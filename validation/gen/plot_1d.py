@@ -1,4 +1,4 @@
-"""Space-time plot of a 1D run written by `fdtd run1d --out file.npz`.
+"""Space-time plot of a 1D run written by `fdtd run --out file.npz`.
 
 Expects keys: ez (steps x nx, f64; row n is Ez at time n, column i is node i),
 courant (scalar), dt (scalar, normalized units).
