@@ -1,6 +1,9 @@
 //! Phase 0 acceptance tests for the 1D reference solver. Public API only.
 //! All quantities are normalized (dx = 1, c0 = 1, dt = S).
 
+mod common;
+
+use common::{max_abs, wavenumber_from_probes};
 use fdtd_core::dispersion::numerical_wavenumber_1d;
 use fdtd_core::fdtd1d::{Boundary1d, Sim1d, Source1d};
 use fdtd_core::source::{SourceKind, Waveform};
@@ -54,18 +57,6 @@ fn a1_magic_time_step_1000_cells() {
     assert!(err < 1e-12 * peak, "shape error {err:e}, peak {peak}");
 }
 
-fn max_abs(v: &[f64]) -> f64 {
-    v.iter().fold(0.0_f64, |m, x| m.max(x.abs()))
-}
-
-/// DTFT `sum_n p[n] exp(-j omega n S)` of a probe record, as (re, im).
-fn dtft(p: &[f64], omega: f64, s: f64) -> (f64, f64) {
-    p.iter().enumerate().fold((0.0, 0.0), |(re, im), (n, &v)| {
-        let ph = omega * n as f64 * s;
-        (re + v * ph.cos(), im - v * ph.sin())
-    })
-}
-
 /// A2 at `cpw` cells per wavelength. Returns (measured k, discrete k, continuum k).
 ///
 /// In a source-free stretch of the discrete line, a right-going field has
@@ -104,13 +95,7 @@ fn a2_measure(cpw: f64) -> (f64, f64, f64) {
         "record cut off the pulse"
     );
 
-    let (a, b) = dtft(&tr[0], omega, s);
-    let (c, d) = dtft(&tr[1], omega, s);
-    // arg(F2 / F1) = arg(F2 * conj(F1))
-    let phase = (d * a - c * b).atan2(c * a + d * b);
-    // Choose the 2 pi branch nearest the continuum k; valid while |k_d - k_c| L < pi.
-    let m = ((omega * len as f64 + phase) / (2.0 * PI)).round();
-    let k_meas = (2.0 * PI * m - phase) / len as f64;
+    let k_meas = wavenumber_from_probes(&tr[0], &tr[1], omega, s, len as f64, omega);
     (k_meas, numerical_wavenumber_1d(omega, s).unwrap(), omega)
 }
 
