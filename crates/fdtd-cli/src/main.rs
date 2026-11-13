@@ -1,6 +1,7 @@
 //! `fdtd`: command line front end for the reference solver.
 
 mod npz;
+mod svg;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use fdtd_core::FdtdError;
@@ -34,6 +35,167 @@ enum Cmd {
     /// angle sweep, against one shared reference run, and write a CSV sorted by
     /// the worst reflection from 0 to 70 degrees, best first. Run it in release.
     PmlSweep(SweepArgs),
+    /// Regenerate the validation report: CPML reflection vs angle for the
+    /// recommended 10 and 16 cell layers, as CSV, SVG plot, and report.md.
+    Report(ReportArgs),
+}
+
+#[derive(clap::Args)]
+struct ReportArgs {
+    #[arg(long, default_value = "validation/report")]
+    dir: PathBuf,
+}
+
+/// Measures every layer on `setup` and writes `cpml_reflection.csv`,
+/// `cpml_reflection.svg` and `report.md` into `dir`. Returns the dB per probe
+/// for each layer.
+fn write_cpml_report(
+    dir: &Path,
+    setup: &ReflectionSetup,
+    layers: &[PmlSpec],
+) -> Result<Vec<Vec<f64>>, Box<dyn std::error::Error>> {
+    std::fs::create_dir_all(dir)?;
+    let reference = setup.reference()?;
+    let results = measure_all(setup, &reference, layers)?;
+    let probes = setup.probes.len();
+    // The angle sweep runs right of the source; anything else (the corner)
+    // goes in the tables only.
+    let on_sweep = |k: usize| setup.probes[k].0 >= setup.source.0;
+
+    let mut csv = String::from("probe,i,j,angle_deg");
+    for p in layers {
+        csv += &format!(",db_{}_cells", p.thickness);
+    }
+    csv.push('\n');
+    for k in 0..probes {
+        let (i, j) = setup.probes[k];
+        csv += &format!("{k},{i},{j},{:.2}", setup.angle_deg(k));
+        for db in &results {
+            csv += &format!(",{:.2}", db[k]);
+        }
+        csv.push('\n');
+    }
+    std::fs::write(dir.join("cpml_reflection.csv"), csv)?;
+
+    let colors = ["#1f77b4", "#d95f02", "#1b9e77", "#7570b3"];
+    let points: Vec<Vec<(f64, f64)>> = results
+        .iter()
+        .map(|db| {
+            let mut pts: Vec<(f64, f64)> = (0..probes)
+                .filter(|&k| on_sweep(k))
+                .map(|k| (setup.angle_deg(k), db[k]))
+                .collect();
+            pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+            pts
+        })
+        .collect();
+    let labels: Vec<String> = layers
+        .iter()
+        .map(|p| format!("{} cells", p.thickness))
+        .collect();
+    let series: Vec<svg::Series> = points
+        .iter()
+        .zip(&labels)
+        .zip(colors.iter().cycle())
+        .map(|((pts, label), color)| svg::Series {
+            label,
+            color,
+            points: pts,
+        })
+        .collect();
+    let lowest = results
+        .iter()
+        .flatten()
+        .copied()
+        .filter(|v| v.is_finite())
+        .fold(-60.0_f64, f64::min);
+    let plot = svg::Plot {
+        title: "CPML reflection vs angle of incidence (f64 reference kernel)",
+        x_label: "angle of incidence (deg)",
+        y_label: "reflection (dB)",
+        x: (0.0, 80.0, 10.0),
+        y: ((lowest / 20.0).floor() * 20.0, 0.0, 20.0),
+        series: &series,
+        hlines: &[(-60.0, "A9 gate, -60 dB"), (-80.0, "A10 target, -80 dB")],
+    };
+    std::fs::write(dir.join("cpml_reflection.svg"), plot.render())?;
+
+    let mut md = String::from(
+        "# Validation report\n\n\
+         `fdtd report` writes this file, so I regenerate it instead of editing it.\n\n\
+         ## CPML reflection (A9, A10)\n\n\
+         ![CPML reflection vs angle](cpml_reflection.svg)\n\n",
+    );
+    md += &format!(
+        "I measure it with the reference-domain method. A Ricker pulse (spectral peak at \
+         20 cells per wavelength, S = {s}) starts {h} cells above the bottom interface of a \
+         {w} x {ht} node vacuum box. I record Ez on the interface row, where the direct \
+         wave meets the layer at each angle, and at the interface corner, then compare \
+         with the same box inside PEC walls so far away that nothing comes back within the \
+         {n} step window. Per probe, R = 20 log10(max |test - reference| / max |reference|). \
+         Everything runs on the f64 reference kernel.\n\n",
+        s = setup.s,
+        h = setup.source.1,
+        w = setup.width,
+        ht = setup.height,
+        n = setup.steps
+    );
+    md += "| Probe | Angle (deg) |";
+    for p in layers {
+        md += &format!(" {} cells (dB) |", p.thickness);
+    }
+    md += "\n|---|---|";
+    md += &"---|".repeat(layers.len());
+    md.push('\n');
+    for k in 0..probes {
+        let name = if on_sweep(k) { "interface" } else { "corner" };
+        md += &format!("| {name} | {:.1} |", setup.angle_deg(k));
+        for db in &results {
+            md += &format!(" {:.2} |", db[k]);
+        }
+        md.push('\n');
+    }
+    md += "\n| Check | Layer | Gate | Worst, 0 to 70 deg | Result |\n|---|---|---|---|---|\n";
+    for (p, db) in layers.iter().zip(&results) {
+        let worst = setup.worst_db(db, 70.0);
+        let (check, gate, ok) = if p.thickness < 16 {
+            ("A9", "at most -60 dB", worst <= -60.0)
+        } else {
+            ("A10", "-80 dB target", worst <= -80.0)
+        };
+        md += &format!(
+            "| {check} | {} cells: m = {}, sigma_scale = {}, kappa_max = {}, alpha_max = {} | {gate} | {worst:.2} dB | {} |\n",
+            p.thickness,
+            p.m,
+            p.sigma_scale,
+            p.kappa_max,
+            p.alpha_max,
+            if ok { "pass" } else { "FAIL" }
+        );
+    }
+    md += "\nThe layers are `PmlSpec::recommended`, tuned with `fdtd pml-sweep` against the \
+           worst reflection over every probe above, grazing 80 degrees included.\n\n\
+           ## Cavity convergence (A7)\n\n\
+           ![Cavity resonance error vs resolution](cavity_convergence.png)\n\n\
+           `validation/gen/plot_cavity_convergence.py` makes this plot. It re-measures the \
+           resonances in NumPy on its own, as a cross-check of the Rust test.\n";
+    std::fs::write(dir.join("report.md"), md)?;
+    Ok(results)
+}
+
+fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let setup = ReflectionSetup::standard();
+    let layers = [PmlSpec::recommended(10), PmlSpec::recommended(16)];
+    let results = write_cpml_report(&a.dir, &setup, &layers)?;
+    for (p, db) in layers.iter().zip(&results) {
+        println!(
+            "{} cells: worst 0 to 70 deg {:.2} dB",
+            p.thickness,
+            setup.worst_db(db, 70.0)
+        );
+    }
+    println!("wrote {}", a.dir.display());
+    Ok(())
 }
 
 #[derive(clap::Args)]
@@ -353,6 +515,7 @@ fn main() -> std::process::ExitCode {
             None => run(a),
         },
         Cmd::PmlSweep(a) => pml_sweep(a),
+        Cmd::Report(a) => report(a),
     };
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
@@ -382,6 +545,36 @@ mod tests {
             }
         }
         assert!(n >= 2, "found {n} scenes");
+    }
+
+    /// The report writes CSV, SVG and markdown with one row per probe and one
+    /// curve per layer, on a small setup.
+    #[test]
+    fn report_writes_three_files() {
+        let dir = std::env::temp_dir().join(format!("fdtd_cli_report_{}", std::process::id()));
+        let setup = ReflectionSetup {
+            width: 60,
+            height: 30,
+            source: (20, 10),
+            probes: vec![(20, 0), (30, 0), (45, 0), (0, 0)],
+            steps: 300,
+            ..ReflectionSetup::standard()
+        };
+        let layers = [PmlSpec::recommended(10), PmlSpec::recommended(16)];
+        let results = write_cpml_report(&dir, &setup, &layers).unwrap();
+        assert_eq!(results.len(), 2);
+        let read = |f: &str| std::fs::read_to_string(dir.join(f)).unwrap();
+        let csv = read("cpml_reflection.csv");
+        assert_eq!(csv.lines().count(), 5);
+        assert!(csv.starts_with("probe,i,j,angle_deg,db_10_cells,db_16_cells"));
+        let svg = read("cpml_reflection.svg");
+        assert!(svg.starts_with("<svg") && svg.trim_end().ends_with("</svg>"));
+        assert_eq!(svg.matches("<polyline").count(), 2);
+        // Three sweep probes per curve; the corner is left out of the plot.
+        assert_eq!(svg.matches("<circle").count(), 6);
+        let md = read("report.md");
+        assert!(md.contains("| corner |") && md.contains("| A9 |") && md.contains("| A10 |"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
