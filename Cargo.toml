@@ -1,0 +1,14 @@
+[workspace]
+members = ["crates/*"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+license = "MIT OR Apache-2.0"
+
+[workspace.dependencies]
+fdtd-core = { path = "crates/fdtd-core" }
+thiserror = "2"
+proptest = "1"
+clap = { version = "4", features = ["derive"] }
+zip = { version = "2", default-features = false }
