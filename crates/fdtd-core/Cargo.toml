@@ -1,0 +1,12 @@
+[package]
+name = "fdtd-core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "Plain f64 reference FDTD solver. The oracle for every other kernel."
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
