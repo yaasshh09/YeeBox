@@ -2,6 +2,7 @@
 //! obviously correct. Everything inside works in normalized units: dx = 1,
 //! c0 = eps0 = mu0 = 1, and dt = S (the Courant number).
 
+pub mod dispersion;
 pub mod error;
 pub mod fdtd1d;
 pub mod grid;

@@ -11,6 +11,10 @@ pub enum FdtdError {
     /// A parameter is out of range, zero where it must be positive, or not finite.
     #[error("invalid parameter {name} = {value}")]
     InvalidParameter { name: &'static str, value: f64 },
+    /// No real numerical wavenumber exists: the frequency is above what the grid
+    /// can carry at this Courant number (the wave is evanescent on the grid).
+    #[error("omega {omega} is above the grid cutoff at Courant number {s}")]
+    AboveGridCutoff { omega: f64, s: f64 },
 }
 
 /// Shorthand used across the crate.
