@@ -17,7 +17,10 @@
 //! only, so those values never leave zero. PEC material nodes have Ca = Cb = 0.
 
 use crate::error::{FdtdError, Result};
-use crate::scene::{Scene, Source};
+use crate::grid::Component;
+use crate::kernel::Kernel;
+use crate::monitor::PointProbe;
+use crate::scene::{Monitor, Scene, Source};
 use crate::source::SourceKind;
 
 /// TMz grid state built from a validated scene.
@@ -34,6 +37,7 @@ pub struct SimTm {
     cb: Vec<f64>,
     eps: Vec<f64>,
     sources: Vec<Source>,
+    probes: Vec<PointProbe>,
 }
 
 impl SimTm {
@@ -66,24 +70,34 @@ impl SimTm {
                 eps[k] = m.eps();
             }
         }
+        let mut probes: Vec<PointProbe> = scene
+            .monitors
+            .iter()
+            .map(|&Monitor::Point { i, j }| PointProbe::new(i, j))
+            .collect();
+        let ez = vec![0.0; nx * ny];
+        for p in &mut probes {
+            p.record(&ez, nx);
+        }
         Self {
             nx,
             ny,
             s,
             n: 0,
-            ez: vec![0.0; nx * ny],
+            ez,
             hx: vec![0.0; nx * ny],
             hy: vec![0.0; nx * ny],
             ca,
             cb,
             eps,
             sources: scene.sources.clone(),
+            probes,
         }
     }
 
     /// Advances one full step: H to n + 1/2, E to n + 1, then the sources,
-    /// which use the waveform at t = (n + 1) * S. Soft sources add to Ez, hard
-    /// sources overwrite it.
+    /// which use the waveform at t = (n + 1) * S, then the probes. Soft
+    /// sources add to Ez, hard sources overwrite it.
     pub fn step(&mut self) {
         let (nx, ny, s) = (self.nx, self.ny, self.s);
         let (ez, hx, hy) = (&mut self.ez, &mut self.hx, &mut self.hy);
@@ -122,6 +136,9 @@ impl SimTm {
                 SourceKind::Hard => ez[k] = v,
             }
         }
+        for p in &mut self.probes {
+            p.record(ez, nx);
+        }
     }
 
     /// Advances `steps` full steps.
@@ -129,6 +146,11 @@ impl SimTm {
         for _ in 0..steps {
             self.step();
         }
+    }
+
+    /// Point probes in scene monitor order.
+    pub fn probes(&self) -> &[PointProbe] {
+        &self.probes
     }
 
     /// Replaces Ez with `values` (one per node, `j * nx + i`), forcing wall and
@@ -194,6 +216,32 @@ impl SimTm {
     /// True on wall nodes and PEC material nodes of node (i, j).
     pub fn is_pec(&self, i: usize, j: usize) -> bool {
         self.cb[j * self.nx + i] == 0.0
+    }
+}
+
+impl Kernel for SimTm {
+    fn from_scene(scene: &Scene) -> Result<Self> {
+        SimTm::from_scene(scene)
+    }
+
+    fn step(&mut self, n: u64) {
+        self.step_n(n);
+    }
+
+    fn time_step(&self) -> u64 {
+        self.n
+    }
+
+    fn read_field(&mut self, which: Component) -> Result<Vec<f64>> {
+        Ok(match which {
+            Component::Ez => self.ez.clone(),
+            Component::Hx => self.hx.clone(),
+            Component::Hy => self.hy.clone(),
+        })
+    }
+
+    fn probe_history(&mut self) -> Result<Vec<Vec<f64>>> {
+        Ok(self.probes.iter().map(|p| p.history().to_vec()).collect())
     }
 }
 
@@ -487,5 +535,51 @@ pub(crate) mod tests {
         eprintln!(
             "A4: S = 0.70 max {worst:.3} (start {peak0:.3}), S = 0.72 passed 1e6x at step {steps}"
         );
+    }
+
+    /// Drives any kernel through the trait only.
+    fn run_through_trait<K: Kernel>(scene: &Scene, steps: u64) -> (u64, Vec<f64>, Vec<Vec<f64>>) {
+        let mut k = K::from_scene(scene).unwrap();
+        k.step(steps);
+        (
+            k.time_step(),
+            k.read_field(Component::Ez).unwrap(),
+            k.probe_history().unwrap(),
+        )
+    }
+
+    /// The trait path equals the direct path, and probe entry n is Ez at the
+    /// probe node after n steps.
+    #[test]
+    fn kernel_trait_and_probes() {
+        let mut scene = vacuum_box(20, 16, 0.5);
+        scene.sources.push(Source {
+            i: 5,
+            j: 6,
+            waveform: Waveform::Ricker {
+                t0: 15.0,
+                f_peak: 0.1,
+            },
+            amplitude: 1.0,
+            kind: SourceKind::Soft,
+        });
+        scene.monitors = vec![
+            Monitor::Point { i: 12, j: 9 },
+            Monitor::Point { i: 5, j: 6 },
+        ];
+
+        let mut sim = SimTm::from_scene(&scene).unwrap();
+        let mut expect = vec![vec![0.0], vec![0.0]];
+        for _ in 0..60 {
+            sim.step();
+            expect[0].push(sim.ez()[9 * 20 + 12]);
+            expect[1].push(sim.ez()[6 * 20 + 5]);
+        }
+        let (n, ez, probes) = run_through_trait::<SimTm>(&scene, 60);
+        assert_eq!(n, 60);
+        assert_eq!(ez, sim.ez());
+        assert_eq!(probes, expect);
+        assert_eq!(sim.probes()[0].history(), &expect[0][..]);
+        assert!(expect[0].iter().any(|v| *v != 0.0));
     }
 }
