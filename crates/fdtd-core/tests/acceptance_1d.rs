@@ -205,3 +205,52 @@ fn a3_pec_image_equivalence_s05() {
     assert!(peak > 0.1);
     assert!(err < 1e-12 * peak, "error {err:e}");
 }
+
+/// With no source the fields stay exactly zero: nothing in the update can
+/// create energy from nothing, for any boundary combination.
+#[test]
+fn quiescence_no_source_exact_zero() {
+    let ends = [Boundary1d::Pec, Boundary1d::Mur1];
+    for left in ends {
+        for right in ends {
+            let mut sim = Sim1d::new(300, 0.5, left, right).unwrap();
+            sim.step_n(1000);
+            assert!(sim.ez().iter().chain(sim.hy()).all(|&v| v == 0.0));
+        }
+    }
+}
+
+/// Doubling every source amplitude doubles every field value bit for bit,
+/// since scaling by 2 is exact in binary floating point and the scheme is linear.
+#[test]
+fn linearity_double_amplitude_bit_exact() {
+    let run = |scale: f64| {
+        let mut sim = Sim1d::new(400, 0.5, Boundary1d::Mur1, Boundary1d::Pec).unwrap();
+        let mut soft = gaussian_source(100);
+        soft.amplitude = 0.7 * scale;
+        let hard = Source1d {
+            node: 250,
+            waveform: Waveform::ModulatedGaussian {
+                t0: 90.0,
+                tau: 15.0,
+                f0: 0.05,
+            },
+            amplitude: -1.3 * scale,
+            kind: SourceKind::Hard,
+        };
+        sim.add_source(soft).unwrap();
+        sim.add_source(hard).unwrap();
+        sim.step_n(900);
+        sim
+    };
+    let (one, two) = (run(1.0), run(2.0));
+    assert!(max_abs(one.ez()) > 1e-3);
+    for (a, b) in one
+        .ez()
+        .iter()
+        .zip(two.ez())
+        .chain(one.hy().iter().zip(two.hy()))
+    {
+        assert_eq!(2.0 * a, *b);
+    }
+}
