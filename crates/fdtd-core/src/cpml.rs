@@ -153,6 +153,33 @@ pub struct PmlSpec {
 }
 
 impl PmlSpec {
+    /// Layers tuned with `fdtd pml-sweep` on the standard reflection sweep
+    /// (`ReflectionSetup::standard`: Ricker pulse peaking at 20 cells per
+    /// wavelength, S = 0.5, probes from normal to 80 degrees plus a corner),
+    /// ranked by the worst reflection over every probe. The optimum is flat to
+    /// about 0.5 dB, so these are round values from its middle. Below 16 cells
+    /// this is the 10-cell tuning, from 16 cells up the 16-cell one. Measured
+    /// numbers are in `PROGRESS.md`.
+    pub fn recommended(thickness: usize) -> PmlSpec {
+        if thickness < 16 {
+            PmlSpec {
+                thickness,
+                m: 3.0,
+                sigma_scale: 1.25,
+                kappa_max: 2.0,
+                alpha_max: 0.15,
+            }
+        } else {
+            PmlSpec {
+                thickness,
+                m: 4.0,
+                sigma_scale: 1.0,
+                kappa_max: 2.0,
+                alpha_max: 0.1,
+            }
+        }
+    }
+
     /// Rejects non-finite values, `m < 1`, `sigma_scale < 0`, `kappa_max < 1`
     /// and `alpha_max < 0`. Whether the layer fits the grid is the scene's check.
     pub fn validate(&self) -> Result<()> {
@@ -302,6 +329,17 @@ pub(crate) mod tests {
     fn sigma_opt_value() {
         assert_eq!(sigma_opt(3.0, 1.0), 3.2);
         assert_eq!(sigma_opt(3.0, 4.0), 1.6);
+    }
+
+    #[test]
+    fn recommended_layers_are_valid() {
+        for t in [8, 10, 15, 16, 20] {
+            let p = PmlSpec::recommended(t);
+            assert!(p.validate().is_ok());
+            assert_eq!(p.thickness, t);
+        }
+        assert_eq!(PmlSpec::recommended(10).m, 3.0);
+        assert_eq!(PmlSpec::recommended(16).m, 4.0);
     }
 
     #[test]
