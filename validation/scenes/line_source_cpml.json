@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "grid": { "nx": 161, "ny": 121, "dx_phys_m": 0.001, "courant": 0.5 },
+  "materials": [
+    { "kind": "dielectric", "eps_inf": 1, "sigma": 0 },
+    { "kind": "dielectric", "eps_inf": 4, "sigma": 0 },
+    { "kind": "pec" }
+  ],
+  "geometry": [
+    { "shape": "circle", "cx": 105, "cy": 60, "r": 10, "material": 1 },
+    { "shape": "rect", "x0": 70, "y0": 85, "x1": 72, "y1": 100, "material": 2 }
+  ],
+  "sources": [
+    { "i": 50, "j": 60, "waveform": { "type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 0 }, "amplitude": 1 }
+  ],
+  "monitors": [
+    { "type": "point", "i": 130, "j": 60 },
+    { "type": "point", "i": 50, "j": 25 }
+  ],
+  "pml": { "thickness": 16, "m": 4, "sigma_scale": 1, "kappa_max": 2, "alpha_max": 0.1 }
+}

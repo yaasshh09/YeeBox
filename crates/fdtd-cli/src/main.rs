@@ -368,6 +368,22 @@ mod tests {
     use super::*;
     use std::io::Read;
 
+    /// Every committed example scene parses and validates.
+    #[test]
+    fn example_scenes_are_valid() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/scenes");
+        let mut n = 0;
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "json") {
+                let text = std::fs::read_to_string(&path).unwrap();
+                Scene::from_json(&text).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+                n += 1;
+            }
+        }
+        assert!(n >= 2, "found {n} scenes");
+    }
+
     #[test]
     fn sweep_covers_every_combination() {
         let cli = Cli::parse_from([
