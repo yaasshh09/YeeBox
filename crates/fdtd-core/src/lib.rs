@@ -6,6 +6,7 @@ pub mod dispersion;
 pub mod error;
 pub mod fdtd1d;
 pub mod grid;
+pub mod material;
 pub mod source;
 pub mod units;
 
