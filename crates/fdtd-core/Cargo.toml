@@ -7,6 +7,8 @@ description = "Plain f64 reference FDTD solver. The oracle for every other kerne
 
 [dependencies]
 thiserror.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true

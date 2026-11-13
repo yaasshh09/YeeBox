@@ -3,10 +3,13 @@
 //! (cycles per step is f * S).
 
 use crate::error::{FdtdError, Result};
+use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
 /// A source time function. All times and frequencies are normalized.
-#[derive(Debug, Clone, Copy, PartialEq)]
+/// JSON form is tagged, for example `{"type": "gaussian", "t0": 60, "tau": 10}`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Waveform {
     /// `exp(-((t - t0) / tau)^2)`. This waveform HAS a DC component: its
     /// integral is `sqrt(pi) * tau`. Use it for pulses, not for anything that
@@ -31,7 +34,8 @@ pub enum Waveform {
 }
 
 /// How a source couples into its node.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum SourceKind {
     /// Adds the waveform to the field. Transparent to passing waves. The default.
     #[default]
@@ -211,5 +215,54 @@ mod tests {
         for w in bad {
             assert!(w.validate().is_err(), "{w:?}");
         }
+    }
+
+    #[test]
+    fn json_round_trip() {
+        let all = [
+            Waveform::Gaussian {
+                t0: 60.0,
+                tau: 10.0,
+            },
+            Waveform::ModulatedGaussian {
+                t0: 1.0,
+                tau: 2.0,
+                f0: 0.1,
+            },
+            Waveform::Ricker {
+                t0: 30.0,
+                f_peak: 0.05,
+            },
+            Waveform::RampedCw {
+                f0: 0.1,
+                ramp_periods: 3.0,
+                phase: 0.5,
+            },
+        ];
+        for w in all {
+            let text = serde_json::to_string(&w).unwrap();
+            assert_eq!(
+                serde_json::from_str::<Waveform>(&text).unwrap(),
+                w,
+                "{text}"
+            );
+        }
+        let w: Waveform =
+            serde_json::from_str(r#"{"type": "gaussian", "t0": 60, "tau": 10}"#).unwrap();
+        assert_eq!(
+            w,
+            Waveform::Gaussian {
+                t0: 60.0,
+                tau: 10.0
+            }
+        );
+        assert!(
+            serde_json::from_str::<Waveform>(r#"{"type": "gaussian", "t0": 1, "tau": 1, "x": 0}"#)
+                .is_err()
+        );
+        assert_eq!(
+            serde_json::from_str::<SourceKind>(r#""hard""#).unwrap(),
+            SourceKind::Hard
+        );
     }
 }
