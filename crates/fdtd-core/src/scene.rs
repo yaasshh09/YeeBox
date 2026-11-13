@@ -98,6 +98,29 @@ fn finite(name: &'static str, value: f64) -> Result<()> {
 }
 
 impl Shape {
+    /// Whether the point (x, y), in cell units, is inside. Rect and circle
+    /// edges count as inside. Polygons use the even-odd rule, and a point
+    /// exactly on a polygon edge may land either way.
+    pub fn contains(&self, x: f64, y: f64) -> bool {
+        match self {
+            Shape::Rect { x0, y0, x1, y1, .. } => *x0 <= x && x <= *x1 && *y0 <= y && y <= *y1,
+            Shape::Circle { cx, cy, r, .. } => (x - cx).powi(2) + (y - cy).powi(2) <= r * r,
+            Shape::Polygon { points, .. } => {
+                let mut inside = false;
+                let mut prev = points[points.len() - 1];
+                for &p in points {
+                    if (p[1] > y) != (prev[1] > y)
+                        && x < (prev[0] - p[0]) * (y - p[1]) / (prev[1] - p[1]) + p[0]
+                    {
+                        inside = !inside;
+                    }
+                    prev = p;
+                }
+                inside
+            }
+        }
+    }
+
     fn material(&self) -> usize {
         match self {
             Shape::Rect { material, .. }
@@ -158,6 +181,27 @@ impl Shape {
 }
 
 impl Scene {
+    /// Material index of Ez node (i, j): the last shape containing the node's
+    /// position (i, j), or 0 if none does. Assumes a validated scene.
+    pub fn material_at(&self, i: usize, j: usize) -> usize {
+        let (x, y) = (i as f64, j as f64);
+        self.geometry
+            .iter()
+            .rev()
+            .find(|s| s.contains(x, y))
+            .map_or(0, Shape::material)
+    }
+
+    /// Material index of every Ez node, laid out `j * nx + i`. The one
+    /// rasterization rule shared by every kernel. Assumes a validated scene.
+    pub fn rasterize(&self) -> Vec<usize> {
+        let GridSpec { nx, ny, .. } = self.grid;
+        (0..ny)
+            .flat_map(|j| (0..nx).map(move |i| (i, j)))
+            .map(|(i, j)| self.material_at(i, j))
+            .collect()
+    }
+
     /// Parses and validates a scene.
     pub fn from_json(text: &str) -> Result<Scene> {
         let scene: Scene =
@@ -231,6 +275,9 @@ impl Scene {
                     i: src.i,
                     j: src.j,
                 });
+            }
+            if self.materials[self.material_at(src.i, src.j)] == Material::Pec {
+                return Err(FdtdError::SourceOnPec { i: src.i, j: src.j });
             }
         }
         for m in &self.monitors {
@@ -426,5 +473,122 @@ pub(crate) mod tests {
         s.grid.courant = std::f64::consts::FRAC_1_SQRT_2;
         s.monitors[0] = Monitor::Point { i: 0, j: 29 };
         assert!(s.validate().is_ok());
+    }
+
+    fn empty(nx: usize, ny: usize, geometry: Vec<Shape>) -> Scene {
+        let mut s = sample();
+        s.grid.nx = nx;
+        s.grid.ny = ny;
+        s.geometry = geometry;
+        s.sources.clear();
+        s.monitors.clear();
+        s
+    }
+
+    fn cells(scene: &Scene, id: usize) -> Vec<(usize, usize)> {
+        let nx = scene.grid.nx;
+        scene
+            .rasterize()
+            .iter()
+            .enumerate()
+            .filter(|&(_, &m)| m == id)
+            .map(|(k, _)| (k % nx, k / nx))
+            .collect()
+    }
+
+    #[test]
+    fn rect_edges_inclusive() {
+        let rect = Shape::Rect {
+            x0: 2.0,
+            y0: 3.0,
+            x1: 5.0,
+            y1: 4.0,
+            material: 1,
+        };
+        let s = empty(10, 8, vec![rect]);
+        let expect: Vec<_> = (3..=4).flat_map(|j| (2..=5).map(move |i| (i, j))).collect();
+        assert_eq!(cells(&s, 1), expect);
+        assert_eq!(s.rasterize().len(), 80);
+    }
+
+    /// Lattice points in a disk of radius r differ from pi r^2 by far less
+    /// than the perimeter; the disk is also symmetric under both mirrors.
+    #[test]
+    fn circle_area_and_symmetry() {
+        let r = 20.0;
+        let s = empty(
+            61,
+            61,
+            vec![Shape::Circle {
+                cx: 30.0,
+                cy: 30.0,
+                r,
+                material: 2,
+            }],
+        );
+        let got = cells(&s, 2);
+        let area = std::f64::consts::PI * r * r;
+        assert!((got.len() as f64 - area).abs() < 2.0 * std::f64::consts::PI * r);
+        for &(i, j) in &got {
+            assert!(got.contains(&(60 - i, j)) && got.contains(&(i, 60 - j)));
+        }
+        assert!(got.contains(&(10, 30)) && got.contains(&(30, 50)));
+        assert!(!got.contains(&(9, 30)));
+    }
+
+    /// Right triangle with hypotenuse x + y = 10.5: nodes with i, j >= 1 and
+    /// i + j <= 10, which is 45 nodes. No node lies on an edge.
+    #[test]
+    fn triangle_known_cells() {
+        let tri = Shape::Polygon {
+            points: vec![[0.5, 0.5], [10.0, 0.5], [0.5, 10.0]],
+            material: 1,
+        };
+        let s = empty(14, 14, vec![tri]);
+        let got = cells(&s, 1);
+        let expect: Vec<_> = (1..14)
+            .flat_map(|j| (1..14).map(move |i| (i, j)))
+            .filter(|&(i, j)| i + j <= 10)
+            .collect();
+        assert_eq!(got.len(), 45);
+        assert_eq!(got, expect);
+    }
+
+    #[test]
+    fn last_shape_wins() {
+        let a = Shape::Rect {
+            x0: 0.0,
+            y0: 0.0,
+            x1: 6.0,
+            y1: 6.0,
+            material: 1,
+        };
+        let b = Shape::Rect {
+            x0: 4.0,
+            y0: 4.0,
+            x1: 9.0,
+            y1: 9.0,
+            material: 2,
+        };
+        let s = empty(10, 10, vec![a.clone(), b.clone()]);
+        assert_eq!(s.material_at(5, 5), 2);
+        assert_eq!(s.material_at(3, 3), 1);
+        assert_eq!(s.material_at(9, 0), 0);
+        let s = empty(10, 10, vec![b, a]);
+        assert_eq!(s.material_at(5, 5), 1);
+        let raster = s.rasterize();
+        for j in 0..10 {
+            for i in 0..10 {
+                assert_eq!(raster[j * 10 + i], s.material_at(i, j));
+            }
+        }
+    }
+
+    #[test]
+    fn source_on_pec_rejected() {
+        assert_eq!(
+            rejects(|s| (s.sources[0].i, s.sources[0].j) = (25, 15)),
+            FdtdError::SourceOnPec { i: 25, j: 15 }
+        );
     }
 }
