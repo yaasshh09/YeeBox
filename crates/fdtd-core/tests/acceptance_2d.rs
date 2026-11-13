@@ -3,7 +3,7 @@
 
 mod common;
 
-use common::{max_abs, wavenumber_from_probes};
+use common::{blackman_harris, golden_max, magnitude, max_abs, wavenumber_from_probes};
 use fdtd_core::dispersion::numerical_wavenumber;
 use fdtd_core::material::Material;
 use fdtd_core::scene::{GridSpec, Monitor, SCENE_VERSION, Scene, Source};
@@ -147,4 +147,155 @@ fn a5_dispersion_near_axis_10_cpw() {
 #[test]
 fn a5_dispersion_near_axis_20_cpw() {
     a5_near_axis(20.0, 65);
+}
+
+/// Discrete resonance of PEC cavity mode (m, n) for a cavity of `a` by `b`
+/// cells: the 2D relation with kx = m pi / a, ky = n pi / b, solved for omega.
+fn cavity_discrete(m: usize, n: usize, a: usize, b: usize, s: f64) -> f64 {
+    let kx = m as f64 * PI / a as f64;
+    let ky = n as f64 * PI / b as f64;
+    let r = ((kx / 2.0).sin().powi(2) + (ky / 2.0).sin().powi(2)).sqrt();
+    2.0 / s * (s * r).asin()
+}
+
+/// Continuum resonance `pi sqrt((m/a)^2 + (n/b)^2)` (c0 = 1, lengths in cells).
+fn cavity_continuum(m: usize, n: usize, a: usize, b: usize) -> f64 {
+    PI * ((m as f64 / a as f64).powi(2) + (n as f64 / b as f64).powi(2)).sqrt()
+}
+
+/// Runs a closed PEC cavity of `a` by `b` cells driven by a Ricker pulse at
+/// `src` and returns `steps` samples of Ez at `probe`, starting once the pulse
+/// is over (t > 2 t0), so the record is a pure sum of undamped cavity modes.
+fn cavity_record(
+    a: usize,
+    b: usize,
+    s: f64,
+    f_peak: f64,
+    src: (usize, usize),
+    probe: (usize, usize),
+    steps: u64,
+) -> Vec<f64> {
+    let t0 = 6.0 / (PI * f_peak);
+    let skip = (2.0 * t0 / s).ceil() as usize;
+    let mut scene = vacuum(a + 1, b + 1, s);
+    scene.sources.push(Source {
+        i: src.0,
+        j: src.1,
+        waveform: Waveform::Ricker { t0, f_peak },
+        amplitude: 1.0,
+        kind: SourceKind::Soft,
+    });
+    scene.monitors = vec![Monitor::Point {
+        i: probe.0,
+        j: probe.1,
+    }];
+    let mut sim = SimTm::from_scene(&scene).unwrap();
+    sim.step_n(skip as u64 + steps);
+    sim.probes()[0].history()[skip..].to_vec()
+}
+
+/// Every local maximum of the Blackman-Harris windowed spectrum in
+/// (0, w_max] that is within 60 dB of the largest, refined by golden-section
+/// search. The scan step is a quarter of a DFT bin; the window's main lobe is
+/// 8 bins wide and its sidelobes are below -92 dB, so sidelobes never count.
+fn spectral_peaks(rec: &[f64], s: f64, w_max: f64) -> Vec<f64> {
+    let win = blackman_harris(rec.len());
+    let bin = 2.0 * PI / (rec.len() as f64 * s);
+    let step = bin / 4.0;
+    let grid: Vec<f64> = (1..)
+        .map(|k| k as f64 * step)
+        .take_while(|&w| w <= w_max)
+        .collect();
+    let mag: Vec<f64> = grid.iter().map(|&w| magnitude(rec, &win, w, s)).collect();
+    let top = mag.iter().cloned().fold(0.0, f64::max);
+    let mut peaks = Vec::new();
+    for k in 1..grid.len() - 1 {
+        if mag[k] > mag[k - 1] && mag[k] >= mag[k + 1] && mag[k] > 1e-3 * top {
+            let (lo, hi) = (grid[k - 1], grid[k + 1]);
+            let w = golden_max(|w| magnitude(rec, &win, w, s), lo, hi, 1e-13);
+            assert!(
+                w > lo + 1e-12 && w < hi - 1e-12,
+                "peak stuck on its bracket"
+            );
+            peaks.push(w);
+        }
+    }
+    peaks
+}
+
+/// A6. A 40 x 23 cell PEC cavity (lowest seven modes at least 4.3 percent
+/// apart) rings after a Ricker pulse. Source and probe sit on nodes where
+/// every one of the lowest seven modes is nonzero. A blind peak search must
+/// find exactly six resonances below the midpoint of modes 6 and 7, and each
+/// must match the discrete prediction to 0.01 percent.
+#[test]
+fn a6_cavity_first_six_resonances() {
+    let (a, b, s) = (40, 23, 0.5);
+    let mut predicted: Vec<(f64, usize, usize)> = (1..10)
+        .flat_map(|m| (1..10).map(move |n| (cavity_discrete(m, n, a, b, s), m, n)))
+        .collect();
+    predicted.sort_by(|x, y| x.0.total_cmp(&y.0));
+    let w_max = 0.5 * (predicted[5].0 + predicted[6].0);
+
+    let rec = cavity_record(a, b, s, 0.04, (7, 5), (29, 16), 20_000);
+    let peaks = spectral_peaks(&rec, s, w_max);
+    assert_eq!(peaks.len(), 6, "peaks found: {peaks:?}");
+    for (w, &(w_d, m, n)) in peaks.iter().zip(&predicted) {
+        let err = (w / w_d - 1.0).abs();
+        let gap = (w_d / cavity_continuum(m, n, a, b) - 1.0).abs();
+        println!(
+            "A6 mode ({m}, {n}): measured {w:.10}, discrete {w_d:.10}, rel err {err:.2e}, discrete vs continuum {gap:.2e}"
+        );
+        assert!(err < 1e-4, "mode ({m}, {n}): relative error {err:e}");
+    }
+}
+
+/// Measured omega of mode (1, 1) of a 4L x 3L cell cavity, source and probe
+/// at the center node so only odd modes ring and (1, 1) stays isolated.
+fn cavity_11(l: usize, s: f64) -> f64 {
+    let (a, b) = (4 * l, 3 * l);
+    let w_c = cavity_continuum(1, 1, a, b);
+    let steps = (60.0 * a as f64 / s) as u64;
+    let rec = cavity_record(
+        a,
+        b,
+        s,
+        w_c / (2.0 * PI),
+        (a / 2, b / 2),
+        (a / 2, b / 2),
+        steps,
+    );
+    let peaks = spectral_peaks(&rec, s, 1.5 * w_c);
+    assert_eq!(peaks.len(), 1, "L = {l}: peaks {peaks:?}");
+    peaks[0]
+}
+
+/// A7. The measured (1, 1) resonance converges to the continuum value
+/// pi sqrt(1/a^2 + 1/b^2) at second order as the same physical cavity is
+/// resolved with L = 4, 8, 16, 32 cells per unit (16 x 12 up to 128 x 96).
+#[test]
+fn a7_cavity_convergence_order() {
+    let s = 0.5;
+    let pts: Vec<(f64, f64)> = [4, 8, 16, 32]
+        .iter()
+        .map(|&l| {
+            let w = cavity_11(l, s);
+            let w_c = cavity_continuum(1, 1, 4 * l, 3 * l);
+            let w_d = cavity_discrete(1, 1, 4 * l, 3 * l, s);
+            let err = (w / w_c - 1.0).abs();
+            println!(
+                "A7 L = {l}: measured {w:.12}, continuum {w_c:.12}, rel err {err:.4e}, measured vs discrete {:.1e}",
+                (w / w_d - 1.0).abs()
+            );
+            ((1.0 / l as f64).ln(), err.ln())
+        })
+        .collect();
+    let m = pts.len() as f64;
+    let (sx, sy) = pts.iter().fold((0.0, 0.0), |(a, b), p| (a + p.0, b + p.1));
+    let (mx, my) = (sx / m, sy / m);
+    let num: f64 = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum();
+    let den: f64 = pts.iter().map(|p| (p.0 - mx).powi(2)).sum();
+    let order = num / den;
+    println!("A7 fitted order {order:.4}");
+    assert!((1.8..=2.2).contains(&order), "order {order}");
 }
