@@ -76,6 +76,15 @@ impl ReflectionSetup {
         dx.atan2(dy).to_degrees()
     }
 
+    /// Worst (largest) `R_dB` over probes whose angle is at most `max_deg`
+    /// (half a degree of slack covers node rounding).
+    pub fn worst_db(&self, db: &[f64], max_deg: f64) -> f64 {
+        db.iter()
+            .enumerate()
+            .filter(|&(k, _)| self.angle_deg(k) <= max_deg + 0.5)
+            .fold(f64::NEG_INFINITY, |m, (_, &v)| m.max(v))
+    }
+
     /// Margin of the reference domain: with PEC walls this far outside the
     /// interior box, any echo travels at least `2 * margin` cells, which takes
     /// longer than the window plus 40 cells of slack.
@@ -183,6 +192,13 @@ mod tests {
             assert!((a - 10.0 * k as f64).abs() < 1.5, "probe {k}: {a}");
         }
         assert!((s.angle_deg(9) - 51.34).abs() < 0.01);
+        // worst_db keeps probes up to 70 degrees (and the 51 degree corner).
+        let mut db: Vec<f64> = (0..10).map(|k| -100.0 + k as f64).collect();
+        db[9] = -150.0;
+        assert_eq!(s.worst_db(&db, 70.0), -93.0);
+        assert_eq!(s.worst_db(&db, 80.0), -92.0);
+        db[9] = -50.0;
+        assert_eq!(s.worst_db(&db, 70.0), -50.0);
         // The window holds the direct pulse at the farthest probe.
         let far = s.probes[8].0 - s.source.0;
         assert!((far as f64).hypot(20.0) + 80.0 < s.steps as f64 * s.s);

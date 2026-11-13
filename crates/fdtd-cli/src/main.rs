@@ -3,9 +3,12 @@
 mod npz;
 
 use clap::{Parser, Subcommand, ValueEnum};
+use fdtd_core::FdtdError;
+use fdtd_core::cpml::PmlSpec;
 use fdtd_core::fdtd1d::{Boundary1d, Sim1d, Source1d};
 use fdtd_core::grid::Component;
 use fdtd_core::kernel::Kernel;
+use fdtd_core::reflection::{ReflectionSetup, reflection_db};
 use fdtd_core::scene::Scene;
 use fdtd_core::source::{SourceKind, Waveform};
 use fdtd_core::tm::SimTm;
@@ -27,6 +30,137 @@ enum Cmd {
     /// or, with --scene, run a 2D TMz scene and dump its final fields and probe records.
     /// All quantities are normalized: dx = 1, c0 = 1, dt = S.
     Run(RunArgs),
+    /// Measure CPML reflection over a grid of layer parameters with the standard
+    /// angle sweep, against one shared reference run, and write a CSV sorted by
+    /// the worst reflection from 0 to 70 degrees, best first. Run it in release.
+    PmlSweep(SweepArgs),
+}
+
+#[derive(clap::Args)]
+struct SweepArgs {
+    /// Layer thicknesses in cells.
+    #[arg(long, value_delimiter = ',', default_values_t = [10, 16, 20])]
+    thickness: Vec<usize>,
+    /// Grading orders.
+    #[arg(long, value_delimiter = ',', default_values_t = [2.0, 3.0, 4.0])]
+    m: Vec<f64>,
+    /// sigma_max as a multiple of sigma_opt.
+    #[arg(long, value_delimiter = ',', default_values_t = [0.6, 0.8, 1.0, 1.2, 1.5])]
+    sigma_scale: Vec<f64>,
+    #[arg(long, value_delimiter = ',', default_values_t = [1.0, 5.0, 10.0, 15.0])]
+    kappa_max: Vec<f64>,
+    /// Normalized like a conductivity.
+    #[arg(long, value_delimiter = ',', default_values_t = [0.0, 0.05, 0.1, 0.2])]
+    alpha_max: Vec<f64>,
+    #[arg(long, default_value = "out/pml_sweep.csv")]
+    out: PathBuf,
+}
+
+/// Every combination of the sweep values, thickness outermost.
+fn sweep_specs(a: &SweepArgs) -> Vec<PmlSpec> {
+    let mut specs = Vec::new();
+    for &thickness in &a.thickness {
+        for &m in &a.m {
+            for &sigma_scale in &a.sigma_scale {
+                for &kappa_max in &a.kappa_max {
+                    for &alpha_max in &a.alpha_max {
+                        specs.push(PmlSpec {
+                            thickness,
+                            m,
+                            sigma_scale,
+                            kappa_max,
+                            alpha_max,
+                        });
+                    }
+                }
+            }
+        }
+    }
+    specs
+}
+
+/// Reflection per probe for each spec, measured in parallel against one
+/// reference. Threads only split the list of runs; each run is the plain
+/// single-threaded reference kernel.
+fn measure_all(
+    setup: &ReflectionSetup,
+    reference: &[Vec<f64>],
+    specs: &[PmlSpec],
+) -> Result<Vec<Vec<f64>>, FdtdError> {
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+    let chunk = specs.len().div_ceil(threads).max(1);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = specs
+            .chunks(chunk)
+            .map(|part| {
+                scope.spawn(move || {
+                    part.iter()
+                        .map(|&p| {
+                            let test = setup.test_domain(Some(p))?;
+                            Ok(reflection_db(&test, reference))
+                        })
+                        .collect::<Result<Vec<_>, FdtdError>>()
+                })
+            })
+            .collect();
+        let mut all = Vec::with_capacity(specs.len());
+        for h in handles {
+            all.extend(h.join().map_err(|_| FdtdError::InvalidParameter {
+                name: "sweep thread panicked",
+                value: f64::NAN,
+            })??);
+        }
+        Ok(all)
+    })
+}
+
+fn pml_sweep(a: &SweepArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let setup = ReflectionSetup::standard();
+    let specs = sweep_specs(a);
+    for p in &specs {
+        p.validate()?;
+    }
+    eprintln!("reference run, then {} layer runs", specs.len());
+    let reference = setup.reference()?;
+    let results = measure_all(&setup, &reference, &specs)?;
+
+    let mut rows: Vec<(f64, &PmlSpec, &Vec<f64>)> = specs
+        .iter()
+        .zip(&results)
+        .map(|(p, db)| (setup.worst_db(db, 70.0), p, db))
+        .collect();
+    rows.sort_by(|x, y| x.0.total_cmp(&y.0));
+
+    let angles: Vec<String> = (0..setup.probes.len())
+        .map(|k| format!("db_at_{:.1}deg", setup.angle_deg(k)))
+        .collect();
+    let mut csv = format!(
+        "thickness,m,sigma_scale,kappa_max,alpha_max,worst_0_70_db,{}\n",
+        angles.join(",")
+    );
+    for (worst, p, db) in &rows {
+        let cells: Vec<String> = db.iter().map(|v| format!("{v:.2}")).collect();
+        csv += &format!(
+            "{},{},{},{},{},{worst:.2},{}\n",
+            p.thickness,
+            p.m,
+            p.sigma_scale,
+            p.kappa_max,
+            p.alpha_max,
+            cells.join(",")
+        );
+    }
+    if let Some(dir) = a.out.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    std::fs::write(&a.out, csv)?;
+    for &t in &a.thickness {
+        if let Some((worst, p, _)) = rows.iter().find(|r| r.1.thickness == t) {
+            println!("best at {t} cells: {worst:.2} dB with {p:?}");
+        }
+    }
+    println!("wrote {}", a.out.display());
+    Ok(())
 }
 
 #[derive(clap::Args)]
@@ -218,6 +352,7 @@ fn main() -> std::process::ExitCode {
             Some(path) => run_scene(path, a.steps, &a.out),
             None => run(a),
         },
+        Cmd::PmlSweep(a) => pml_sweep(a),
     };
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
@@ -232,6 +367,31 @@ fn main() -> std::process::ExitCode {
 mod tests {
     use super::*;
     use std::io::Read;
+
+    #[test]
+    fn sweep_covers_every_combination() {
+        let cli = Cli::parse_from([
+            "fdtd",
+            "pml-sweep",
+            "--thickness",
+            "10,16",
+            "--m",
+            "3",
+            "--sigma-scale",
+            "0.8,1",
+            "--alpha-max",
+            "0,0.1,0.2",
+        ]);
+        let Cmd::PmlSweep(a) = cli.cmd else {
+            panic!("expected pml-sweep")
+        };
+        let specs = sweep_specs(&a);
+        // 2 thicknesses, 1 m, 2 scales, 4 default kappas, 3 alphas.
+        assert_eq!(specs.len(), 2 * 2 * 4 * 3);
+        assert_eq!(specs[0].thickness, 10);
+        assert_eq!(specs[specs.len() - 1].thickness, 16);
+        assert_eq!(specs[specs.len() - 1].alpha_max, 0.2);
+    }
 
     #[test]
     fn run_scene_writes_fields_and_probes() {
