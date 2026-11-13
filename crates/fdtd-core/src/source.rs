@@ -10,7 +10,8 @@ use std::f64::consts::PI;
 pub enum Waveform {
     /// `exp(-((t - t0) / tau)^2)`. This waveform HAS a DC component: its
     /// integral is `sqrt(pi) * tau`. Use it for pulses, not for anything that
-    /// must leave no static field behind.
+    /// must leave no static field behind. Use t0 >= 6 tau so the value at t = 0 is
+    /// below 1e-15; a visible turn-on step injects a grid-scale checkerboard.
     Gaussian { t0: f64, tau: f64 },
     /// `sin(2 pi f0 (t - t0)) * exp(-((t - t0) / tau)^2)`. Center frequency
     /// `f0`, bandwidth set by `tau`. Zero DC exactly, by odd symmetry about t0.

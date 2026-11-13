@@ -212,4 +212,75 @@ mod tests {
             assert_eq!(sim.ez, ez, "ez differs, seed {seed}");
         }
     }
+
+    fn pulse(node: usize, kind: SourceKind) -> Source1d {
+        Source1d {
+            node,
+            waveform: Waveform::Gaussian { t0: 40.0, tau: 6.0 },
+            amplitude: 1.0,
+            kind,
+        }
+    }
+
+    fn max_abs(v: &[f64]) -> f64 {
+        v.iter().fold(0.0_f64, |m, x| m.max(x.abs()))
+    }
+
+    #[test]
+    fn courant_above_limit_errors() {
+        let new = |s| Sim1d::new(10, s, Boundary1d::Pec, Boundary1d::Pec);
+        assert_eq!(
+            new(1.0001).unwrap_err(),
+            FdtdError::CourantAboveLimit {
+                s: 1.0001,
+                limit: 1.0
+            }
+        );
+        for s in [0.0, -1.0, f64::NAN, f64::INFINITY] {
+            assert!(new(s).is_err(), "accepted S = {s}");
+        }
+        assert!(new(1.0).is_ok());
+        assert!(Sim1d::new(2, 0.5, Boundary1d::Pec, Boundary1d::Pec).is_err());
+    }
+
+    #[test]
+    fn add_source_rejects_bad_input() {
+        let mut sim = Sim1d::new(10, 0.5, Boundary1d::Pec, Boundary1d::Pec).unwrap();
+        assert!(sim.add_source(pulse(10, SourceKind::Soft)).is_err());
+        let mut bad_amp = pulse(5, SourceKind::Soft);
+        bad_amp.amplitude = f64::NAN;
+        assert!(sim.add_source(bad_amp).is_err());
+        let mut bad_wave = pulse(5, SourceKind::Soft);
+        bad_wave.waveform = Waveform::Gaussian { t0: 1.0, tau: -1.0 };
+        assert!(sim.add_source(bad_wave).is_err());
+    }
+
+    /// A hard source overwrites its node with the waveform at t = n * S.
+    #[test]
+    fn hard_source_sets_value() {
+        let s = 0.5;
+        let mut sim = Sim1d::new(100, s, Boundary1d::Mur1, Boundary1d::Mur1).unwrap();
+        let mut src = pulse(40, SourceKind::Hard);
+        src.amplitude = 2.5;
+        sim.add_source(src).unwrap();
+        for n in 1..=80u64 {
+            sim.step();
+            assert_eq!(sim.time_step(), n);
+            assert_eq!(sim.ez()[40], 2.5 * src.waveform.value(n as f64 * s));
+        }
+    }
+
+    /// At S = 1 the first-order Mur end is exact, so once both halves of the
+    /// pulse have left, nothing at all remains on the grid. This needs t0 >= 6 tau:
+    /// a turn-on step leaves a checkerboard (-1)^(i+n) box that Mur cannot see.
+    #[test]
+    fn mur_exact_at_s1() {
+        let mut sim = Sim1d::new(200, 1.0, Boundary1d::Mur1, Boundary1d::Mur1).unwrap();
+        sim.add_source(pulse(100, SourceKind::Soft)).unwrap();
+        sim.step_n(60);
+        assert!(max_abs(sim.ez()) > 0.1, "pulse should be on the grid");
+        sim.step_n(340);
+        assert!(max_abs(sim.ez()) < 1e-14, "ez left {}", max_abs(sim.ez()));
+        assert!(max_abs(sim.hy()) < 1e-14, "hy left {}", max_abs(sim.hy()));
+    }
 }
