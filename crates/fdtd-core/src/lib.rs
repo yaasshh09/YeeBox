@@ -11,6 +11,7 @@ pub mod grid;
 pub mod kernel;
 pub mod material;
 pub mod monitor;
+pub mod reflection;
 pub mod scene;
 pub mod source;
 pub mod tm;
