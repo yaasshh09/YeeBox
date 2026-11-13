@@ -267,6 +267,7 @@ pub(crate) mod tests {
             geometry: vec![],
             sources: vec![],
             monitors: vec![],
+            pml: None,
         }
     }
 

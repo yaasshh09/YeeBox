@@ -24,6 +24,7 @@ fn vacuum(nx: usize, ny: usize, s: f64) -> Scene {
         geometry: vec![],
         sources: vec![],
         monitors: vec![],
+        pml: None,
     }
 }
 

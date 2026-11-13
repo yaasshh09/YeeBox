@@ -35,6 +35,20 @@ pub enum FdtdError {
     /// Grid smaller than 3 by 3 or above the cell budget.
     #[error("grid {nx} x {ny} is outside the supported size")]
     GridSize { nx: usize, ny: usize },
+    /// The CPML layer leaves fewer than one interior node along x or y.
+    #[error("pml of {thickness} cells does not fit a {nx} x {ny} grid")]
+    PmlTooThick {
+        thickness: usize,
+        nx: usize,
+        ny: usize,
+    },
+    /// A source sits strictly inside the CPML layer.
+    #[error("source at node ({i}, {j}) is inside the pml")]
+    SourceInPml { i: usize, j: usize },
+    /// A node in the CPML layer has a different material from the interior
+    /// node it faces along the layer normal.
+    #[error("material at pml node ({i}, {j}) is not uniform along the pml normal")]
+    PmlNotUniform { i: usize, j: usize },
     /// The scene JSON could not be parsed or written.
     #[error("scene json: {0}")]
     Json(String),

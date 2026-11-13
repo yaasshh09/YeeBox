@@ -5,6 +5,7 @@
 //! (i, j) at (i, j). Time and frequency inside waveforms are normalized
 //! (one time unit is dx / c0). `dx_phys_m` only matters at the UI boundary.
 
+use crate::cpml::PmlSpec;
 use crate::dispersion::courant_limit;
 use crate::error::{FdtdError, Result};
 use crate::material::Material;
@@ -31,6 +32,9 @@ pub struct Scene {
     pub sources: Vec<Source>,
     #[serde(default)]
     pub monitors: Vec<Monitor>,
+    /// CPML layer inside the PEC wall. Absent means a closed PEC box.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pml: Option<PmlSpec>,
 }
 
 /// Grid size in Ez nodes, physical cell size, and Courant number.
@@ -202,6 +206,19 @@ impl Scene {
             .collect()
     }
 
+    /// CPML thickness in cells, 0 without a layer.
+    pub fn pml_thickness(&self) -> usize {
+        self.pml.map_or(0, |p| p.thickness)
+    }
+
+    /// Whether Ez node (i, j) is strictly inside the CPML layer (the wall
+    /// ring counts as inside). Interface nodes, at depth 0, are not.
+    pub fn in_pml(&self, i: usize, j: usize) -> bool {
+        let d = self.pml_thickness();
+        let GridSpec { nx, ny, .. } = self.grid;
+        d > 0 && (i < d || j < d || i > nx - 1 - d || j > ny - 1 - d)
+    }
+
     /// Parses and validates a scene.
     pub fn from_json(text: &str) -> Result<Scene> {
         let scene: Scene =
@@ -217,8 +234,9 @@ impl Scene {
 
     /// Checks everything that would make a kernel built from this scene wrong
     /// or unstable: version, grid size, Courant number against the 2D limit,
-    /// material values, material indices, shape parameters, and source and
-    /// monitor positions.
+    /// material values, material indices, shape parameters, the CPML layer
+    /// (parameters, fit, and materials uniform along its normal), and source
+    /// and monitor positions.
     pub fn validate(&self) -> Result<()> {
         self.validate_inner(true)
     }
@@ -265,6 +283,18 @@ impl Scene {
         for shape in &self.geometry {
             shape.validate(self.materials.len())?;
         }
+        if let Some(p) = &self.pml {
+            p.validate()?;
+            let d = p.thickness;
+            if nx < 2 * d + 3 || ny < 2 * d + 3 {
+                return Err(FdtdError::PmlTooThick {
+                    thickness: d,
+                    nx,
+                    ny,
+                });
+            }
+            self.check_pml_uniform()?;
+        }
         for src in &self.sources {
             src.waveform.validate()?;
             finite("amplitude", src.amplitude)?;
@@ -275,6 +305,9 @@ impl Scene {
                     i: src.i,
                     j: src.j,
                 });
+            }
+            if self.in_pml(src.i, src.j) {
+                return Err(FdtdError::SourceInPml { i: src.i, j: src.j });
             }
             if self.materials[self.material_at(src.i, src.j)] == Material::Pec {
                 return Err(FdtdError::SourceOnPec { i: src.i, j: src.j });
@@ -288,6 +321,27 @@ impl Scene {
                     i,
                     j,
                 });
+            }
+        }
+        Ok(())
+    }
+
+    /// Every non-wall node in the layer must have the material of the
+    /// interior node it is clamped to. That covers the edges (uniform along
+    /// the normal) and the corners (uniform along both) with one rule.
+    fn check_pml_uniform(&self) -> Result<()> {
+        let d = self.pml_thickness();
+        let GridSpec { nx, ny, .. } = self.grid;
+        let ids = self.rasterize();
+        for j in 1..ny - 1 {
+            for i in 1..nx - 1 {
+                if !self.in_pml(i, j) {
+                    continue;
+                }
+                let (ci, cj) = (i.clamp(d, nx - 1 - d), j.clamp(d, ny - 1 - d));
+                if ids[j * nx + i] != ids[cj * nx + ci] {
+                    return Err(FdtdError::PmlNotUniform { i, j });
+                }
             }
         }
         Ok(())
@@ -346,6 +400,7 @@ pub(crate) mod tests {
                 kind: SourceKind::Soft,
             }],
             monitors: vec![Monitor::Point { i: 30, j: 20 }],
+            pml: None,
         }
     }
 
@@ -582,6 +637,94 @@ pub(crate) mod tests {
                 assert_eq!(raster[j * 10 + i], s.material_at(i, j));
             }
         }
+    }
+
+    /// Vacuum 40 x 30 with a 5-cell layer and a source well inside.
+    fn open_sample() -> Scene {
+        let mut s = empty(40, 30, vec![]);
+        s.pml = Some(crate::cpml::tests::spec(5));
+        s.sources = sample().sources;
+        s
+    }
+
+    #[test]
+    fn pml_json_round_trip_and_absent_by_default() {
+        let s = open_sample();
+        let text = s.to_json().unwrap();
+        assert!(text.contains("\"kappa_max\""));
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+        // A scene without a layer writes no pml key, so Phase 1 files are unchanged.
+        let text = sample().to_json().unwrap();
+        assert!(!text.contains("pml"));
+        assert_eq!(Scene::from_json(&text).unwrap().pml, None);
+    }
+
+    #[test]
+    fn pml_validation() {
+        assert!(open_sample().validate().is_ok());
+        let bad = |f: fn(&mut Scene)| {
+            let mut s = open_sample();
+            f(&mut s);
+            s.validate().unwrap_err()
+        };
+        assert!(matches!(
+            bad(|s| s.pml.as_mut().unwrap().kappa_max = 0.5),
+            FdtdError::InvalidParameter {
+                name: "kappa_max",
+                ..
+            }
+        ));
+        // ny = 30 leaves 30 - 2 * 14 = 2 nodes, one short of the minimum 3.
+        assert!(matches!(
+            bad(|s| s.pml.as_mut().unwrap().thickness = 14),
+            FdtdError::PmlTooThick { thickness: 14, .. }
+        ));
+        let mut s = open_sample();
+        s.pml.as_mut().unwrap().thickness = 13;
+        (s.sources[0].i, s.sources[0].j) = (20, 15);
+        assert!(s.validate().is_ok());
+
+        // Sources: inside the layer is rejected, on the interface node is fine.
+        for (i, j) in [(4, 15), (35, 15), (20, 4), (20, 25), (2, 2)] {
+            let mut s = open_sample();
+            (s.sources[0].i, s.sources[0].j) = (i, j);
+            assert_eq!(s.validate(), Err(FdtdError::SourceInPml { i, j }));
+        }
+        for (i, j) in [(5, 15), (34, 15), (20, 5), (20, 24)] {
+            let mut s = open_sample();
+            (s.sources[0].i, s.sources[0].j) = (i, j);
+            assert!(s.validate().is_ok(), "({i}, {j})");
+        }
+    }
+
+    #[test]
+    fn pml_materials_uniform_along_normal() {
+        let with = |shape: Shape| {
+            let mut s = open_sample();
+            s.geometry = vec![shape];
+            s.validate()
+        };
+        let rect = |x0, y0, x1, y1| Shape::Rect {
+            x0,
+            y0,
+            x1,
+            y1,
+            material: 1,
+        };
+        // A slab crossing the left layer along x is uniform along the normal.
+        assert!(with(rect(0.0, 10.0, 20.0, 14.0)).is_ok());
+        // A block ending inside the layer is not.
+        assert_eq!(
+            with(rect(3.0, 10.0, 20.0, 14.0)),
+            Err(FdtdError::PmlNotUniform { i: 1, j: 10 })
+        );
+        // A block that only touches the interface column from inside is not either.
+        assert!(with(rect(5.0, 10.0, 20.0, 14.0)).is_err());
+        // A slab reaching the bottom-left corner region must fill the corner too.
+        assert!(with(rect(0.0, 0.0, 20.0, 14.0)).is_ok());
+        assert!(with(rect(0.0, 3.0, 20.0, 14.0)).is_err());
+        // Wall nodes are PEC whatever the raster says, so they are not checked.
+        assert!(with(rect(0.0, 0.0, 0.0, 29.0)).is_ok());
     }
 
     #[test]
