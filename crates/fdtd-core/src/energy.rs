@@ -9,6 +9,10 @@
 //! H^(n + 1/2) is computed here from the current state with the same
 //! expression the solver uses, so no copy of the previous H is stored.
 //! Squaring H at a single half step instead gives a quantity that oscillates.
+//!
+//! Closed boxes only. Inside a CPML layer the H update carries 1/kappa and
+//! psi, so the H^(n + 1/2) recomputed here is not the solver's, and W is not
+//! the quantity the layer conserves or dissipates.
 
 use crate::tm::SimTm;
 
