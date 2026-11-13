@@ -2,6 +2,8 @@
 //! quantities are normalized (dx = dy = 1, c0 = 1, dt = S). Reflection is
 //! measured by the reference-domain method in `fdtd_core::reflection`.
 
+mod common;
+
 use fdtd_core::cpml::PmlSpec;
 use fdtd_core::reflection::{ReflectionSetup, reflection_db};
 use std::sync::OnceLock;
@@ -131,4 +133,146 @@ fn late_time_decay_no_growth() {
         );
     }
     assert!(last <= 1e-20 * peak, "final {:e} of peak", last / peak);
+}
+
+/// Complex quotient a / b of (re, im) pairs.
+fn cdiv(a: (f64, f64), b: (f64, f64)) -> (f64, f64) {
+    let d = b.0 * b.0 + b.1 * b.1;
+    ((a.0 * b.0 + a.1 * b.1) / d, (a.1 * b.0 - a.0 * b.1) / d)
+}
+
+/// A8: a soft CW line source in the open domain against the Hankel
+/// solution, from 2 to 5 wavelengths, along the x axis and the diagonal.
+///
+/// 253 x 253 nodes with the recommended 16-cell layer, source on the centre
+/// node, f0 = 0.05 (20 cells per wavelength, 40 steps per period at S = 0.5),
+/// a 3-period ramp and 3000 steps. The phasor at each probe is the exact DFT
+/// over the last 10 whole periods. Golden values come from SciPy
+/// (`validation/gen/line_source_hankel.py`): `H0^(2)(k r) / H0^(2)(k r0)` with
+/// the numerical k of each direction. The gate is `|F/F0 / (H/H0) - 1| <= 0.02`,
+/// which bounds the amplitude to 2 percent and the phase to 0.02 rad.
+#[test]
+fn a8_line_source_matches_hankel() {
+    use fdtd_core::dispersion::numerical_wavenumber;
+    use fdtd_core::material::Material;
+    use fdtd_core::scene::{GridSpec, Monitor, SCENE_VERSION, Scene, Source};
+    use fdtd_core::source::{SourceKind, Waveform};
+    use fdtd_core::tm::SimTm;
+    use std::f64::consts::PI;
+
+    const GOLDEN: &str = include_str!("../../../validation/golden/line_source_hankel.csv");
+    let (s, f0) = (0.5, 0.05);
+    let omega = 2.0 * PI * f0;
+    assert!(
+        GOLDEN.contains("# S = 0.5, f0 = 0.05,"),
+        "golden data is for another setup"
+    );
+
+    struct Row {
+        diagonal: bool,
+        di: usize,
+        dj: usize,
+        r: f64,
+        k: f64,
+        h: (f64, f64),
+        h_c: (f64, f64),
+    }
+    let rows: Vec<Row> = GOLDEN
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.starts_with("direction"))
+        .map(|l| {
+            let c: Vec<&str> = l.split(',').collect();
+            let f = |k: usize| c[k].parse::<f64>().unwrap();
+            Row {
+                diagonal: c[0] == "diagonal",
+                di: c[1].parse().unwrap(),
+                dj: c[2].parse().unwrap(),
+                r: f(3),
+                k: f(4),
+                h: (f(5), f(6)),
+                h_c: (f(7), f(8)),
+            }
+        })
+        .collect();
+    assert_eq!(rows.len(), 27);
+
+    // The closed-form k in the golden file equals this crate's dispersion solver.
+    for row in &rows {
+        let theta = if row.diagonal { PI / 4.0 } else { 0.0 };
+        let k = numerical_wavenumber(omega, theta, s).unwrap();
+        assert!((k - row.k).abs() < 1e-12 * k, "k {k} vs golden {}", row.k);
+    }
+
+    let (n, c) = (253, 126);
+    let scene = Scene {
+        version: SCENE_VERSION,
+        grid: GridSpec {
+            nx: n,
+            ny: n,
+            dx_phys_m: 1e-3,
+            courant: s,
+        },
+        materials: vec![Material::VACUUM],
+        geometry: vec![],
+        sources: vec![Source {
+            i: c,
+            j: c,
+            waveform: Waveform::RampedCw {
+                f0,
+                ramp_periods: 3.0,
+                phase: 0.0,
+            },
+            amplitude: 1.0,
+            kind: SourceKind::Soft,
+        }],
+        monitors: rows
+            .iter()
+            .map(|r| Monitor::Point {
+                i: c + r.di,
+                j: c + r.dj,
+            })
+            .collect(),
+        pml: Some(PmlSpec::recommended(16)),
+    };
+    let mut sim = SimTm::from_scene(&scene).unwrap();
+    let (steps, period) = (3000, 40);
+    assert_eq!((1.0 / (f0 * s)) as usize, period);
+    sim.step_n(steps as u64);
+
+    let phasors: Vec<(f64, f64)> = sim
+        .probes()
+        .iter()
+        .map(|p| common::dtft(&p.history()[steps + 1 - 10 * period..], None, omega, s))
+        .collect();
+    let (mut worst, mut worst_amp, mut worst_phase, mut worst_c) =
+        (0.0_f64, 0.0_f64, 0.0_f64, 0.0_f64);
+    for diagonal in [false, true] {
+        let idx: Vec<usize> = (0..rows.len())
+            .filter(|&k| rows[k].diagonal == diagonal)
+            .collect();
+        let f_ref = phasors[idx[0]];
+        for &k in &idx {
+            let ratio = cdiv(cdiv(phasors[k], f_ref), rows[k].h);
+            let err = (ratio.0 - 1.0).hypot(ratio.1);
+            let ratio_c = cdiv(cdiv(phasors[k], f_ref), rows[k].h_c);
+            let err_c = (ratio_c.0 - 1.0).hypot(ratio_c.1);
+            eprintln!(
+                "  {} r = {:6.2}: |ratio| - 1 = {:+.2e}, phase {:+.2e} rad, err {:.2e} (continuum k: {:.2e})",
+                if diagonal { "diag" } else { "axis" },
+                rows[k].r,
+                ratio.0.hypot(ratio.1) - 1.0,
+                ratio.1.atan2(ratio.0),
+                err,
+                err_c
+            );
+            worst = worst.max(err);
+            worst_amp = worst_amp.max((ratio.0.hypot(ratio.1) - 1.0).abs());
+            worst_phase = worst_phase.max(ratio.1.atan2(ratio.0).abs());
+            worst_c = worst_c.max(err_c);
+        }
+    }
+    eprintln!(
+        "A8: worst {worst:.2e} (amplitude {worst_amp:.2e}, phase {worst_phase:.2e} rad), gate 0.02; with continuum k {worst_c:.2e}"
+    );
+    assert!(worst <= 0.02, "A8 error {worst}");
 }
