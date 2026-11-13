@@ -1,6 +1,7 @@
 //! Tier 3 invariants for the 2D TMz kernel, through the public API only.
 //! Each one holds for any correct linear Yee solver, whatever the scene.
 
+use fdtd_core::cpml::PmlSpec;
 use fdtd_core::material::Material;
 use fdtd_core::scene::{GridSpec, Monitor, SCENE_VERSION, Scene, Shape, Source};
 use fdtd_core::source::{SourceKind, Waveform};
@@ -180,4 +181,146 @@ fn linearity_double_amplitude_bit_exact() {
         assert!(a.iter().zip(b).all(|(x, y)| 2.0 * x == *y));
     }
     assert!(max_abs(one.ez()) > 1e-3);
+}
+
+fn layer(thickness: usize) -> PmlSpec {
+    PmlSpec {
+        thickness,
+        m: 3.0,
+        sigma_scale: 1.0,
+        kappa_max: 5.0,
+        alpha_max: 0.05,
+    }
+}
+
+/// 61 x 51 with a 10-cell CPML, symmetric about x = 30 and y = 25: two
+/// dielectric bars, two PEC disks, a lossy disk at the centre, and a source
+/// one node off centre along x so both mirrors are needed.
+fn open_symmetric() -> Scene {
+    let mut scene = cluttered(61, 51);
+    scene.pml = Some(layer(10));
+    let bar = |y0, y1| Shape::Rect {
+        x0: 22.0,
+        y0,
+        x1: 38.0,
+        y1,
+        material: 1,
+    };
+    let disk = |cx, cy, r, material| Shape::Circle {
+        cx,
+        cy,
+        r,
+        material,
+    };
+    scene.geometry = vec![
+        bar(13.0, 15.0),
+        bar(35.0, 37.0),
+        disk(15.0, 25.0, 2.5, 3),
+        disk(45.0, 25.0, 2.5, 3),
+        disk(30.0, 25.0, 1.5, 2),
+    ];
+    scene.sources = vec![ricker_at(30, 25, 1.0)];
+    scene
+}
+
+/// With the CPML on, the field stays mirror symmetric about both axes. A
+/// half-cell slip in one profile, or a low side that does not match the high
+/// side, breaks this long before it shows in a reflection number. Run long
+/// enough for every face and corner to absorb a wave.
+#[test]
+fn mirror_symmetry_with_cpml() {
+    let scene = open_symmetric();
+    let (nx, ny) = (scene.grid.nx, scene.grid.ny);
+    let mut sim = SimTm::from_scene(&scene).unwrap();
+    let mut worst = 0.0_f64;
+    let mut peak = 0.0_f64;
+    for _ in 0..4 {
+        sim.step_n(150);
+        let (ez, hx, hy) = (sim.ez(), sim.hx(), sim.hy());
+        peak = peak.max(max_abs(ez));
+        let at = |i: usize, j: usize| j * nx + i;
+        for j in 0..ny {
+            for i in 0..nx {
+                let (mx, my) = (nx - 1 - i, ny - 1 - j);
+                worst = worst.max((ez[at(i, j)] - ez[at(mx, j)]).abs());
+                worst = worst.max((ez[at(i, j)] - ez[at(i, my)]).abs());
+                if j < ny - 1 {
+                    // Hx at (i, j + 1/2): even in x, odd in y (mirror row ny - 2 - j).
+                    worst = worst.max((hx[at(i, j)] - hx[at(mx, j)]).abs());
+                    worst = worst.max((hx[at(i, j)] + hx[at(i, ny - 2 - j)]).abs());
+                }
+                if i < nx - 1 {
+                    // Hy at (i + 1/2, j): odd in x (mirror column nx - 2 - i), even in y.
+                    worst = worst.max((hy[at(i, j)] + hy[at(nx - 2 - i, j)]).abs());
+                    worst = worst.max((hy[at(i, j)] - hy[at(i, my)]).abs());
+                }
+            }
+        }
+    }
+    eprintln!(
+        "mirror symmetry with cpml: worst {:.2e} of peak",
+        worst / peak
+    );
+    assert!(peak > 1e-3);
+    assert!(
+        worst <= 1e-14 * peak,
+        "relative asymmetry {:e}",
+        worst / peak
+    );
+}
+
+/// Walls and padding stay exactly zero with the layer on.
+#[test]
+fn padding_and_walls_zero_with_cpml() {
+    let scene = open_symmetric();
+    let (nx, ny) = (scene.grid.nx, scene.grid.ny);
+    let mut sim = SimTm::from_scene(&scene).unwrap();
+    for _ in 0..300 {
+        sim.step();
+        for j in 0..ny {
+            for i in 0..nx {
+                let k = j * nx + i;
+                if i == 0 || j == 0 || i == nx - 1 || j == ny - 1 {
+                    assert_eq!(sim.ez()[k], 0.0, "wall ez at ({i}, {j})");
+                }
+                if j == ny - 1 {
+                    assert_eq!(sim.hx()[k], 0.0, "hx padding at ({i}, {j})");
+                }
+                if i == nx - 1 {
+                    assert_eq!(sim.hy()[k], 0.0, "hy padding at ({i}, {j})");
+                }
+            }
+        }
+    }
+    assert!(max_abs(sim.ez()) > 0.0);
+}
+
+/// Quiescence and exact linearity hold with the layer on: the psi recursions
+/// are linear and start at zero.
+#[test]
+fn quiescence_and_linearity_with_cpml() {
+    let mut scene = open_symmetric();
+    scene.sources.clear();
+    let mut sim = SimTm::from_scene(&scene).unwrap();
+    sim.step_n(300);
+    for f in [sim.ez(), sim.hx(), sim.hy()] {
+        assert!(f.iter().all(|&v| v == 0.0));
+    }
+
+    let run = |amp: f64| {
+        let mut scene = open_symmetric();
+        scene.sources = vec![ricker_at(18, 14, amp)];
+        let mut sim = SimTm::from_scene(&scene).unwrap();
+        sim.step_n(400);
+        sim
+    };
+    let (one, two) = (run(1.0), run(2.0));
+    for (a, b) in [
+        (one.ez(), two.ez()),
+        (one.hx(), two.hx()),
+        (one.hy(), two.hy()),
+    ] {
+        assert!(a.iter().zip(b).all(|(x, y)| 2.0 * x == *y));
+    }
+    assert!(max_abs(one.ez()) > 1e-6);
 }
