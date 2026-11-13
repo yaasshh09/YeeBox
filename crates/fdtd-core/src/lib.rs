@@ -9,6 +9,7 @@ pub mod grid;
 pub mod material;
 pub mod scene;
 pub mod source;
+pub mod tm;
 pub mod units;
 
 pub use error::{FdtdError, Result};
