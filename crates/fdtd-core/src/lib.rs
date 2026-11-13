@@ -4,6 +4,7 @@
 
 pub mod error;
 pub mod fdtd1d;
+pub mod grid;
 pub mod source;
 pub mod units;
 

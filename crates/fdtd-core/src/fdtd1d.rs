@@ -154,3 +154,62 @@ impl Sim1d {
         self.s
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::grid::{Axis, Component, curl_stencil_tm};
+
+    /// Deterministic values in [-1, 1) from a 64-bit LCG. Enough for test data.
+    fn random_fields(seed: u64, n: usize) -> Vec<f64> {
+        let mut x = seed;
+        (0..n)
+            .map(|_| {
+                x = x
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                (x >> 11) as f64 / (1u64 << 52) as f64 - 1.0
+            })
+            .collect()
+    }
+
+    /// One step driven by the stencil table in `grid.rs`, restricted to 1D by
+    /// dropping every y-difference. Interior nodes only.
+    fn stencil_step(ez: &mut [f64], hy: &mut [f64], s: f64) {
+        let apply = |target: Component, src: &[f64], i: usize| -> f64 {
+            curl_stencil_tm(target)
+                .iter()
+                .filter(|t| t.axis == Axis::X)
+                .map(|t| t.sign * src[(i as i64 + t.di) as usize])
+                .sum()
+        };
+        for (i, h) in hy.iter_mut().enumerate() {
+            *h += s * apply(Component::Hy, ez, i);
+        }
+        for i in 1..ez.len() - 1 {
+            ez[i] += s * apply(Component::Ez, hy, i);
+        }
+    }
+
+    /// The hand-written loop in `step` must equal the stencil table exactly,
+    /// which proves the loop indices match the documented staggering.
+    #[test]
+    fn stencil_oracle_matches_step() {
+        let (nx, s) = (64, 0.5);
+        for seed in 1..=5 {
+            let mut sim = Sim1d::new(nx, s, Boundary1d::Pec, Boundary1d::Pec).unwrap();
+            sim.ez = random_fields(seed, nx);
+            sim.hy = random_fields(seed + 100, nx - 1);
+            let (mut ez, mut hy) = (sim.ez.clone(), sim.hy.clone());
+
+            for _ in 0..3 {
+                sim.step();
+                stencil_step(&mut ez, &mut hy, s);
+                ez[0] = 0.0;
+                ez[nx - 1] = 0.0;
+            }
+            assert_eq!(sim.hy, hy, "hy differs, seed {seed}");
+            assert_eq!(sim.ez, ez, "ez differs, seed {seed}");
+        }
+    }
+}
