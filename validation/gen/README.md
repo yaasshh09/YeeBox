@@ -15,7 +15,9 @@ golden data only with those versions.
 
 | Script | Input | Output |
 |---|---|---|
-| `plot_1d.py` | NPZ from `fdtd run1d` | space-time plot of Ez (Phase 0 done check) |
+| `plot_1d.py` | NPZ from `fdtd run` | space-time plot of Ez (Phase 0 done check) |
+| `plot_cavity_convergence.py` | runs `fdtd run --scene` itself | `validation/report/cavity_convergence.png`, cavity error vs resolution with the fitted order (Phase 1 done check) |
 
-Phase 0 needs no golden data: every Phase 0 reference is an exact discrete
-identity computed in Rust.
+Phases 0 and 1 need no golden data: every reference so far is an exact
+discrete identity or a closed form computed in Rust. The cavity plot script
+re-measures the resonances in NumPy on its own, as a cross-check of A7.
