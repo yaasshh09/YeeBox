@@ -15,7 +15,16 @@
 //!
 //! The outer ring of Ez nodes is a PEC wall: the E loop covers interior nodes
 //! only, so those values never leave zero. PEC material nodes have Ca = Cb = 0.
+//!
+//! CPML (`cpml.rs`) runs through the same loops. Each difference term is
+//! scaled by the 1/kappa of its axis, and the psi of each derivative is added
+//! on. Outside the layer 1/kappa = 1 and b = c = 0, so psi stays zero and every
+//! operation reduces exactly to the plain Yee update, in the same order. With
+//! no layer the result is bit for bit the closed-box solver. psi arrays are
+//! full `nx * ny` and named for the field and the derivative axis:
+//! `psi_hxy` (Hx, d/dy), `psi_hyx` (Hy, d/dx), `psi_ezx`, `psi_ezy`.
 
+use crate::cpml::Cpml;
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::kernel::Kernel;
@@ -36,6 +45,11 @@ pub struct SimTm {
     ca: Vec<f64>,
     cb: Vec<f64>,
     eps: Vec<f64>,
+    pml: Cpml,
+    psi_hxy: Vec<f64>,
+    psi_hyx: Vec<f64>,
+    psi_ezx: Vec<f64>,
+    psi_ezy: Vec<f64>,
     sources: Vec<Source>,
     probes: Vec<PointProbe>,
 }
@@ -79,6 +93,13 @@ impl SimTm {
         for p in &mut probes {
             p.record(&ez, nx);
         }
+        // sigma_opt is set for the background material; a PEC background
+        // has no wave impedance, so it falls back to vacuum.
+        let eps_r = scene.materials[0].eps().max(1.0);
+        let pml = match &scene.pml {
+            Some(spec) => Cpml::new(spec, nx, ny, s, eps_r),
+            None => Cpml::none(nx, ny),
+        };
         Self {
             nx,
             ny,
@@ -90,6 +111,11 @@ impl SimTm {
             ca,
             cb,
             eps,
+            pml,
+            psi_hxy: vec![0.0; nx * ny],
+            psi_hyx: vec![0.0; nx * ny],
+            psi_ezx: vec![0.0; nx * ny],
+            psi_ezy: vec![0.0; nx * ny],
             sources: scene.sources.clone(),
             probes,
         }
@@ -101,27 +127,46 @@ impl SimTm {
     pub fn step(&mut self) {
         let (nx, ny, s) = (self.nx, self.ny, self.s);
         let (ez, hx, hy) = (&mut self.ez, &mut self.hx, &mut self.hy);
+        let p = &self.pml;
 
-        // Hx[i, j] at (i, j + 1/2): minus the y-difference of Ez.
+        // Hx[i, j] at (i, j + 1/2): minus the y-difference of Ez. y profile
+        // at the half position j + 1/2.
         for j in 0..ny - 1 {
+            let (b, c, ik) = (p.y_half.b[j], p.y_half.c[j], p.y_half.inv_kappa[j]);
             for i in 0..nx {
                 let k = j * nx + i;
-                hx[k] -= s * (ez[k + nx] - ez[k]);
+                let psi = &mut self.psi_hxy[k];
+                *psi = b * *psi + c * (ez[k + nx] - ez[k]);
+                hx[k] -= s * (ez[k + nx] * ik - ez[k] * ik + *psi);
             }
         }
-        // Hy[i, j] at (i + 1/2, j): the x-difference of Ez.
+        // Hy[i, j] at (i + 1/2, j): the x-difference of Ez. x profile at the
+        // half position i + 1/2.
         for j in 0..ny {
             for i in 0..nx - 1 {
+                let (b, c, ik) = (p.x_half.b[i], p.x_half.c[i], p.x_half.inv_kappa[i]);
                 let k = j * nx + i;
-                hy[k] += s * (ez[k + 1] - ez[k]);
+                let psi = &mut self.psi_hyx[k];
+                *psi = b * *psi + c * (ez[k + 1] - ez[k]);
+                hy[k] += s * (ez[k + 1] * ik - ez[k] * ik + *psi);
             }
         }
-        // Ez[i, j] at (i, j), interior only. Summed in the order of the
-        // stencil table so the oracle test can compare bit for bit.
+        // Ez[i, j] at (i, j), interior only, profiles at the integer
+        // positions. Summed in the order of the stencil table so the oracle
+        // tests can compare bit for bit.
         for j in 1..ny - 1 {
+            let (by, cy, iky) = (p.y_int.b[j], p.y_int.c[j], p.y_int.inv_kappa[j]);
             for i in 1..nx - 1 {
+                let (bx, cx, ikx) = (p.x_int.b[i], p.x_int.c[i], p.x_int.inv_kappa[i]);
                 let k = j * nx + i;
-                let curl = hy[k] - hy[k - 1] - hx[k] + hx[k - nx];
+                let px = &mut self.psi_ezx[k];
+                *px = bx * *px + cx * (hy[k] - hy[k - 1]);
+                let py = &mut self.psi_ezy[k];
+                *py = by * *py + cy * (hx[k] - hx[k - nx]);
+                let curl = hy[k] * ikx - hy[k - 1] * ikx - hx[k] * iky
+                    + hx[k - nx] * iky
+                    + self.psi_ezx[k]
+                    - self.psi_ezy[k];
                 ez[k] = self.ca[k] * ez[k] + self.cb[k] * curl;
             }
         }
@@ -248,7 +293,8 @@ impl Kernel for SimTm {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::grid::{Component, curl_stencil_tm};
+    use crate::cpml::{Cpml, Profile};
+    use crate::grid::{Axis, Component, curl_stencil_tm};
     use crate::material::Material;
     use crate::scene::{GridSpec, SCENE_VERSION, Shape};
     use crate::source::Waveform;
@@ -337,9 +383,163 @@ pub(crate) mod tests {
         }
     }
 
+    /// Random b in [0, 1), c in (-1, 0], 1/kappa in (0.1, 1], `n` entries.
+    fn random_profile(seed: u64, n: usize) -> Profile {
+        let r = |k| random_fields(seed + k, n);
+        Profile {
+            b: r(1).iter().map(|v| 0.5 * (v + 1.0)).collect(),
+            c: r(2).iter().map(|v| -0.5 * (v + 1.0)).collect(),
+            inv_kappa: r(3).iter().map(|v| 1.0 - 0.45 * (v + 1.0)).collect(),
+        }
+    }
+
+    /// CPML oracle, written from doc 02 and the stencil table. Every term
+    /// `sign * src` is scaled by the 1/kappa of its own axis. psi is kept in
+    /// the curl-sign convention: with `D` the signed stencil sum along an
+    /// axis, `psi = b psi + c D` and `update = coef * (sum(term / kappa) + psi)`.
+    /// The solver keeps psi on the plain difference, which for the two
+    /// y-derivatives (Hx and the Hx part of Ez) is exactly minus this one.
+    struct CpmlFields {
+        f: Fields,
+        pml: Cpml,
+        /// Hx along y, Hy along x, Ez along x, Ez along y.
+        psi: [Vec<f64>; 4],
+    }
+
+    impl CpmlFields {
+        fn slot(target: Component, axis: Axis) -> usize {
+            match (target, axis) {
+                (Component::Hx, _) => 0,
+                (Component::Hy, _) => 1,
+                (Component::Ez, Axis::X) => 2,
+                (Component::Ez, Axis::Y) => 3,
+            }
+        }
+
+        /// The profile entry a (target, axis) pair at (i, j) uses. H sits half
+        /// a cell off the node along its derivative axis, Ez sits on the node.
+        /// x is indexed by i, y by j.
+        fn coef(&self, target: Component, axis: Axis, i: usize, j: usize) -> (f64, f64, f64) {
+            let (p, k) = match (target, axis) {
+                (Component::Ez, Axis::X) => (&self.pml.x_int, i),
+                (Component::Ez, Axis::Y) => (&self.pml.y_int, j),
+                (_, Axis::X) => (&self.pml.x_half, i),
+                (_, Axis::Y) => (&self.pml.y_half, j),
+            };
+            (p.b[k], p.c[k], p.inv_kappa[k])
+        }
+
+        fn apply(&mut self, target: Component, i: usize, j: usize) -> f64 {
+            let nx = self.f.nx;
+            let (mut d, mut used, mut sum) = ([0.0; 2], [false; 2], 0.0);
+            for t in curl_stencil_tm(target) {
+                let src = match t.src {
+                    Component::Ez => &self.f.ez,
+                    Component::Hx => &self.f.hx,
+                    Component::Hy => &self.f.hy,
+                };
+                let (si, sj) = ((i as i64 + t.di) as usize, (j as i64 + t.dj) as usize);
+                let v = t.sign * src[sj * nx + si];
+                sum += v * self.coef(target, t.axis, i, j).2;
+                d[t.axis as usize] += v;
+                used[t.axis as usize] = true;
+            }
+            for axis in [Axis::X, Axis::Y] {
+                if used[axis as usize] {
+                    let (b, c, _) = self.coef(target, axis, i, j);
+                    let psi = &mut self.psi[Self::slot(target, axis)][j * nx + i];
+                    *psi = b * *psi + c * d[axis as usize];
+                    sum += *psi;
+                }
+            }
+            sum
+        }
+
+        fn step(&mut self, s: f64) {
+            let (nx, ny) = (self.f.nx, self.f.ny);
+            for j in 0..ny - 1 {
+                for i in 0..nx {
+                    let d = self.apply(Component::Hx, i, j);
+                    self.f.hx[j * nx + i] += s * d;
+                }
+            }
+            for j in 0..ny {
+                for i in 0..nx - 1 {
+                    let d = self.apply(Component::Hy, i, j);
+                    self.f.hy[j * nx + i] += s * d;
+                }
+            }
+            for j in 1..ny - 1 {
+                for i in 1..nx - 1 {
+                    let k = j * nx + i;
+                    let d = self.apply(Component::Ez, i, j);
+                    self.f.ez[k] = self.f.ca[k] * self.f.ez[k] + self.f.cb[k] * d;
+                }
+            }
+        }
+    }
+
+    /// The CPML update in `step` equals the oracle bit for bit, with random
+    /// fields, random psi, random Ca and Cb, and random b, c, 1/kappa at
+    /// every position, on a non-square grid so x and y cannot be swapped.
+    #[test]
+    fn stencil_oracle_with_cpml() {
+        let (nx, ny, s) = (23, 17, 0.5);
+        for seed in 1..=4 {
+            let r = |k: u64| random_fields(seed * 100 + k, nx * ny);
+            let mut f = Fields {
+                nx,
+                ny,
+                ez: r(1),
+                hx: r(2),
+                hy: r(3),
+                ca: r(4),
+                cb: r(5).iter().map(|v| 0.5 * (v + 1.0)).collect(),
+            };
+            for i in 0..nx {
+                f.hx[(ny - 1) * nx + i] = 0.0;
+            }
+            for j in 0..ny {
+                f.hy[j * nx + nx - 1] = 0.0;
+            }
+            let pml = Cpml {
+                x_int: random_profile(seed * 100 + 10, nx),
+                x_half: random_profile(seed * 100 + 20, nx),
+                y_int: random_profile(seed * 100 + 30, ny),
+                y_half: random_profile(seed * 100 + 40, ny),
+            };
+            let psi = [r(6), r(7), r(8), r(9)];
+
+            let mut sim = SimTm::from_scene(&vacuum_box(nx, ny, s)).unwrap();
+            (sim.ez, sim.hx, sim.hy) = (f.ez.clone(), f.hx.clone(), f.hy.clone());
+            (sim.ca, sim.cb) = (f.ca.clone(), f.cb.clone());
+            sim.pml = pml.clone();
+            let neg = |v: &[f64]| v.iter().map(|x| -x).collect::<Vec<_>>();
+            sim.psi_hxy = neg(&psi[0]);
+            sim.psi_hyx = psi[1].clone();
+            sim.psi_ezx = psi[2].clone();
+            sim.psi_ezy = neg(&psi[3]);
+            let mut o = CpmlFields { f, pml, psi };
+
+            for _ in 0..3 {
+                sim.step();
+                o.step(s);
+            }
+            assert_eq!(sim.hx, o.f.hx, "hx differs, seed {seed}");
+            assert_eq!(sim.hy, o.f.hy, "hy differs, seed {seed}");
+            assert_eq!(sim.ez, o.f.ez, "ez differs, seed {seed}");
+            assert_eq!(sim.psi_hxy, neg(&o.psi[0]), "psi_hxy, seed {seed}");
+            assert_eq!(sim.psi_hyx, o.psi[1], "psi_hyx, seed {seed}");
+            assert_eq!(sim.psi_ezx, o.psi[2], "psi_ezx, seed {seed}");
+            assert_eq!(sim.psi_ezy, neg(&o.psi[3]), "psi_ezy, seed {seed}");
+        }
+    }
+
     /// The hand-written loops must equal the stencil table exactly, with
     /// random fields and random per node coefficients. This proves the loop
-    /// indices match the documented staggering.
+    /// indices match the documented staggering. Built with no PML, so this
+    /// also proves the CPML update is bit for bit the Phase 1 update when the
+    /// profiles are the identity.
     #[test]
     fn stencil_oracle_matches_step() {
         let (nx, ny, s) = (23, 17, 0.5);
