@@ -5,5 +5,6 @@
 pub mod error;
 pub mod fdtd1d;
 pub mod source;
+pub mod units;
 
 pub use error::{FdtdError, Result};
