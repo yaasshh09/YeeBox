@@ -52,6 +52,10 @@ pub enum FdtdError {
     /// The TF/SF plane wave box breaks a placement rule.
     #[error("plane wave: {0}")]
     PlaneWave(crate::tfsf::PlaneWaveFault),
+    /// A spectrum run hit its step budget before the fields died down, so
+    /// its spectrum would ring.
+    #[error("fields still at {level:e} of peak after {steps} steps")]
+    NotDecayed { steps: u64, level: f64 },
     /// The scene JSON could not be parsed or written.
     #[error("scene json: {0}")]
     Json(String),

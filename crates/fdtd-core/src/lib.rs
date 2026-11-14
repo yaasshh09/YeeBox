@@ -14,6 +14,7 @@ pub mod monitor;
 pub mod reflection;
 pub mod scene;
 pub mod source;
+pub mod spectra;
 pub mod tfsf;
 pub mod tm;
 pub mod units;
