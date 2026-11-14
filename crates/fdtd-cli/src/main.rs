@@ -377,18 +377,15 @@ fn case_sections(
     };
     std::fs::write(dir.join("slab_rt.svg"), plot.render())?;
     Ok(format!(
-        "
-## Every case (A1 to A15)
-
-         `fdtd validate` prints the same table. Each gate is the one in          `docs/04-validation.md`; the conditions column says what was run.
-
-{}
-         ## Dielectric slab (A13)
-
-         ![Slab R and T vs frequency](slab_rt.svg)
-
-         The measured curves sit on the exact discrete slab to 1e-7; what separates them          from Airy is the grid's own dispersion, 4.9e-3 at the band edge, as the golden          file predicts. The numbers are in `slab_rt.csv`.
-",
+        "\n## Every case (A1 to A15)\n\n\
+         `fdtd validate` prints the same table. Each gate is the one in \
+         `docs/04-validation.md`; the conditions column says what was run.\n\n\
+         {}\n\
+         ## Dielectric slab (A13)\n\n\
+         ![Slab R and T vs frequency](slab_rt.svg)\n\n\
+         The measured curves sit on the exact discrete slab to 1e-7; what separates them \
+         from Airy is the grid's own dispersion, 4.9e-3 at the band edge, as the golden \
+         file predicts. The numbers are in `slab_rt.csv`.\n",
         case_table(rows)
     ))
 }

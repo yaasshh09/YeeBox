@@ -36,7 +36,7 @@ The layers are `PmlSpec::recommended`, tuned with `fdtd pml-sweep` against the w
 
 ## Every case (A1 to A15)
 
-         `fdtd validate` prints the same table. Each gate is the one in          `docs/04-validation.md`; the conditions column says what was run.
+`fdtd validate` prints the same table. Each gate is the one in `docs/04-validation.md`; the conditions column says what was run.
 
 | Case | Check | Measured | Gate | Result | Conditions |
 |---|---|---|---|---|---|
@@ -57,11 +57,11 @@ The layers are `PmlSpec::recommended`, tuned with `fdtd pml-sweep` against the w
 | A14 | lossy medium attenuation vs analytic | 4.00e-3 rel | <= 0.01 | pass | eps 2.25, sigma 0.05, f 0.008 to 0.02; vs exact discrete 2.5e-6 |
 | A15 | TF/SF leakage, empty domain | -303.9111 dB | <= -120 | pass | all four directions, closed box and periodic y |
 
-         ## Dielectric slab (A13)
+## Dielectric slab (A13)
 
-         ![Slab R and T vs frequency](slab_rt.svg)
+![Slab R and T vs frequency](slab_rt.svg)
 
-         The measured curves sit on the exact discrete slab to 1e-7; what separates them          from Airy is the grid's own dispersion, 4.9e-3 at the band edge, as the golden          file predicts. The numbers are in `slab_rt.csv`.
+The measured curves sit on the exact discrete slab to 1e-7; what separates them from Airy is the grid's own dispersion, 4.9e-3 at the band edge, as the golden file predicts. The numbers are in `slab_rt.csv`.
 
 ## GPU against CPU (Tier 4)
 
