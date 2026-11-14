@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "grid": { "nx": 100, "ny": 120, "dx_phys_m": 0.001, "courant": 0.5 },
+  "materials": [
+    { "kind": "dielectric", "eps_inf": 1, "sigma": 0 },
+    { "kind": "dielectric", "eps_inf": 2, "sigma": 0.02 }
+  ],
+  "geometry": [
+    { "shape": "rect", "x0": 35, "y0": 50, "x1": 65, "y1": 60, "material": 1 }
+  ],
+  "monitors": [
+    { "type": "point", "i": 50, "j": 40 },
+    { "type": "flux", "normal": "y", "at": 20, "from": 30, "to": 70, "freqs": [0.03, 0.04] }
+  ],
+  "pml": { "thickness": 12, "m": 3, "sigma_scale": 1.25, "kappa_max": 2, "alpha_max": 0.15 },
+  "plane_wave": { "x0": 25, "y0": 25, "x1": 75, "y1": 95, "direction": "-y", "waveform": { "type": "ramped_cw", "f0": 0.04, "ramp_periods": 3, "phase": 0 }, "amplitude": 1 }
+}

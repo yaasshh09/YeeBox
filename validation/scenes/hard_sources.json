@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "grid": { "nx": 80, "ny": 60, "dx_phys_m": 0.001, "courant": 0.5 },
+  "materials": [
+    { "kind": "dielectric", "eps_inf": 1, "sigma": 0 },
+    { "kind": "dielectric", "eps_inf": 2, "sigma": 0 }
+  ],
+  "geometry": [
+    { "shape": "rect", "x0": 45, "y0": 10, "x1": 55, "y1": 50, "material": 1 }
+  ],
+  "sources": [
+    { "i": 20, "j": 30, "waveform": { "type": "modulated_gaussian", "t0": 100, "tau": 15, "f0": 0.05 }, "amplitude": 1, "kind": "hard" },
+    { "i": 65, "j": 20, "waveform": { "type": "gaussian", "t0": 70, "tau": 10 }, "amplitude": 0.5 },
+    { "i": 65, "j": 20, "waveform": { "type": "ricker", "t0": 80, "f_peak": 0.03 }, "amplitude": -0.7 },
+    { "i": 30, "j": 45, "waveform": { "type": "gaussian", "t0": 80, "tau": 12 }, "amplitude": 1 },
+    { "i": 30, "j": 45, "waveform": { "type": "ricker", "t0": 90, "f_peak": 0.04 }, "amplitude": 0.3, "kind": "hard" }
+  ],
+  "monitors": [
+    { "type": "point", "i": 40, "j": 30 },
+    { "type": "point", "i": 70, "j": 45 }
+  ]
+}

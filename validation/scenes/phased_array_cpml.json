@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "grid": { "nx": 160, "ny": 120, "dx_phys_m": 0.001, "courant": 0.5 },
+  "materials": [{ "kind": "dielectric", "eps_inf": 1, "sigma": 0 }],
+  "sources": [
+    {"i": 40, "j": 46, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 0.0}, "amplitude": 1},
+    {"i": 40, "j": 50, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 0.6}, "amplitude": 1},
+    {"i": 40, "j": 54, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 1.2}, "amplitude": 1},
+    {"i": 40, "j": 58, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 1.8}, "amplitude": 1},
+    {"i": 40, "j": 62, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 2.4}, "amplitude": 1},
+    {"i": 40, "j": 66, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 3.0}, "amplitude": 1},
+    {"i": 40, "j": 70, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 3.6}, "amplitude": 1},
+    {"i": 40, "j": 74, "waveform": {"type": "ramped_cw", "f0": 0.05, "ramp_periods": 3, "phase": 4.2}, "amplitude": 1}
+  ],
+  "monitors": [
+    {"type": "point", "i": 120, "j": 40},
+    {"type": "point", "i": 120, "j": 80},
+    {"type": "flux", "normal": "x", "at": 130, "from": 20, "to": 100, "freqs": [0.05]}
+  ],
+  "pml": {"thickness": 16, "m": 4, "sigma_scale": 1, "kappa_max": 2, "alpha_max": 0.1}
+}

@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "grid": { "nx": 100, "ny": 80, "dx_phys_m": 0.001, "courant": 0.5 },
+  "materials": [
+    { "kind": "dielectric", "eps_inf": 1, "sigma": 0 }
+  ],
+  "monitors": [
+    { "type": "point", "i": 50, "j": 40 },
+    { "type": "point", "i": 70, "j": 40 }
+  ],
+  "pml": { "thickness": 12, "m": 3, "sigma_scale": 1.25, "kappa_max": 2, "alpha_max": 0.15 },
+  "plane_wave": { "x0": 50, "y0": 20, "x1": 50, "y1": 60, "direction": "+x", "waveform": { "type": "gaussian", "t0": 70, "tau": 10 }, "amplitude": 1 }
+}
