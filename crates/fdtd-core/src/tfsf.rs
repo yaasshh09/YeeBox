@@ -11,6 +11,7 @@
 use crate::cpml::PmlSpec;
 use crate::error::Result;
 use crate::fdtd1d::{Boundary1d, Sim1d, Source1d};
+use crate::grid::Component;
 use crate::source::{SourceKind, Waveform};
 use serde::{Deserialize, Serialize};
 
@@ -118,40 +119,68 @@ impl Tfsf {
         }
     }
 
-    /// Incident Ez at 2D node (i, j).
-    fn ez_at(&self, i: usize, j: usize) -> f64 {
-        self.ez_inc(if self.along_x() { i } else { j })
+    /// The incident Ez on every travel-axis node of the box, `lo..=hi`, at
+    /// the auxiliary grid's current level (E^n during the H corrections).
+    /// Entry `q - lo` is node q. This is what `Correction::src` indexes for
+    /// the H corrections.
+    pub fn incident_e(&self) -> Vec<f64> {
+        let (lo, hi) = self.span();
+        (lo..=hi).map(|q| self.ez_inc(q)).collect()
     }
 
-    /// H corrections, applied right after the 2D H update, with the
+    /// The incident transverse H on the edge just outside each face, `[lo -
+    /// 1/2, hi + 1/2]` along the travel axis, at the auxiliary level (n + 1/2
+    /// after `advance`). This is what `Correction::src` indexes for the E
+    /// corrections.
+    pub fn incident_h(&self) -> [f64; 2] {
+        let (lo, hi) = self.span();
+        [self.h_inc(lo - 1), self.h_inc(hi)]
+    }
+
+    /// Where `incident_e` holds the incident Ez of 2D node (i, j).
+    fn src_e(&self, i: usize, j: usize) -> usize {
+        (if self.along_x() { i } else { j }) - self.span().0
+    }
+
+    /// The H corrections, applied right after the 2D H update with the
     /// auxiliary grid still at E^n. An edge on the scattered side of a face
     /// read a total Ez across it, so the incident Ez there is taken back out:
     ///
     ///   hy[x0 - 1, j] -= S Ez_inc(x0),  hy[x1, j] += S Ez_inc(x1)
     ///   hx[i, y0 - 1] += S Ez_inc(y0),  hx[i, y1] -= S Ez_inc(y1)
     ///
-    /// Arrays are the padded 2D ones, index `j * nx + i`. With `periodic_y`
-    /// there are no y faces.
-    pub fn correct_h(&self, hx: &mut [f64], hy: &mut [f64], nx: usize, s: f64, periodic_y: bool) {
+    /// One group per line index (j for the x faces, then i for the y faces),
+    /// its two entries in this order; `src` indexes `incident_e`. Indices are
+    /// into the padded 2D arrays, `j * nx + i`. With `periodic_y` there are
+    /// no y faces. Different groups never touch the same edge, so a kernel
+    /// may apply groups in parallel and the entries of a group in order.
+    pub fn h_corrections(&self, nx: usize, s: f64, periodic_y: bool) -> Vec<[Correction; 2]> {
         let PlaneWave { x0, y0, x1, y1, .. } = self.pw;
+        let c = |field, k, (i, j), factor| Correction {
+            field,
+            k,
+            src: self.src_e(i, j),
+            factor,
+        };
+        let mut out = Vec::new();
         for j in y0..=y1 {
-            hy[j * nx + x0 - 1] -= s * self.ez_at(x0, j);
-            hy[j * nx + x1] += s * self.ez_at(x1, j);
+            out.push([
+                c(Component::Hy, j * nx + x0 - 1, (x0, j), -s),
+                c(Component::Hy, j * nx + x1, (x1, j), s),
+            ]);
         }
         if !periodic_y {
             for i in x0..=x1 {
-                hx[(y0 - 1) * nx + i] += s * self.ez_at(i, y0);
-                hx[y1 * nx + i] -= s * self.ez_at(i, y1);
+                out.push([
+                    c(Component::Hx, (y0 - 1) * nx + i, (i, y0), s),
+                    c(Component::Hx, y1 * nx + i, (i, y1), -s),
+                ]);
             }
         }
+        out
     }
 
-    /// Steps the auxiliary grid: its H to n + 1/2 and its E to n + 1.
-    pub fn advance(&mut self) {
-        self.aux.step();
-    }
-
-    /// E corrections, applied right after the 2D E update, with the
+    /// The E corrections, applied right after the 2D E update with the
     /// auxiliary H at n + 1/2. A total-field node on a face read a
     /// scattered H across it, so the incident H there is added back, with
     /// the sign of that term in the curl:
@@ -161,23 +190,66 @@ impl Tfsf {
     ///
     /// Only the transverse H of the travel axis is nonzero, so x travel
     /// corrects the x faces and y travel the y faces. `cb` is the per-node
-    /// 2D coefficient array.
-    pub fn correct_e(&self, ez: &mut [f64], cb: &[f64], nx: usize) {
+    /// 2D coefficient array; `src` indexes `incident_h`. One group per line
+    /// index, entries in order. A box one node thick puts both entries of a
+    /// group on the same node, which is why they stay together.
+    pub fn e_corrections(&self, nx: usize, cb: &[f64]) -> Vec<[Correction; 2]> {
         let PlaneWave { x0, y0, x1, y1, .. } = self.pw;
+        let c = |k: usize, src, sign: f64| Correction {
+            field: Component::Ez,
+            k,
+            src,
+            factor: sign * cb[k],
+        };
         if self.along_x() {
-            for j in y0..=y1 {
-                let (a, b) = (j * nx + x0, j * nx + x1);
-                ez[a] -= cb[a] * self.h_inc(x0 - 1);
-                ez[b] += cb[b] * self.h_inc(x1);
-            }
+            (y0..=y1)
+                .map(|j| [c(j * nx + x0, 0, -1.0), c(j * nx + x1, 1, 1.0)])
+                .collect()
         } else {
-            for i in x0..=x1 {
-                let (a, b) = (y0 * nx + i, y1 * nx + i);
-                ez[a] += cb[a] * self.h_inc(y0 - 1);
-                ez[b] -= cb[b] * self.h_inc(y1);
-            }
+            (x0..=x1)
+                .map(|i| [c(y0 * nx + i, 0, 1.0), c(y1 * nx + i, 1, -1.0)])
+                .collect()
         }
     }
+
+    /// Applies `h_corrections` from the current `incident_e`.
+    pub fn correct_h(&self, hx: &mut [f64], hy: &mut [f64], nx: usize, s: f64, periodic_y: bool) {
+        let inc = self.incident_e();
+        for c in self.h_corrections(nx, s, periodic_y).iter().flatten() {
+            let field = if c.field == Component::Hx {
+                &mut *hx
+            } else {
+                &mut *hy
+            };
+            field[c.k] += c.factor * inc[c.src];
+        }
+    }
+
+    /// Steps the auxiliary grid: its H to n + 1/2 and its E to n + 1.
+    pub fn advance(&mut self) {
+        self.aux.step();
+    }
+
+    /// Applies `e_corrections` from the current `incident_h`.
+    pub fn correct_e(&self, ez: &mut [f64], cb: &[f64], nx: usize) {
+        let inc = self.incident_h();
+        for c in self.e_corrections(nx, cb).iter().flatten() {
+            ez[c.k] += c.factor * inc[c.src];
+        }
+    }
+}
+
+/// One TF/SF correction: `field[k] += factor * incident[src]`, with
+/// `incident` the `Tfsf::incident_e` list for H corrections and
+/// `incident_h` for E corrections. Both kernels apply the same lists.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Correction {
+    pub field: Component,
+    /// Index into the padded `j * nx + i` array of `field`.
+    pub k: usize,
+    pub src: usize,
+    /// Normalized: plus or minus S for H, plus or minus the node's Cb for E.
+    pub factor: f64,
 }
 
 /// Travel direction of the incident plane wave.
@@ -247,6 +319,137 @@ impl std::fmt::Display for PlaneWaveFault {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The correction loops as they were written before they became data.
+    /// The lists must reproduce them bit for bit.
+    fn ez_at(t: &Tfsf, i: usize, j: usize) -> f64 {
+        t.ez_inc(if t.along_x() { i } else { j })
+    }
+
+    fn loops_h(t: &Tfsf, hx: &mut [f64], hy: &mut [f64], nx: usize, s: f64, periodic_y: bool) {
+        let PlaneWave { x0, y0, x1, y1, .. } = t.pw;
+        for j in y0..=y1 {
+            hy[j * nx + x0 - 1] -= s * ez_at(t, x0, j);
+            hy[j * nx + x1] += s * ez_at(t, x1, j);
+        }
+        if !periodic_y {
+            for i in x0..=x1 {
+                hx[(y0 - 1) * nx + i] += s * ez_at(t, i, y0);
+                hx[y1 * nx + i] -= s * ez_at(t, i, y1);
+            }
+        }
+    }
+
+    fn loops_e(t: &Tfsf, ez: &mut [f64], cb: &[f64], nx: usize) {
+        let PlaneWave { x0, y0, x1, y1, .. } = t.pw;
+        if t.along_x() {
+            for j in y0..=y1 {
+                let (a, b) = (j * nx + x0, j * nx + x1);
+                ez[a] -= cb[a] * t.h_inc(x0 - 1);
+                ez[b] += cb[b] * t.h_inc(x1);
+            }
+        } else {
+            for i in x0..=x1 {
+                let (a, b) = (y0 * nx + i, y1 * nx + i);
+                ez[a] += cb[a] * t.h_inc(y0 - 1);
+                ez[b] -= cb[b] * t.h_inc(y1);
+            }
+        }
+    }
+
+    fn noise(seed: u64, n: usize) -> Vec<f64> {
+        let mut x = seed;
+        (0..n)
+            .map(|_| {
+                x = x
+                    .wrapping_mul(6364136223846793005)
+                    .wrapping_add(1442695040888963407);
+                (x >> 11) as f64 / (1u64 << 53) as f64 - 0.5
+            })
+            .collect()
+    }
+
+    fn bits(v: &[f64]) -> Vec<u64> {
+        v.iter().map(|x| x.to_bits()).collect()
+    }
+
+    /// Every direction, closed and periodic, a normal box and boxes one node
+    /// thick along each axis, at several auxiliary time levels.
+    #[test]
+    fn correction_lists_equal_the_loops() {
+        let (nx, ny, s) = (40, 30, 0.5);
+        let boxes = [(10, 8, 25, 20), (17, 8, 17, 20), (10, 13, 25, 13)];
+        let dirs = [
+            Direction::PlusX,
+            Direction::MinusX,
+            Direction::PlusY,
+            Direction::MinusY,
+        ];
+        for (b, &(x0, y0, x1, y1)) in boxes.iter().enumerate() {
+            for (d, &direction) in dirs.iter().enumerate() {
+                for periodic_y in [false, true] {
+                    let pw = PlaneWave {
+                        x0,
+                        y0,
+                        x1,
+                        y1,
+                        direction,
+                        waveform: Waveform::Ricker {
+                            t0: 20.0,
+                            f_peak: 0.08,
+                        },
+                        amplitude: 1.3,
+                    };
+                    let mut t = Tfsf::new(&pw, 2.0, s).unwrap();
+                    let seed = (b * 8 + d * 2 + periodic_y as usize) as u64;
+                    let cb = noise(seed + 100, nx * ny);
+                    for _ in 0..40 {
+                        let (mut hx, mut hy) = (noise(seed, nx * ny), noise(seed + 1, nx * ny));
+                        let (mut hx2, mut hy2) = (hx.clone(), hy.clone());
+                        loops_h(&t, &mut hx, &mut hy, nx, s, periodic_y);
+                        t.correct_h(&mut hx2, &mut hy2, nx, s, periodic_y);
+                        t.advance();
+                        let mut ez = noise(seed + 2, nx * ny);
+                        let mut ez2 = ez.clone();
+                        loops_e(&t, &mut ez, &cb, nx);
+                        t.correct_e(&mut ez2, &cb, nx);
+                        assert_eq!(bits(&hx), bits(&hx2));
+                        assert_eq!(bits(&hy), bits(&hy2));
+                        assert_eq!(bits(&ez), bits(&ez2));
+                    }
+                }
+            }
+        }
+    }
+
+    /// No two groups touch the same target, so a kernel may run groups in
+    /// parallel. Checked on a box one node thick, the tightest case.
+    #[test]
+    fn groups_never_share_a_target() {
+        let pw = PlaneWave {
+            x0: 17,
+            y0: 8,
+            x1: 17,
+            y1: 20,
+            direction: Direction::PlusX,
+            waveform: Waveform::Gaussian {
+                t0: 60.0,
+                tau: 10.0,
+            },
+            amplitude: 1.0,
+        };
+        let t = Tfsf::new(&pw, 1.0, 0.5).unwrap();
+        let cb = vec![0.5; 40 * 30];
+        for groups in [t.h_corrections(40, 0.5, false), t.e_corrections(40, &cb)] {
+            let mut seen = std::collections::BTreeMap::new();
+            for (g, group) in groups.iter().enumerate() {
+                for c in group {
+                    let owner = *seen.entry((c.field as u8, c.k)).or_insert(g);
+                    assert_eq!(owner, g, "{c:?} is in two groups");
+                }
+            }
+        }
+    }
 
     #[test]
     fn direction_json_names() {
