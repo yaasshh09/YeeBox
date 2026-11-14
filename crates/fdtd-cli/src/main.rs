@@ -44,6 +44,98 @@ enum Cmd {
     /// kernel and print measured value, gate and pass or fail. Exits with
     /// an error if any case fails. Run it in release.
     Validate,
+    /// Measure solver throughput headless, in million cell updates per
+    /// second: the GPU kernel on an n x n grid, with and without a 16-cell
+    /// CPML, submitting a fixed number of steps at a time like a frame
+    /// loop, and the f64 CPU reference for comparison. Run it in release.
+    Bench(BenchArgs),
+}
+
+#[derive(clap::Args)]
+struct BenchArgs {
+    /// Grid edge in Ez nodes.
+    #[arg(long, default_value_t = 1024)]
+    n: usize,
+    /// Steps per submission, the steps per frame of the browser loop.
+    #[arg(long, default_value_t = 8)]
+    steps_per_submit: u64,
+    /// Seconds of timed GPU stepping per case, after a warmup.
+    #[arg(long, default_value_t = 3.0)]
+    seconds: f64,
+    /// CPU steps to time (it is slow at this size).
+    #[arg(long, default_value_t = 20)]
+    cpu_steps: u64,
+}
+
+/// An empty vacuum box of n x n nodes, with or without the recommended
+/// 16-cell layer: pure update throughput, no sources or monitors.
+fn bench_scene(n: usize, pml: bool) -> Scene {
+    Scene {
+        version: fdtd_core::scene::SCENE_VERSION,
+        grid: fdtd_core::scene::GridSpec {
+            nx: n,
+            ny: n,
+            dx_phys_m: 1e-3,
+            courant: 0.5,
+        },
+        materials: vec![fdtd_core::material::Material::VACUUM],
+        geometry: Vec::new(),
+        sources: Vec::new(),
+        monitors: Vec::new(),
+        pml: pml.then(|| PmlSpec::recommended(16)),
+        periodic_y: false,
+        plane_wave: None,
+    }
+}
+
+fn bench(a: &BenchArgs) -> Result<(), Box<dyn std::error::Error>> {
+    use fdtd_gpu::{Gpu, GpuSim};
+    use std::time::Instant;
+    let gpu = Gpu::shared()?;
+    let cells = (a.n * a.n) as f64;
+    println!("adapter: {}", gpu.describe());
+    println!(
+        "grid {} x {}, {} steps per submit, f32",
+        a.n, a.n, a.steps_per_submit
+    );
+    for pml in [false, true] {
+        let scene = bench_scene(a.n, pml);
+        let mut sim = GpuSim::new(gpu, &scene)?;
+        sim.step_n(16 * a.steps_per_submit);
+        sim.sync()?;
+        let start = Instant::now();
+        let mut steps = 0;
+        while start.elapsed().as_secs_f64() < a.seconds {
+            sim.step_n(a.steps_per_submit);
+            steps += a.steps_per_submit;
+            // Keep the queue from running far ahead of the clock.
+            if steps % (64 * a.steps_per_submit) == 0 {
+                sim.sync()?;
+            }
+        }
+        sim.sync()?;
+        let t = start.elapsed().as_secs_f64();
+        let rate = steps as f64 / t;
+        println!(
+            "gpu {:>13}: {:8.1} Mcells/s, {:7.1} steps/s, {:5.1} steps per frame at 60 fps",
+            if pml { "16-cell cpml" } else { "no layer" },
+            cells * rate / 1e6,
+            rate,
+            rate / 60.0
+        );
+    }
+    let mut cpu = SimTm::from_scene(&bench_scene(a.n, true))?;
+    cpu.step_n(2);
+    let start = Instant::now();
+    cpu.step_n(a.cpu_steps);
+    let rate = a.cpu_steps as f64 / start.elapsed().as_secs_f64();
+    println!(
+        "cpu {:>13}: {:8.1} Mcells/s, {:7.1} steps/s (f64 reference, one thread)",
+        "16-cell cpml",
+        cells * rate / 1e6,
+        rate
+    );
+    Ok(())
 }
 
 /// The case rows as a markdown table: id, check, measured, gate, result, notes.
@@ -653,6 +745,7 @@ fn main() -> std::process::ExitCode {
         Cmd::PmlSweep(a) => pml_sweep(a),
         Cmd::Report(a) => report(a),
         Cmd::Validate => validate(),
+        Cmd::Bench(a) => bench(a),
     };
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
@@ -667,6 +760,14 @@ fn main() -> std::process::ExitCode {
 mod tests {
     use super::*;
     use std::io::Read;
+
+    /// The benchmark grids are valid scenes, with and without the layer.
+    #[test]
+    fn bench_scenes_are_valid() {
+        for pml in [false, true] {
+            bench_scene(64, pml).validate().unwrap();
+        }
+    }
 
     /// Every committed example scene parses and validates.
     #[test]

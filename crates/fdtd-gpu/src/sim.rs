@@ -503,6 +503,19 @@ impl GpuSim {
     pub fn time_step(&self) -> u64 {
         self.n
     }
+
+    /// Blocks until every submitted step has finished on the device, then
+    /// reports any device error. For timing.
+    pub fn sync(&mut self) -> Result<()> {
+        if let Some(e) = self.pending.take() {
+            return Err(e);
+        }
+        self.gpu
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|e| FdtdError::Gpu(e.to_string()))?;
+        self.gpu.check()
+    }
 }
 
 impl Kernel for GpuSim {

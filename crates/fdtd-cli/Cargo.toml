@@ -11,5 +11,6 @@ path = "src/main.rs"
 
 [dependencies]
 fdtd-core.workspace = true
+fdtd-gpu.workspace = true
 clap.workspace = true
 zip.workspace = true
