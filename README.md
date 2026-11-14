@@ -11,13 +11,15 @@ That's the goal. Here's where it stands today, honestly:
   against exact discrete identities and analytic physics; a convolutional PML
   absorbing boundary with its reflection measured in dB; an axis-aligned
   total-field / scattered-field plane wave source; and frequency-domain
-  monitors that measure reflection, transmission and guided modes.
-- **Not done yet:** the GPU kernel, the browser app, oblique plane waves,
+  monitors that measure reflection, transmission and guided modes. On top of
+  that, an f32 GPU kernel (wgpu and WGSL compute shaders) that matches the
+  reference on every committed scene.
+- **Not done yet:** the browser app, oblique plane waves,
   dispersive materials, scattering and far-field checks. I'll only claim those
   once their tests pass.
 
 The reference solver stays deliberately simple. Its only job is to be
-obviously correct, so it can later prove the fast GPU kernel right.
+obviously correct, so it can prove the fast GPU kernel right.
 
 ## The absorbing boundary
 
@@ -68,12 +70,39 @@ exact answer of the discrete Yee scheme, and the measurements land on it to
 `fdtd validate` runs every case and prints this table with its gates;
 `cargo test` checks the same cases.
 
+## The GPU kernel
+
+The GPU kernel is a port, not a rewrite. Every coefficient, CPML profile,
+source sample and plane-wave correction is computed by the reference crate in
+f64 and uploaded; the shaders hold no formula (a test checks they contain no
+float literal at all). Then I run both kernels on the same scene and diff
+every field.
+
+| Check | Result | Gate |
+|---|---|---|
+| 11 scenes, every field, probe and spectrum, 2000 steps | 5.9e-6 worst, most near 1e-6 | 1e-4 of peak |
+| Growth over 50000 steps, lossless cavity | 7.2e-6, grows like n^0.44 | no faster than n^1.2 |
+| Workgroup size 4, 8, 16 | bit-identical | identical |
+| Padding and wall nodes | exactly zero | zero |
+| 1024 x 1024, GTX 1660 Ti | 3.0 Gcells/s, about 48 steps per 60 fps frame | 8 steps per frame |
+
+![GPU minus CPU vs step](validation/report/gpu_cpu_diff.svg)
+
+The difference is f32 round-off measured against the peak field of the run.
+It levels off instead of climbing, which is what rules out a hidden
+instability. The scenes cover closed boxes, the CPML, periodic y, PEC,
+lossy and dielectric shapes, every waveform, soft and hard sources, a phased
+array, plane waves in all four directions and every monitor type. Any new
+feature has to add a scene there.
+
 ## Running it
 
     cargo test --workspace                       # everything, under a minute
     cargo run --release -p fdtd-cli -- validate  # every acceptance case, with gates
     cargo run --release -p fdtd-cli -- report    # regenerate validation/report
+    cargo run --release -p fdtd-cli -- bench     # GPU and CPU throughput
     cargo run --release -p fdtd-cli -- run --scene validation/scenes/line_source_cpml.json
 
-`fdtd pml-sweep` reruns the layer tuning and writes a CSV ranked from best to
+The GPU tests need an adapter. Without one they show up as ignored, with a
+banner, never as passed. `fdtd pml-sweep` reruns the layer tuning and writes a CSV ranked from best to
 worst.
