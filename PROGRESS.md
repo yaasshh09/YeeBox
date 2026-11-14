@@ -7,7 +7,7 @@ entry at the top of the session log.
 
 **Active phase:** Phase 3 (Phases 0, 1 and 2 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** push so CI runs once, then plan Phase 3 (sources, TF/SF, DFT monitors) in detail
+**Next action:** Phase 3 commits 17 to 21 (cases module, fdtd validate, report, scenes, tables); plan in ~/.claude/plans/quirky-nibbling-fountain.md
 
 ## Decisions log
 
@@ -123,6 +123,42 @@ Format:
 
 Write the Broke field carefully, especially when the cause was embarrassing.
 It becomes the devlog.
+
+### 2026-11-14 (Phase 3, part 1)
+**Landed:** I added periodic y, with the CPML on the x faces only when it's
+on. The 1D grid now takes a background eps and has a CPML end, and its update
+matches the 2D periodic slice bit for bit. The TF/SF plane wave works in all
+four directions. A15 leakage is -301.9 dB worst against a -120 dB gate.
+There's a phased array helper. I added a running DFT and pinned the H half
+step with a plane-wave identity: H enters at its true time (n - 1/2) S, which
+is the doc's exp(-j w dt / 2) for H^(n+1/2) stored under index n. Flux line
+monitors match the analytic launch spectrum to 1e-8. DFT and flux monitors
+are scene objects now, and `Kernel::monitor_spectra` reads them back. The
+`spectra::rt_spectrum` workflow measures R and T against a normalization run.
+Golden generators `slab_airy.py` and `waveguide.py` write both the continuum
+and the exact discrete Yee answer.
+- A13: 4.88e-3 against the 0.01 gate (exactly the predicted discretization
+  error), R + T - 1 at 6.9e-8, 1.4e-7 from the exact discrete slab, order 2.006
+- A14: 0.400% against the 1% gate (lossy medium as background, line source)
+- A11: guided wavelength 0.030%, cutoff 0.002%
+- A12: alpha 0.060%
+- Reciprocity with TF/SF and monitors present: 6.1e-14
+**Broke:** At first A13 missed the exact discrete slab by 3e-3 at its lowest
+frequencies. The cause was the CFS alpha in the CPML. At f = 0.0025 the
+16-cell preset reflects -40.8 dB, against -157 dB with alpha 0. That's
+measured in `fdtd1d` layer_reflection_against_frequency. The TF/SF 1D layer
+now uses alpha 0 (it's 32 cells, -158 dB), and the 1D-like spectral scenes use
+alpha 0 too. Known deviation: the recommended 2D presets absorb poorly at long
+wavelengths, where w < alpha_max. That matters for CW sources in the UI phase.
+Also: A14 moved from a lossy half-space inside the TF region (the TF/SF rules
+forbid it) to a lossy background with a line source. One commit went in with
+a clippy lint, fixed in the next commit (`279a4be`).
+**Open:** I haven't written the decisions and measured-numbers tables for
+Phase 3 yet. CI still hasn't run on GitHub.
+**Next:** commits 17 to 21 of the plan. Move A1 to A15 into a shared `cases`
+module, add `fdtd validate`, extend `fdtd report` with the table and a slab
+R/T plot, add the `slab_tfsf.json` and `waveguide_tm.json` example scenes,
+then the README and PROGRESS tables.
 
 ### 2026-11-13 (Phase 2)
 **Landed:** Phase 2 is done. The CPML runs through the same TMz loops as
