@@ -5,6 +5,7 @@
 //! acceptance is agreement with the CPU reference on identical scenes
 //! (Tier 4 in `docs/04-validation.md`), never agreement with physics alone.
 
+pub mod buffers;
 pub mod device;
 
 pub use device::Gpu;

@@ -331,6 +331,12 @@ impl SimTm {
         self.n
     }
 
+    /// The per-node update coefficients (Ca, Cb), `nx * ny`, zero on walls
+    /// and PEC nodes. Read only, so another kernel can check its upload.
+    pub fn coefficients(&self) -> (&[f64], &[f64]) {
+        (&self.ca, &self.cb)
+    }
+
     /// True on wall nodes and PEC material nodes of node (i, j).
     pub fn is_pec(&self, i: usize, j: usize) -> bool {
         self.cb[j * self.nx + i] == 0.0
