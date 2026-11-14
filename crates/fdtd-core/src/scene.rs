@@ -98,6 +98,15 @@ pub struct Source {
     pub kind: SourceKind,
 }
 
+impl Source {
+    /// The value this source applies at normalized time `t`:
+    /// `amplitude * waveform(t)`. Both kernels call this, so the GPU uploads
+    /// exactly the CPU's samples.
+    pub fn value_at(&self, t: f64) -> f64 {
+        self.amplitude * self.waveform.value(t)
+    }
+}
+
 /// A phased array of `amplitudes.len()` soft point sources. Element k sits
 /// on Ez node `origin + k * step` (cell units, steps may be negative) and
 /// radiates `amplitudes[k] * sin(2 pi f0 t + k * phase_step)`, ramped on over

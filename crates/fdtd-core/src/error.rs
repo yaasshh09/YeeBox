@@ -64,6 +64,10 @@ pub enum FdtdError {
     /// The scene JSON could not be parsed or written.
     #[error("scene json: {0}")]
     Json(String),
+    /// The GPU kernel could not get a device, build a pipeline, or read a
+    /// buffer back, or the device reported an error while running.
+    #[error("gpu: {0}")]
+    Gpu(String),
 }
 
 /// Shorthand used across the crate.

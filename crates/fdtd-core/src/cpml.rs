@@ -21,6 +21,7 @@
 //! and Hx). Using the integer positions for H costs about 20 dB.
 
 use crate::error::{FdtdError, Result};
+use crate::scene::Scene;
 use serde::{Deserialize, Serialize};
 
 /// `b`, `c` and `1/kappa` at one set of positions along one axis, one entry
@@ -128,6 +129,20 @@ impl Cpml {
             y_int: id.y_int,
             y_half: id.y_half,
             ..self
+        }
+    }
+
+    /// The layer a validated scene runs with, the one both kernels upload.
+    /// sigma_opt is set for the background material; a PEC background has
+    /// no wave impedance, so it falls back to vacuum. With periodic y only
+    /// the x faces get a layer; with no `pml` every entry is the identity.
+    pub fn for_scene(scene: &Scene) -> Self {
+        let (nx, ny, s) = (scene.grid.nx, scene.grid.ny, scene.grid.courant);
+        let eps_r = scene.materials[0].eps().max(1.0);
+        match &scene.pml {
+            Some(spec) if scene.periodic_y => Cpml::new(spec, nx, ny, s, eps_r).x_only(),
+            Some(spec) => Cpml::new(spec, nx, ny, s, eps_r),
+            None => Cpml::none(nx, ny),
         }
     }
 

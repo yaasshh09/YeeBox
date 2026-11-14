@@ -125,14 +125,7 @@ impl SimTm {
         for p in &mut probes {
             p.record(&ez, nx);
         }
-        // sigma_opt is set for the background material; a PEC background
-        // has no wave impedance, so it falls back to vacuum.
-        let eps_r = scene.materials[0].eps().max(1.0);
-        let pml = match &scene.pml {
-            Some(spec) if scene.periodic_y => Cpml::new(spec, nx, ny, s, eps_r).x_only(),
-            Some(spec) => Cpml::new(spec, nx, ny, s, eps_r),
-            None => Cpml::none(nx, ny),
-        };
+        let pml = Cpml::for_scene(scene);
         // Validated: material 0 is a lossless dielectric when there is a plane wave.
         let tfsf = match &scene.plane_wave {
             Some(pw) => Some(Tfsf::new(pw, scene.materials[0].eps(), s)?),
@@ -238,7 +231,7 @@ impl SimTm {
         let t = self.n as f64 * s;
         for src in &self.sources {
             let k = src.j * nx + src.i;
-            let v = src.amplitude * src.waveform.value(t);
+            let v = src.value_at(t);
             match src.kind {
                 SourceKind::Soft => ez[k] += v,
                 SourceKind::Hard => ez[k] = v,
