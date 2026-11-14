@@ -81,8 +81,8 @@ impl SimTm {
     }
 
     /// Same as `from_scene` but accepts a Courant number above the 2D limit.
-    /// Only the stability test uses it.
-    #[cfg(test)]
+    /// Only the A4 stability case uses it; it is not public, so no user
+    /// input can build an unstable kernel.
     pub(crate) fn from_scene_unchecked(scene: &Scene) -> Result<Self> {
         scene.validate_inner(false)?;
         Self::build(scene)
@@ -412,18 +412,7 @@ pub(crate) mod tests {
         }
     }
 
-    /// Deterministic values in [-1, 1) from a 64-bit LCG.
-    pub(crate) fn random_fields(seed: u64, n: usize) -> Vec<f64> {
-        let mut x = seed;
-        (0..n)
-            .map(|_| {
-                x = x
-                    .wrapping_mul(6_364_136_223_846_793_005)
-                    .wrapping_add(1_442_695_040_888_963_407);
-                (x >> 11) as f64 / (1u64 << 52) as f64 - 1.0
-            })
-            .collect()
-    }
+    pub(crate) use crate::cases::signal::random_fields;
 
     /// Fields and coefficients for the oracle step, padded like `SimTm`.
     struct Fields {
@@ -934,38 +923,6 @@ pub(crate) mod tests {
 
     fn max_abs(v: &[f64]) -> f64 {
         v.iter().fold(0.0, |m, x| m.max(x.abs()))
-    }
-
-    /// A4. A random field in a 32 x 32 PEC box at S = 0.70 stays bounded for
-    /// 20000 steps. At S = 0.72, above 1/sqrt(2), the highest box mode has
-    /// `2 S^2 (sin^2(kx/2) + sin^2(ky/2)) > 2`, so it grows by about 1.44 per
-    /// step, and the field passes a million times its start within 2000 steps.
-    #[test]
-    fn a4_stability_bounded_at_070_unbounded_at_072() {
-        let n = 32;
-        let start = random_fields(7, n * n);
-        let peak0 = max_abs(&start);
-
-        let mut sim = SimTm::from_scene(&vacuum_box(n, n, 0.70)).unwrap();
-        sim.set_ez(&start).unwrap();
-        let mut worst = 0.0_f64;
-        for _ in 0..20_000 {
-            sim.step();
-            worst = worst.max(max_abs(sim.ez()));
-        }
-        assert!(worst < 10.0 * peak0, "S = 0.70: max |ez| {worst}");
-
-        let mut sim = SimTm::from_scene_unchecked(&vacuum_box(n, n, 0.72)).unwrap();
-        sim.set_ez(&start).unwrap();
-        let mut steps = 0;
-        while max_abs(sim.ez()) <= 1e6 * peak0 {
-            assert!(steps < 2000, "S = 0.72 did not blow up in 2000 steps");
-            sim.step();
-            steps += 1;
-        }
-        eprintln!(
-            "A4: S = 0.70 max {worst:.3} (start {peak0:.3}), S = 0.72 passed 1e6x at step {steps}"
-        );
     }
 
     /// Drives any kernel through the trait only.

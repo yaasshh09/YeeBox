@@ -56,6 +56,11 @@ pub enum FdtdError {
     /// its spectrum would ring.
     #[error("fields still at {level:e} of peak after {steps} steps")]
     NotDecayed { steps: u64, level: f64 },
+    /// A validation case could not produce a trustworthy measurement: its
+    /// golden data is for another setup, or a sanity guard failed (a record
+    /// cut off a pulse, a peak search came up empty).
+    #[error("validation case: {0}")]
+    Case(String),
     /// The scene JSON could not be parsed or written.
     #[error("scene json: {0}")]
     Json(String),
