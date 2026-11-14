@@ -124,6 +124,7 @@ impl ReflectionSetup {
                 .collect(),
             pml,
             periodic_y: false,
+            plane_wave: None,
         }
     }
 

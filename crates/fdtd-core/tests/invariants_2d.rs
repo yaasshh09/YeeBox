@@ -72,6 +72,7 @@ fn cluttered(nx: usize, ny: usize) -> Scene {
         monitors: vec![],
         pml: None,
         periodic_y: false,
+        plane_wave: None,
     }
 }
 

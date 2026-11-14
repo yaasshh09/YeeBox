@@ -339,6 +339,7 @@ pub(crate) mod tests {
             monitors: vec![],
             pml: None,
             periodic_y: false,
+            plane_wave: None,
         }
     }
 

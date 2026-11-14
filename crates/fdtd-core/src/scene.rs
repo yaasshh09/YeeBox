@@ -10,6 +10,7 @@ use crate::dispersion::courant_limit;
 use crate::error::{FdtdError, Result};
 use crate::material::Material;
 use crate::source::{SourceKind, Waveform};
+use crate::tfsf::{Direction, PlaneWave, PlaneWaveFault};
 use serde::{Deserialize, Serialize};
 
 /// The format version this build writes and reads.
@@ -39,6 +40,9 @@ pub struct Scene {
     /// CPML (if any) sits on the x faces only. For y-uniform plane waves.
     #[serde(default, skip_serializing_if = "is_false")]
     pub periodic_y: bool,
+    /// TF/SF plane wave, axis-aligned. Absent means none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plane_wave: Option<PlaneWave>,
 }
 
 fn is_false(b: &bool) -> bool {
@@ -343,6 +347,62 @@ impl Scene {
                 });
             }
         }
+        if let Some(pw) = &self.plane_wave {
+            self.check_plane_wave(pw)?;
+        }
+        Ok(())
+    }
+
+    /// The TF/SF placement rules: a non-empty box whose faces, and the
+    /// scattered-field nodes just across them, are live nodes outside the
+    /// walls and the layer, all in material 0, which must be a lossless
+    /// dielectric. With periodic y the wave travels along x and the box spans
+    /// every row, so there are no y faces to check.
+    fn check_plane_wave(&self, pw: &PlaneWave) -> Result<()> {
+        let fault = |f| Err(FdtdError::PlaneWave(f));
+        pw.waveform.validate()?;
+        finite("amplitude", pw.amplitude)?;
+        let GridSpec { nx, ny, .. } = self.grid;
+        if pw.x0 > pw.x1 || pw.y0 > pw.y1 {
+            return fault(PlaneWaveFault::EmptyBox);
+        }
+        if !matches!(self.materials[0], Material::Dielectric { sigma, .. } if sigma == 0.0) {
+            return fault(PlaneWaveFault::LossyBackground);
+        }
+        if self.periodic_y {
+            if matches!(pw.direction, Direction::PlusY | Direction::MinusY) {
+                return fault(PlaneWaveFault::WrapsAlongY);
+            }
+            if pw.y0 != 0 || pw.y1 != ny - 1 {
+                return fault(PlaneWaveFault::NotFullHeight);
+            }
+        }
+        // Every node on a face and the node across it, as signed indices so
+        // a face on row or column 0 shows up as out of range, not as a wrap.
+        let (x0, x1, y0, y1) = (pw.x0 as i64, pw.x1 as i64, pw.y0 as i64, pw.y1 as i64);
+        let mut nodes = Vec::new();
+        for j in y0..=y1 {
+            for i in [x0 - 1, x0, x1, x1 + 1] {
+                nodes.push((i, j));
+            }
+        }
+        if !self.periodic_y {
+            for i in x0..=x1 {
+                for j in [y0 - 1, y0, y1, y1 + 1] {
+                    nodes.push((i, j));
+                }
+            }
+        }
+        for (i, j) in nodes {
+            let live_x = (1..nx as i64 - 1).contains(&i);
+            let live_y = self.periodic_y || (1..ny as i64 - 1).contains(&j);
+            if !(live_x && live_y) || self.in_pml(i as usize, j as usize) {
+                return fault(PlaneWaveFault::FaceTooClose);
+            }
+            if self.material_at(i as usize, j as usize) != 0 {
+                return fault(PlaneWaveFault::NotBackground);
+            }
+        }
         Ok(())
     }
 
@@ -427,6 +487,7 @@ pub(crate) mod tests {
             monitors: vec![Monitor::Point { i: 30, j: 20 }],
             pml: None,
             periodic_y: false,
+            plane_wave: None,
         }
     }
 
@@ -812,6 +873,174 @@ pub(crate) mod tests {
             material: 1,
         };
         assert_eq!(s.validate(), Err(FdtdError::PmlNotUniform { i: 1, j: 0 }));
+    }
+
+    /// A 60 x 50 grid with a 5-cell layer and a +x plane wave box over
+    /// [10, 50] x [10, 40], all in vacuum.
+    fn tfsf_sample() -> Scene {
+        let mut s = empty(60, 50, vec![]);
+        s.pml = Some(crate::cpml::tests::spec(5));
+        s.plane_wave = Some(PlaneWave {
+            x0: 10,
+            y0: 10,
+            x1: 50,
+            y1: 40,
+            direction: Direction::PlusX,
+            waveform: Waveform::Ricker {
+                t0: 40.0,
+                f_peak: 0.05,
+            },
+            amplitude: 1.0,
+        });
+        s
+    }
+
+    fn tfsf_fault(f: impl FnOnce(&mut Scene)) -> Result<()> {
+        let mut s = tfsf_sample();
+        f(&mut s);
+        s.validate()
+    }
+
+    fn pw(s: &mut Scene) -> &mut PlaneWave {
+        s.plane_wave.as_mut().unwrap()
+    }
+
+    #[test]
+    fn plane_wave_json_round_trip_and_absent_by_default() {
+        let s = tfsf_sample();
+        let text = s.to_json().unwrap();
+        assert!(text.contains("\"direction\": \"+x\""));
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+        assert!(!sample().to_json().unwrap().contains("plane_wave"));
+        let typo = text.replace("\"amplitude\": 1.0", "\"amplitude\": 1.0, \"angle\": 0");
+        assert!(
+            Scene::from_json(&typo).is_err(),
+            "unknown keys must be rejected"
+        );
+    }
+
+    #[test]
+    fn plane_wave_placement_rules() {
+        use PlaneWaveFault::*;
+        let err = |f| Err(FdtdError::PlaneWave(f));
+        assert!(tfsf_sample().validate().is_ok());
+        assert_eq!(tfsf_fault(|s| pw(s).x1 = 9), err(EmptyBox));
+        assert_eq!(tfsf_fault(|s| pw(s).y0 = 41), err(EmptyBox));
+
+        // Layer is 5 cells: node 5 is the interface, so a face at 6 leaves
+        // one scattered-field node (5) outside the layer, and a face at 5 does not.
+        assert!(tfsf_fault(|s| pw(s).x0 = 6).is_ok());
+        assert_eq!(tfsf_fault(|s| pw(s).x0 = 5), err(FaceTooClose));
+        assert!(tfsf_fault(|s| pw(s).y1 = 43).is_ok());
+        assert_eq!(tfsf_fault(|s| pw(s).y1 = 44), err(FaceTooClose));
+        assert_eq!(tfsf_fault(|s| pw(s).x1 = 59), err(FaceTooClose));
+        // Without a layer the walls are the limit: column 0 is a wall.
+        assert!(tfsf_fault(|s| (s.pml, pw(s).x0) = (None, 2)).is_ok());
+        assert!(
+            tfsf_fault(|s| {
+                s.pml = None;
+                pw(s).x0 = 1;
+            })
+            .is_err()
+        );
+        assert!(
+            tfsf_fault(|s| {
+                s.pml = None;
+                pw(s).y0 = 0;
+            })
+            .is_err()
+        );
+
+        // Material 0 on both sides of every face; shapes strictly inside are fine.
+        let block = |x0, y0, x1, y1| Shape::Rect {
+            x0,
+            y0,
+            x1,
+            y1,
+            material: 1,
+        };
+        assert!(tfsf_fault(|s| s.geometry = vec![block(11.0, 11.0, 49.0, 39.0)]).is_ok());
+        assert_eq!(
+            tfsf_fault(|s| s.geometry = vec![block(9.0, 20.0, 9.0, 20.0)]),
+            err(NotBackground)
+        );
+        assert_eq!(
+            tfsf_fault(|s| s.geometry = vec![block(30.0, 40.0, 30.0, 40.0)]),
+            err(NotBackground)
+        );
+        assert_eq!(
+            tfsf_fault(|s| s.geometry = vec![block(30.0, 9.0, 30.0, 9.0)]),
+            err(NotBackground)
+        );
+
+        // The auxiliary grid is lossless: material 0 must be too.
+        let lossy = Material::Dielectric {
+            eps_inf: 2.0,
+            sigma: 0.01,
+        };
+        assert_eq!(tfsf_fault(|s| s.materials[0] = lossy), err(LossyBackground));
+        assert_eq!(
+            tfsf_fault(|s| s.materials[0] = Material::Pec),
+            err(LossyBackground)
+        );
+        assert!(
+            tfsf_fault(|s| s.materials[0] = Material::Dielectric {
+                eps_inf: 2.25,
+                sigma: 0.0
+            })
+            .is_ok()
+        );
+
+        // Waveform and amplitude are checked like a point source's.
+        assert!(tfsf_fault(|s| pw(s).amplitude = f64::NAN).is_err());
+        assert!(
+            tfsf_fault(|s| pw(s).waveform = Waveform::Ricker {
+                t0: 1.0,
+                f_peak: -1.0
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn plane_wave_with_periodic_y() {
+        use PlaneWaveFault::*;
+        let err = |f| Err(FdtdError::PlaneWave(f));
+        let full = |s: &mut Scene| {
+            s.periodic_y = true;
+            (pw(s).y0, pw(s).y1) = (0, 49);
+        };
+        assert!(tfsf_fault(full).is_ok());
+        assert_eq!(
+            tfsf_fault(|s| {
+                full(s);
+                pw(s).y1 = 48;
+            }),
+            err(NotFullHeight)
+        );
+        for d in [Direction::PlusY, Direction::MinusY] {
+            assert_eq!(
+                tfsf_fault(|s| {
+                    full(s);
+                    pw(s).direction = d;
+                }),
+                err(WrapsAlongY)
+            );
+        }
+        // The x faces still need material 0 on every row, the seam rows included.
+        assert_eq!(
+            tfsf_fault(|s| {
+                full(s);
+                s.geometry = vec![Shape::Rect {
+                    x0: 9.0,
+                    y0: 0.0,
+                    x1: 9.0,
+                    y1: 0.0,
+                    material: 1,
+                }];
+            }),
+            err(NotBackground)
+        );
     }
 
     #[test]

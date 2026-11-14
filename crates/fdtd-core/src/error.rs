@@ -49,6 +49,9 @@ pub enum FdtdError {
     /// node it faces along the layer normal.
     #[error("material at pml node ({i}, {j}) is not uniform along the pml normal")]
     PmlNotUniform { i: usize, j: usize },
+    /// The TF/SF plane wave box breaks a placement rule.
+    #[error("plane wave: {0}")]
+    PlaneWave(crate::tfsf::PlaneWaveFault),
     /// The scene JSON could not be parsed or written.
     #[error("scene json: {0}")]
     Json(String),
