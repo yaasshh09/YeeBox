@@ -97,6 +97,58 @@ pub struct Source {
     pub kind: SourceKind,
 }
 
+/// A phased array of `amplitudes.len()` soft point sources. Element k sits
+/// on Ez node `origin + k * step` (cell units, steps may be negative) and
+/// radiates `amplitudes[k] * sin(2 pi f0 t + k * phase_step)`, ramped on over
+/// `ramp_periods` periods (`Waveform::RampedCw`). So each element leads the
+/// one before it by `phase_step` radians. Frequencies are normalized.
+///
+/// Returns ordinary sources; `Scene::validate` checks where they land.
+pub fn phased_array(
+    origin: (usize, usize),
+    step: (i64, i64),
+    phase_step: f64,
+    amplitudes: &[f64],
+    f0: f64,
+    ramp_periods: f64,
+) -> Result<Vec<Source>> {
+    if amplitudes.is_empty() {
+        return Err(FdtdError::InvalidParameter {
+            name: "array elements",
+            value: 0.0,
+        });
+    }
+    finite("phase_step", phase_step)?;
+    let mut out = Vec::with_capacity(amplitudes.len());
+    for (k, &amplitude) in amplitudes.iter().enumerate() {
+        finite("amplitude", amplitude)?;
+        let (i, j) = (
+            origin.0 as i64 + k as i64 * step.0,
+            origin.1 as i64 + k as i64 * step.1,
+        );
+        if i < 0 || j < 0 {
+            return Err(FdtdError::InvalidParameter {
+                name: "array element index",
+                value: i.min(j) as f64,
+            });
+        }
+        let waveform = Waveform::RampedCw {
+            f0,
+            ramp_periods,
+            phase: k as f64 * phase_step,
+        };
+        waveform.validate()?;
+        out.push(Source {
+            i: i as usize,
+            j: j as usize,
+            waveform,
+            amplitude,
+            kind: SourceKind::Soft,
+        });
+    }
+    Ok(out)
+}
+
 /// A field monitor.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -1040,6 +1092,59 @@ pub(crate) mod tests {
                 }];
             }),
             err(NotBackground)
+        );
+    }
+
+    /// Element k sits at origin + k * step, leads by k * phase_step, and has
+    /// amplitude k; each one is a soft ramped CW source at f0.
+    #[test]
+    fn phased_array_elements() {
+        let srcs = phased_array((10, 20), (0, 3), 0.25, &[1.0, 0.5, 2.0, 0.0], 0.04, 4.0).unwrap();
+        assert_eq!(srcs.len(), 4);
+        for (k, s) in srcs.iter().enumerate() {
+            assert_eq!((s.i, s.j), (10, 20 + 3 * k));
+            assert_eq!(s.kind, SourceKind::Soft);
+            assert_eq!(s.amplitude, [1.0, 0.5, 2.0, 0.0][k]);
+            assert_eq!(
+                s.waveform,
+                Waveform::RampedCw {
+                    f0: 0.04,
+                    ramp_periods: 4.0,
+                    phase: 0.25 * k as f64,
+                }
+            );
+        }
+        // Steps may run backwards, as long as no element leaves the grid.
+        let back = phased_array((10, 20), (-2, -1), 0.0, &[1.0; 3], 0.04, 4.0).unwrap();
+        assert_eq!((back[2].i, back[2].j), (6, 18));
+        // An expanded array is just point sources, so the scene checks it.
+        let mut s = sample();
+        s.sources = phased_array((5, 20), (3, 0), 0.5, &[1.0; 4], 0.04, 4.0).unwrap();
+        assert!(s.validate().is_ok());
+        s.sources = phased_array((30, 20), (3, 0), 0.5, &[1.0; 4], 0.04, 4.0).unwrap();
+        assert!(matches!(
+            s.validate(),
+            Err(FdtdError::OutOfDomain { what: "source", .. })
+        ));
+    }
+
+    #[test]
+    fn phased_array_rejects_bad_input() {
+        let ok = |o, st, ph, a: &[f64], f, r| phased_array(o, st, ph, a, f, r);
+        assert!(
+            ok((5, 5), (1, 0), 0.0, &[], 0.04, 4.0).is_err(),
+            "no elements"
+        );
+        assert!(
+            ok((5, 5), (-3, 0), 0.0, &[1.0; 3], 0.04, 4.0).is_err(),
+            "below 0"
+        );
+        assert!(ok((5, 5), (1, 0), f64::NAN, &[1.0], 0.04, 4.0).is_err());
+        assert!(ok((5, 5), (1, 0), 0.0, &[1.0, f64::INFINITY], 0.04, 4.0).is_err());
+        assert!(ok((5, 5), (1, 0), 0.0, &[1.0], -0.04, 4.0).is_err());
+        assert!(
+            ok((5, 5), (1, 0), 0.0, &[1.0], 0.04, 2.0).is_err(),
+            "ramp under 3"
         );
     }
 
