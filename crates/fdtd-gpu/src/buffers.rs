@@ -17,7 +17,9 @@
 //! per shader stage by default, and the E update would need 11.
 
 use fdtd_core::cpml::{Cpml, Profile};
+use fdtd_core::grid::Component;
 use fdtd_core::scene::Scene;
+use fdtd_core::tfsf::Correction;
 
 /// Uniform parameters of one step of a batch. Every step of a batch gets its
 /// own 256-byte slot (the default `min_uniform_buffer_offset_alignment`),
@@ -43,6 +45,40 @@ pub struct Params {
 
 /// Byte stride between step slots in the uniform buffer.
 pub const PARAMS_STRIDE: u64 = 256;
+
+/// One TF/SF correction as the shaders read it: `field[k] += factor *
+/// inc[src]`, field numbered like the gather taps (0 Ez, 1 Hx, 2 Hy).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, PartialEq, bytemuck::Pod, bytemuck::Zeroable)]
+pub struct GpuCorrection {
+    pub k: u32,
+    pub src: u32,
+    pub field: u32,
+    pub factor: f32,
+}
+
+/// The shader number of a field: 0 Ez, 1 Hx, 2 Hy.
+pub fn field_id(c: Component) -> u32 {
+    match c {
+        Component::Ez => 0,
+        Component::Hx => 1,
+        Component::Hy => 2,
+    }
+}
+
+/// Correction groups flattened in order, entry e of group g at `2 g + e`.
+pub fn pack_corrections(groups: &[[Correction; 2]]) -> Vec<GpuCorrection> {
+    groups
+        .iter()
+        .flatten()
+        .map(|c| GpuCorrection {
+            k: c.k as u32,
+            src: c.src as u32,
+            field: field_id(c.field),
+            factor: c.factor as f32,
+        })
+        .collect()
+}
 
 /// Material ids, the coefficient table and the CPML profiles of a
 /// validated scene.

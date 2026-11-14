@@ -171,6 +171,25 @@ fn monitors_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
+/// TF/SF in all four directions, closed and periodic boxes, a box one
+/// node thick, and scatterers and monitors inside and outside the box.
+fn tfsf_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    for name in [
+        "slab_tfsf.json",
+        "tfsf_cylinder_plus_y.json",
+        "tfsf_rod_minus_x.json",
+        "tfsf_lossy_minus_y.json",
+        "tfsf_thin_plus_x.json",
+    ] {
+        let s = scene(name);
+        if s.plane_wave.is_none() {
+            return Err(format!("{name} has no plane wave").into());
+        }
+        matches_cpu(gpu, name, &s)?;
+    }
+    Ok(())
+}
+
 /// Hx row ny - 1 (unless y is periodic), Hy column nx - 1 and the wall ring
 /// of Ez stay exactly zero.
 fn padding_stays_zero(gpu: &'static Gpu) -> Result<(), Failed> {
@@ -262,6 +281,7 @@ fn main() {
         ("initial_value_matches_cpu", initial_value_matches_cpu),
         ("sources_match_cpu", sources_match_cpu),
         ("monitors_match_cpu", monitors_match_cpu),
+        ("tfsf_matches_cpu", tfsf_matches_cpu),
         ("padding_stays_zero", padding_stays_zero),
         ("workgroup_size_independent", workgroup_size_independent),
     ];

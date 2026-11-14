@@ -4,7 +4,7 @@
 //! pass, with the passes of every step in the order of `SimTm::step`. Each
 //! step reads its slot of the `Params` uniform through a dynamic offset.
 
-use crate::buffers::{Layout, PARAMS_STRIDE, Params};
+use crate::buffers::{Layout, PARAMS_STRIDE, Params, field_id, pack_corrections};
 use crate::device::Gpu;
 use crate::pipeline::{self, Access, Pass};
 use fdtd_core::grid::Component;
@@ -12,6 +12,7 @@ use fdtd_core::kernel::{Kernel, Spectrum};
 use fdtd_core::monitor::{Dft, FluxLine};
 use fdtd_core::scene::{Monitor, Scene, Source};
 use fdtd_core::source::SourceKind;
+use fdtd_core::tfsf::Tfsf;
 use fdtd_core::{FdtdError, Result};
 use wgpu::util::DeviceExt;
 
@@ -60,6 +61,11 @@ pub struct GpuSim {
     sources: Vec<Source>,
     /// Per-step source values of the current batch, `[b * n_src + s]`.
     src_values: wgpu::Buffer,
+    /// The TF/SF auxiliary grid, stepped on the CPU in lockstep, f64.
+    tfsf: Option<Tfsf>,
+    /// Incident Ez and H of the current batch, `[b * n_inc + q]`, `[2 b + i]`.
+    inc_e: wgpu::Buffer,
+    inc_h: wgpu::Buffer,
     /// Monitors in scene order, each with its first tap.
     monitors: Vec<(usize, Mon)>,
     n_taps: usize,
@@ -67,10 +73,6 @@ pub struct GpuSim {
     gathered: wgpu::Buffer,
     /// The first error seen while stepping, returned by the next read.
     pending: Option<FdtdError>,
-}
-
-fn not_yet(what: &str) -> FdtdError {
-    FdtdError::Gpu(format!("{what} not supported by the gpu kernel yet"))
 }
 
 impl GpuSim {
@@ -88,9 +90,6 @@ impl GpuSim {
                 name: "workgroup edge",
                 value: wg as f64,
             });
-        }
-        if scene.plane_wave.is_some() {
-            return Err(not_yet("plane waves"));
         }
         let (nx, ny) = (scene.grid.nx, scene.grid.ny);
         let limits = gpu.device.limits();
@@ -178,6 +177,7 @@ impl GpuSim {
             nx.div_ceil(wg as usize) as u32,
             ny.div_ceil(wg as usize) as u32,
         );
+        let mut incident = None;
         let mut stages = vec![
             Stage {
                 pass: h,
@@ -190,6 +190,61 @@ impl GpuSim {
                 count: grid,
             },
         ];
+        // TF/SF: H corrections right after H, E corrections right after E,
+        // from the same lists the CPU applies.
+        let tfsf = match &scene.plane_wave {
+            Some(pw) => Some(Tfsf::new(pw, scene.materials[0].eps(), scene.grid.courant)?),
+            None => None,
+        };
+        let (mut n_inc, mut n_hgroups, mut n_egroups) = (0, 0, 0);
+        if let Some(t) = &tfsf {
+            n_inc = t.incident_e().len();
+            let hc = t.h_corrections(nx, scene.grid.courant, scene.periodic_y);
+            let ec = t.e_corrections(nx, &layout.cb_nodes());
+            (n_hgroups, n_egroups) = (hc.len(), ec.len());
+            let hc = storage("tfsf h", bytemuck::cast_slice(&pack_corrections(&hc)));
+            let ec = storage("tfsf e", bytemuck::cast_slice(&pack_corrections(&ec)));
+            let inc_e = storage("inc e", &vec![0u8; BATCH as usize * n_inc * 4]);
+            let inc_h = storage("inc h", &vec![0u8; BATCH as usize * 2 * 4]);
+            let pass = pipeline::pass(
+                device,
+                &params_layout,
+                "tfsf_h",
+                include_str!("../shaders/tfsf_h.wgsl"),
+                wg,
+                &[ReadWrite, ReadWrite, Read, Read],
+            );
+            let group =
+                pipeline::storage_group(device, &pass, &[&fields[HX], &fields[HY], &hc, &inc_e]);
+            stages.insert(
+                1,
+                Stage {
+                    pass,
+                    group,
+                    count: ((n_hgroups as u32).div_ceil(64), 1),
+                },
+            );
+            let pass = pipeline::pass(
+                device,
+                &params_layout,
+                "tfsf_e",
+                include_str!("../shaders/tfsf_e.wgsl"),
+                wg,
+                &[ReadWrite, Read, Read],
+            );
+            let group = pipeline::storage_group(device, &pass, &[&fields[EZ], &ec, &inc_h]);
+            stages.insert(
+                3,
+                Stage {
+                    pass,
+                    group,
+                    count: ((n_egroups as u32).div_ceil(64), 1),
+                },
+            );
+            incident = Some((inc_e, inc_h));
+        }
+        let (inc_e, inc_h) =
+            incident.unwrap_or_else(|| (storage("inc e", &[]), storage("inc h", &[])));
         let n_src = scene.sources.len();
         let nodes: Vec<[u32; 2]> = scene
             .sources
@@ -222,14 +277,11 @@ impl GpuSim {
         let mut monitors = Vec::new();
         for m in &scene.monitors {
             let at = taps.len();
-            taps.extend(m.taps(nx, ny)?.iter().map(|&(c, k)| {
-                let c = match c {
-                    Component::Ez => 0,
-                    Component::Hx => 1,
-                    Component::Hy => 2,
-                };
-                [c, k as u32]
-            }));
+            taps.extend(
+                m.taps(nx, ny)?
+                    .iter()
+                    .map(|&(c, k)| [field_id(c), k as u32]),
+            );
             // Entry 0 of a point history is Ez at n = 0, which is zero.
             monitors.push((
                 at,
@@ -282,9 +334,9 @@ impl GpuSim {
                 s: scene.grid.courant as f32,
                 n_src: n_src as u32,
                 n_taps: n_taps as u32,
-                n_hgroups: 0,
-                n_egroups: 0,
-                n_inc: 0,
+                n_hgroups: n_hgroups as u32,
+                n_egroups: n_egroups as u32,
+                n_inc: n_inc as u32,
                 pad: [0; 2],
             },
             cb: layout.cb_nodes(),
@@ -294,6 +346,9 @@ impl GpuSim {
             stages,
             sources: scene.sources.clone(),
             src_values,
+            tfsf,
+            inc_e,
+            inc_h,
             monitors,
             n_taps,
             gathered,
@@ -340,6 +395,22 @@ impl GpuSim {
         }
         let gpu = self.gpu;
         gpu.queue.write_buffer(&self.params, 0, &slots);
+        // The auxiliary grid runs ahead of the GPU by one batch: for each
+        // step, its E^n for the H corrections, then its step, then its
+        // H^(n+1/2) for the E corrections, as in `SimTm::step`.
+        if let Some(t) = &mut self.tfsf {
+            let mut inc_e = Vec::with_capacity(steps as usize * self.base.n_inc as usize);
+            let mut inc_h = Vec::with_capacity(steps as usize * 2);
+            for _ in 0..steps {
+                inc_e.extend(t.incident_e().iter().map(|&v| v as f32));
+                t.advance();
+                inc_h.extend(t.incident_h().iter().map(|&v| v as f32));
+            }
+            gpu.queue
+                .write_buffer(&self.inc_e, 0, bytemuck::cast_slice(&inc_e));
+            gpu.queue
+                .write_buffer(&self.inc_h, 0, bytemuck::cast_slice(&inc_h));
+        }
         // Step b of the batch takes E to n + b + 1, at t = (n + b + 1) S.
         if !self.sources.is_empty() {
             let s = self.courant;

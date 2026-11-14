@@ -4,6 +4,9 @@
   "materials": [
     { "kind": "dielectric", "eps_inf": 1, "sigma": 0 }
   ],
+  "sources": [
+    { "i": 25, "j": 40, "waveform": { "type": "ricker", "t0": 60, "f_peak": 0.04 }, "amplitude": 1 }
+  ],
   "monitors": [
     { "type": "point", "i": 50, "j": 40 },
     { "type": "point", "i": 70, "j": 40 }

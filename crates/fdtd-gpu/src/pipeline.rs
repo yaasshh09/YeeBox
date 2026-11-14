@@ -142,11 +142,13 @@ pub(crate) mod tests {
     use super::WG_LINE;
 
     /// Every shader of the kernel, so the checks below cannot miss one.
-    pub(crate) const SHADERS: [(&str, &str); 4] = [
+    pub(crate) const SHADERS: [(&str, &str); 6] = [
         ("update_h", include_str!("../shaders/update_h.wgsl")),
         ("update_e", include_str!("../shaders/update_e.wgsl")),
         ("sources", include_str!("../shaders/sources.wgsl")),
         ("gather", include_str!("../shaders/gather.wgsl")),
+        ("tfsf_h", include_str!("../shaders/tfsf_h.wgsl")),
+        ("tfsf_e", include_str!("../shaders/tfsf_e.wgsl")),
     ];
 
     fn code(src: &str) -> String {
