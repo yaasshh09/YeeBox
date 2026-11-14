@@ -42,6 +42,19 @@ fn ticks((min, max, step): (f64, f64, f64)) -> Vec<f64> {
     (0..=n).map(|k| min + k as f64 * step).collect()
 }
 
+/// A tick label: `t` rounded to the decimals the step implies, trailing
+/// zeros dropped, so 3 x 0.2 prints as 0.6, not 0.6000000000000001.
+fn label(t: f64, step: f64) -> String {
+    let decimals = (-step.abs().log10().floor()).max(0.0) as usize;
+    let s = format!("{t:.decimals$}");
+    let s = if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.').to_string()
+    } else {
+        s
+    };
+    if s == "-0" { "0".to_string() } else { s }
+}
+
 impl Plot<'_> {
     fn px(&self, x: f64) -> f64 {
         LEFT + (x - self.x.0) / (self.x.1 - self.x.0) * (W - LEFT - RIGHT)
@@ -70,17 +83,19 @@ impl Plot<'_> {
             let x = self.px(t);
             let _ = writeln!(
                 s,
-                r##"<line x1="{x:.1}" y1="{y0}" x2="{x:.1}" y2="{y1}" stroke="#e4e4e4"/><text x="{x:.1}" y="{}" text-anchor="middle">{t}</text>"##,
-                y1 + 16.0
+                r##"<line x1="{x:.1}" y1="{y0}" x2="{x:.1}" y2="{y1}" stroke="#e4e4e4"/><text x="{x:.1}" y="{}" text-anchor="middle">{}</text>"##,
+                y1 + 16.0,
+                label(t, self.x.2)
             );
         }
         for t in ticks(self.y) {
             let y = self.py(t);
             let _ = writeln!(
                 s,
-                r##"<line x1="{x0}" y1="{y:.1}" x2="{x1}" y2="{y:.1}" stroke="#e4e4e4"/><text x="{}" y="{:.1}" text-anchor="end">{t}</text>"##,
+                r##"<line x1="{x0}" y1="{y:.1}" x2="{x1}" y2="{y:.1}" stroke="#e4e4e4"/><text x="{}" y="{:.1}" text-anchor="end">{}</text>"##,
                 x0 - 6.0,
-                y + 4.0
+                y + 4.0,
+                label(t, self.y.2)
             );
         }
         let _ = writeln!(
@@ -182,5 +197,9 @@ mod tests {
         assert_eq!(svg.matches("<circle").count(), 2);
         assert!(svg.contains("a &lt; b") && svg.contains("gate"));
         assert_eq!(ticks((0.0, 80.0, 10.0)).len(), 9);
+        assert_eq!(label(3.0 * 0.2, 0.2), "0.6");
+        assert_eq!(label(0.005 * 2.0, 0.005), "0.01");
+        assert_eq!(label(-140.0, 20.0), "-140");
+        assert_eq!(label(-0.0, 0.2), "0");
     }
 }
