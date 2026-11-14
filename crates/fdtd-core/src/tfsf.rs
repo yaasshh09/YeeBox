@@ -14,10 +14,12 @@ use crate::fdtd1d::{Boundary1d, Sim1d, Source1d};
 use crate::source::{SourceKind, Waveform};
 use serde::{Deserialize, Serialize};
 
-/// CPML on the far end of the auxiliary grid. Measured at -120 dB in vacuum
-/// at normal incidence (`fdtd1d` tests), so the incident wave it reflects
-/// back into the box is far below anything the TF/SF tests resolve.
-const AUX_PML: usize = 16;
+/// CPML on the far end of the auxiliary grid. Its echo travels back through
+/// the box as a weak backward incident wave. With 16 cells (-127 dB in the
+/// `fdtd1d` reflection test) the plane wave E/H identity was off by 4e-6 at
+/// low frequency; 32 cells (-158 dB) leave 3e-8, and a 1D layer costs
+/// nothing, so 32.
+const AUX_PML: usize = 32;
 
 /// The running TF/SF source: the 1D auxiliary grid and the map from 2D
 /// indices along the travel axis to its nodes.

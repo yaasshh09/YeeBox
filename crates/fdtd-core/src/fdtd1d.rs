@@ -439,23 +439,24 @@ mod tests {
     }
 
     /// The far-end CPML reflects at or below -100 dB at normal incidence, in
-    /// vacuum and in eps = 4, the job it has as the end of the TF/SF
-    /// auxiliary grid. Launch: a hard source on node 0 (the left end), so
-    /// all the energy goes right. Reference-domain method: the same grid
-    /// 800 nodes longer, so its layer's echo cannot reach the probe in time.
-    /// Pulse: Ricker at 20 cells per wavelength in the medium.
+    /// vacuum and in eps = 4, for the 16-cell preset and for the 32-cell
+    /// layer the TF/SF auxiliary grid uses. Launch: a hard source on node 0
+    /// (the left end), so all the energy goes right. Reference-domain
+    /// method: the same grid 800 nodes longer, so its layer's echo cannot
+    /// reach the probe in time. Pulse: Ricker at 20 cells per wavelength in
+    /// the medium.
     #[test]
     fn far_end_cpml_reflection() {
         use crate::cpml::PmlSpec;
-        for eps in [1.0, 4.0] {
+        for (d, eps) in [(16, 1.0), (16, 4.0), (32, 1.0), (32, 4.0)] {
             let f_peak = 1.0 / (20.0 * f64::sqrt(eps));
             let w = Waveform::Ricker {
                 t0: 2.0 / f_peak,
                 f_peak,
             };
-            let (nx, probe, steps) = (200, 100, 1600);
+            let (nx, probe, steps) = (220, 100, 1600);
             let run = |n: usize| {
-                let spec = PmlSpec::recommended(16);
+                let spec = PmlSpec::recommended(d);
                 let mut sim = Sim1d::new(n, 0.5, Boundary1d::Pec, Boundary1d::Cpml(spec)).unwrap();
                 sim.set_eps(eps).unwrap();
                 sim.add_source(Source1d {
@@ -475,8 +476,8 @@ mod tests {
             let (test, reference) = (run(nx), run(nx + 800));
             let diff: Vec<f64> = test.iter().zip(&reference).map(|(a, b)| a - b).collect();
             let db = 20.0 * (max_abs(&diff) / max_abs(&reference)).log10();
-            eprintln!("1D far-end CPML, 16 cells, eps {eps}: {db:.2} dB");
-            assert!(db <= -100.0, "eps {eps}: {db} dB");
+            eprintln!("1D far-end CPML, {d} cells, eps {eps}: {db:.2} dB");
+            assert!(db <= -100.0, "{d} cells, eps {eps}: {db} dB");
         }
     }
 
