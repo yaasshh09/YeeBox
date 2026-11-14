@@ -11,7 +11,7 @@ use fdtd_core::fdtd1d::{Boundary1d, Sim1d, Source1d};
 use fdtd_core::grid::Component;
 use fdtd_core::kernel::Kernel;
 use fdtd_core::reflection::{ReflectionSetup, reflection_db};
-use fdtd_core::scene::Scene;
+use fdtd_core::scene::{Monitor, Scene};
 use fdtd_core::source::{SourceKind, Waveform};
 use fdtd_core::tm::SimTm;
 use std::path::{Path, PathBuf};
@@ -581,7 +581,12 @@ fn run_scene(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let scene = Scene::from_json(&std::fs::read_to_string(scene_path)?)?;
     let (nx, ny) = (scene.grid.nx, scene.grid.ny);
-    let n_probes = scene.monitors.len();
+    // Only point monitors have a time record; flux and DFT monitors do not.
+    let n_probes = scene
+        .monitors
+        .iter()
+        .filter(|m| matches!(m, Monitor::Point { .. }))
+        .count();
     let rows = steps.checked_add(1).ok_or("steps too large")?;
     rows.checked_mul(n_probes)
         .filter(|&t| t <= MAX_RECORD)
@@ -677,6 +682,36 @@ mod tests {
             }
         }
         assert!(n >= 2, "found {n} scenes");
+    }
+
+    /// `run --scene` writes one probe row per point monitor only; flux and
+    /// DFT monitors have no time record. Both new examples have none.
+    #[test]
+    fn run_scene_with_spectral_monitors() {
+        let base = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/scenes");
+        for name in [
+            "slab_tfsf.json",
+            "waveguide_tm.json",
+            "line_source_cpml.json",
+        ] {
+            let out =
+                std::env::temp_dir().join(format!("fdtd_cli_{}_{name}.npz", std::process::id()));
+            run_scene(&base.join(name), 20, &out).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(std::fs::metadata(&out).unwrap().len() > 0);
+            let _ = std::fs::remove_file(&out);
+        }
+    }
+
+    /// The slab example is the scene the A13 case runs (plus its two flux
+    /// lines), so the shared preset cannot drift from what is validated.
+    #[test]
+    fn slab_example_is_the_a13_scene() {
+        let path =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../validation/scenes/slab_tfsf.json");
+        let mut scene = Scene::from_json(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(scene.monitors.len(), 2);
+        scene.monitors.clear();
+        assert_eq!(scene, cases::plane_wave::slab_scene(20, 0.025).0);
     }
 
     /// The report writes CSV, SVG and markdown with one row per probe and one
