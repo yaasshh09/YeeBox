@@ -5,9 +5,9 @@ entry at the top of the session log.
 
 ## Current state
 
-**Active phase:** Phase 4 (Phases 0 to 3 done, CI not yet run on GitHub)
+**Active phase:** Phase 5 (Phases 0 to 4 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** push so CI runs once, then plan Phase 4 (the wgpu kernel against the CPU reference) in detail
+**Next action:** push so CI runs once (first run with lavapipe for the GPU tests), then plan Phase 5 (browser demo) in detail
 
 ## Decisions log
 
@@ -64,6 +64,18 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-14 | A13 and A14 bands picked from the discrete model before any run, predicted error at most half the gate | choosing the experiment from theory, not tuning to a result |
 | 2026-11-14 | Normal-incidence scenes (A13, A14, the TF/SF aux grid) use the graded preset with alpha_max = 0 | the CFS alpha stops absorption below w of about alpha (-41 dB at f = 0.0025); a normal-incidence problem has no evanescent waves for alpha to help |
 | 2026-11-14 | The acceptance cases live in `fdtd-core::cases`; tests, `fdtd validate` and `fdtd report` all run them | the table cannot drift from what the tests check |
+| 2026-11-14 | One shared device, `Gpu::shared()`; `GpuSim::new(&'static Gpu, &Scene)` | one adapter per process in tests and CLI; the browser phase passes its own device |
+| 2026-11-14 | GPU buffers: f32 fields and full-size psi padded like the CPU, u32 material ids, a material table with an extra wall entry | the spec layout; painting will write ids only |
+| 2026-11-14 | CPML profiles and the material table packed into one `vec4` storage buffer | WebGPU allows 8 storage buffers per stage; the E update would need 11 |
+| 2026-11-14 | Two main passes per step in one code path; the workgroup edge is a text constant swapped at pipeline creation | lets Tier 4 test 4, 8 and 16 from one shader |
+| 2026-11-14 | Batches of up to 64 steps in one compute pass; per-step `Params` slots read through a dynamic uniform offset | one submit per frame, no per-step uploads |
+| 2026-11-14 | Source samples and TF/SF incident values computed on the CPU in f64 and uploaded per batch; the auxiliary grid stays the core `Tfsf` | no formula and no second auxiliary update in WGSL; the 1D grid costs nothing |
+| 2026-11-14 | TF/SF corrections are data (`Tfsf::h_corrections`, `e_corrections`), groups of two in loop order; the CPU iterates the same lists | one definition for both kernels, bit for bit with the old loops; one-node boxes stay race-free |
+| 2026-11-14 | Sources run in one sequential invocation in scene order | hard and soft sources on one node land as on the CPU |
+| 2026-11-14 | Monitors are taps (`Monitor::taps`): the GPU gathers samples, the CPU accumulates probes, DFTs and flux in f64 with the core code | no DFT in WGSL, no f32 accumulation over 1e4 steps |
+| 2026-11-14 | `FdtdError::Gpu`; device errors are stored and returned by the next read | `Kernel::step` has no `Result`; nothing panics |
+| 2026-11-14 | GPU tests use a libtest-mimic harness: no adapter means ignored with a banner; `FDTD_REQUIRE_GPU=1` (CI) makes it a failure | the built-in harness cannot skip at runtime |
+| 2026-11-14 | `kernel::compare` normalizes by the reference peak over the run so far, checked every 250 steps | the CLAUDE.md wording "1e-4 of peak field"; f32 error scales with the largest field held (see deviations) |
 
 ## Measured numbers
 
@@ -86,9 +98,13 @@ Fill in as they become available. These go in the README.
 | CPML reflection vs frequency, 16 cells, 1D | alpha 0.1: -40.8 dB at f = 0.0025, -101 to -113 dB at 0.005 to 0.01, -91 dB at 0.025; alpha 0: -157 dB or better | Ricker peak 0.01, hard launch | 2026-11-14 |
 | 1D far-end CPML | 16 cells -127 / -136 dB, 32 cells -158 / -160 dB (vacuum / eps 4) | Ricker at 20 cpw in the medium | 2026-11-14 |
 | `fdtd validate` runtime | about 35 s for 16 checks | release build | 2026-11-14 |
-| GPU vs CPU max difference | | 2000 steps | |
-| Throughput, integrated GPU | | grid, steps per frame | |
-| Throughput, discrete GPU | | grid, steps per frame | |
+| GPU vs CPU max difference | 5.9e-6 of peak worst (`tfsf_thin_plus_x`), 3.3e-7 to 2.7e-6 elsewhere; probes 1.4e-6, spectra 6.1e-5 worst (slab flux) | 11 scenes, every field, checkpoints every 250 steps to 2000, GTX 1660 Ti; gate 1e-4 | 2026-11-14 |
+| GPU vs CPU long run | 7.2e-6 after 50000 steps, fitted growth n^0.44 | `cavity_tm`, checkpoints every 5000; bound n^1.2 set before the run | 2026-11-14 |
+| GPU workgroup independence | bit-identical for 4, 8, 16 | five field-only scenes, 300 steps | 2026-11-14 |
+| GPU f32 TF/SF leakage | about 5e-8 of the incident amplitude (-146 dB) | one-node box, no other source; CPU leaves 1e-16 | 2026-11-14 |
+| Throughput, integrated GPU | not measured, no integrated GPU on this machine | | |
+| Throughput, discrete GPU | 3.0 Gcells/s, 2864 steps/s, 47.7 steps per 60 fps frame (16-cell CPML: 3.0 Gcells/s, 48.1) | GTX 1660 Ti, Vulkan, 1024 x 1024, 8 steps per submit, `fdtd bench` | 2026-11-14 |
+| Throughput, CPU reference | 68 Mcells/s | f64, one thread, 1024 x 1024 with CPML, release | 2026-11-14 |
 | Cold load to first frame | | device | |
 | A1 shape error, 1000 cells | 0 (exact) | S = 1, gate 1e-12 | 2026-11-13 |
 | A2 phase velocity error | 0 at 10, 20, 40 cpw (below 1 ulp of k) | S = 0.5, L = 200, gate 1e-4 | 2026-11-13 |
@@ -126,6 +142,12 @@ Fill in as they become available. These go in the README.
 | Recommended CPML presets at long wavelengths | The preset's CFS alpha leaves the layer weak below w of about alpha_max (-41 dB at 400 cells per wavelength) | alpha is there for evanescent and grazing waves; normal-incidence scenes use alpha 0 | open: the UI phase needs a low-frequency preset or guidance for CW sources |
 | A13 slab thickness | eps on Ez nodes i0..i1 makes a slab i1 - i0 + 1 cells thick, faces at half cells | the exact discrete transfer agrees with this to 1.4e-7 | yes |
 | `fdtd run --scene` probes | It sized its probe array by every monitor; now it counts point monitors only | flux and DFT monitors have no time record | yes, fixed in 1042571 |
+| 04-validation Tier 4 "max abs(gpu - cpu) / max abs(cpu)" | The denominator is the reference peak over the run so far, not at the final step | measured on `materials_clutter`: the absolute difference falls from 5e-8 to 9e-9 while the CPML drains the field 1000 times, so the final-step ratio reaches 2.8e-4 from round-off alone; without the layer it stays at 2e-6. I changed the measure after seeing that failure, so I am flagging it; it matches CLAUDE.md "1e-4 of peak field" | yes, flagged for review |
+| 02-numerics "six 1D buffers per axis" | One packed `vec4` buffer for all profiles and the material table | the 8 storage buffers per stage default limit | yes |
+| 02-numerics "DFT accumulation on the GPU" | The GPU gathers monitor samples, the CPU accumulates in f64 | f32 accumulation loses digits; reuses the core monitor code | yes, revisit if readback ever costs frame time |
+| Phase 4 "TF/SF corrections on the GPU" | Corrections run on the GPU, the auxiliary 1D grid on the CPU in f64 | no second auxiliary implementation; about 100 nodes per step | yes |
+| `tfsf_thin_plus_x` scene | Has a point source besides the one-node TF/SF box | without it every H edge is scattered field, the CPU leaves 1e-16 and any per-field ratio divides two floors | yes |
+| Phase 3 report text | `report.md` had lines indented by 9 spaces, so the slab section rendered as a code block | a scripted edit turned backslash line continuations into literal spaces; fixed in 7b12f54 | yes, fixed |
 
 ## CI coverage
 
@@ -137,8 +159,8 @@ software adapter being available on the runner).
 | 1 Unit | yes | | units, grid, dispersion, waveforms, 1D solver, npz |
 | 2 Analytic | yes | | A1 to A15 through `fdtd_core::cases` (and R + T = 1), plus late-time stability with CPML |
 | 3 Invariant | yes | | quiescence, linearity (1D and 2D); energy conservation and decay, reciprocity, mirror symmetry, padding (2D); the same with CPML; periodic y (1D equivalence, energy, translation); TF/SF linearity, quiescence, mirror and transpose; reciprocity with TF/SF and monitors |
-| Report | | yes | `fdtd report` regenerates `validation/report`; not wired into CI yet |
-| 4 GPU vs CPU | | | |
+| Report | | yes | `fdtd report` regenerates `validation/report` (now with the Tier 4 table and growth plot); not wired into CI yet |
+| 4 GPU vs CPU | yes, on lavapipe (not yet seen running) | | `crates/fdtd-gpu/tests/tier4.rs`; CI sets `FDTD_REQUIRE_GPU=1`; locally on the GTX 1660 Ti |
 | 5 External | | | |
 
 ## Session log
@@ -153,6 +175,36 @@ Format:
 
 Write the Broke field carefully, especially when the cause was embarrassing.
 It becomes the devlog.
+
+### 2026-11-14 (Phase 4)
+**Landed:** Phase 4 is done. `fdtd-gpu` runs the TMz solver in WGSL through
+wgpu 30: H and E updates with the CPML in one code path, periodic y, sources,
+TF/SF corrections and monitor taps. Every number the shaders use comes from
+`fdtd-core`. To get there, the CPML choice, source values, monitor reads and
+TF/SF corrections in the core became shared functions or data, with
+`fdtd validate` byte-identical before and after each step. Tier 4 runs every
+scene under `validation/scenes` (11 now, with a coverage test listing every
+feature): all within 5.9e-6 of peak against the 1e-4 gate, padding exactly
+zero, workgroups 4, 8 and 16 bit-identical, and 50000 steps growing like
+n^0.44. `fdtd bench` measures 3.0 Gcells/s at 1024 x 1024 on the GTX 1660 Ti,
+about 48 steps per frame. `fdtd report` adds the Tier 4 table and the GPU
+minus CPU plot, and the README shows them. 175 tests pass. 19 commits, nothing
+pushed.
+**Broke:** Three things. First, `materials_clutter` failed the gate at 2.8e-4.
+Before touching anything I measured: the absolute difference fell the whole
+run, the CPML just drained the reference peak 1000 times, and removing any
+shape changed nothing. So the measure divided round-off by a residue; I now
+normalize by the peak so far and recorded it as a deviation. Second, the
+one-node TF/SF box blew the ratio to 5e8: every H edge there is scattered
+field, so the CPU holds 1e-16 and the GPU 5e-8. I gave the scene a source.
+Third, my own mistakes: a `git checkout` while checking a sabotage threw away
+an uncommitted refactor (restored from a copy I had taken), and scripted edits
+turned backslash continuations into spaces, which also hit the Phase 3 report
+text. Sabotage checks now run only on committed files.
+**Open:** CI has never run on GitHub, and lavapipe is untested. No integrated
+GPU throughput yet. The CPML low-frequency preset question from Phase 3 is
+still open for the UI. The running-peak measure needs your sign-off.
+**Next:** push, watch CI (lavapipe), then plan Phase 5.
 
 ### 2026-11-14 (Phase 3, part 2)
 **Landed:** Phase 3 is done. The acceptance cases moved into
