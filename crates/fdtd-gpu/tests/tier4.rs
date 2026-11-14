@@ -3,14 +3,18 @@
 //! Its own harness (libtest-mimic) so that a machine without a GPU adapter
 //! reports every trial as ignored, with a banner, instead of as passed.
 //! With `FDTD_REQUIRE_GPU=1` (set in CI) a missing adapter is a failure.
+//!
+//! Every scene under `validation/scenes/` is a trial of its own: 2000
+//! steps, every field, probe record and spectrum within 1e-4 of the
+//! reference peak at every 250-step checkpoint, padding exactly zero.
 
 use fdtd_core::grid::Component;
-use fdtd_core::kernel::compare;
+use fdtd_core::kernel::{Diff, compare};
 use fdtd_core::scene::Scene;
 use fdtd_core::tm::SimTm;
+use fdtd_gpu::tier4::{self, GATE, STEPS};
 use fdtd_gpu::{Gpu, GpuSim};
 use libtest_mimic::{Arguments, Failed, Trial};
-use std::path::Path;
 use wgpu::util::DeviceExt;
 
 type Check = fn(&'static Gpu) -> Result<(), Failed>;
@@ -18,9 +22,7 @@ type Check = fn(&'static Gpu) -> Result<(), Failed>;
 const FIELDS: [Component; 3] = [Component::Ez, Component::Hx, Component::Hy];
 
 fn scene(name: &str) -> Scene {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../validation/scenes")
-        .join(name);
+    let path = tier4::scenes_dir().join(name);
     Scene::from_json(&std::fs::read_to_string(path).unwrap()).unwrap()
 }
 
@@ -55,6 +57,68 @@ fn bump(scene: &Scene) -> Vec<f64> {
         .collect()
 }
 
+/// Every checkpoint within the gate, the last one printed.
+fn within_gate(name: &str, diffs: &[Diff]) -> Result<(), Failed> {
+    for d in diffs {
+        if d.worst().is_nan() || d.worst() >= GATE {
+            return Err(format!("{name}: {d:?}").into());
+        }
+    }
+    if let Some(d) = diffs.last() {
+        eprintln!(
+            "  {name} step {}: worst {:.2e} fields {:.2e} {:.2e} {:.2e} probes {:.2e} spectra {:.2e}",
+            d.step,
+            d.worst(),
+            d.fields[0],
+            d.fields[1],
+            d.fields[2],
+            d.probes,
+            d.spectra
+        );
+    }
+    Ok(())
+}
+
+/// Hx row ny - 1 (unless y is periodic), Hy column nx - 1 and the wall ring
+/// of Ez are exactly zero.
+fn padding_is_zero(name: &str, s: &Scene, sim: &mut GpuSim) -> Result<(), Failed> {
+    let (nx, ny) = (s.grid.nx, s.grid.ny);
+    let (ez, hx, hy) = (
+        sim.read(Component::Ez)?,
+        sim.read(Component::Hx)?,
+        sim.read(Component::Hy)?,
+    );
+    let live = s.live_rows();
+    for j in 0..ny {
+        for i in 0..nx {
+            let k = j * nx + i;
+            let wall = i == 0 || i == nx - 1 || !live.contains(&j);
+            if wall && ez[k] != 0.0 {
+                return Err(format!("{name}: wall Ez ({i}, {j}) = {}", ez[k]).into());
+            }
+            if j == ny - 1 && !s.periodic_y && hx[k] != 0.0 {
+                return Err(format!("{name}: padding Hx ({i}, {j}) = {}", hx[k]).into());
+            }
+            if i == nx - 1 && hy[k] != 0.0 {
+                return Err(format!("{name}: padding Hy ({i}, {j}) = {}", hy[k]).into());
+            }
+        }
+    }
+    if ez.iter().all(|&v| v == 0.0) {
+        return Err(format!("{name}: nothing ran").into());
+    }
+    Ok(())
+}
+
+/// One committed scene, as it is: the Tier 4 acceptance case.
+fn scene_matches_cpu(gpu: &'static Gpu, name: &str, s: &Scene) -> Result<(), Failed> {
+    let mut cpu = SimTm::from_scene(s)?;
+    let mut gpu_sim = GpuSim::new(gpu, s)?;
+    let diffs = compare(&mut cpu, &mut gpu_sim, &tier4::checkpoints(STEPS, 250))?;
+    within_gate(name, &diffs)?;
+    padding_is_zero(name, s, &mut gpu_sim)
+}
+
 /// A buffer written on the CPU reads back bit for bit.
 fn readback_round_trip(gpu: &'static Gpu) -> Result<(), Failed> {
     let values: Vec<f32> = (0..1000).map(|k| (k as f32 * 0.37).sin()).collect();
@@ -85,14 +149,8 @@ fn fields_zero_at_step_0(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
-/// Checkpoints every 250 steps up to 2000, so the bound also holds while
-/// the field is large, not only after it has left through the layer.
-fn checkpoints() -> Vec<u64> {
-    std::iter::once(1).chain((1..=8).map(|k| 250 * k)).collect()
-}
-
 /// The H and E updates alone, from the same initial Ez, on every kind of
-/// grid: within 1e-4 of the reference peak field at every checkpoint.
+/// grid, with nothing else running.
 fn initial_value_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
     for name in FIELD_SCENES {
         let s = fields_only(name);
@@ -100,129 +158,9 @@ fn initial_value_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
         let mut gpu_sim = GpuSim::new(gpu, &s)?;
         cpu.set_ez(&bump(&s))?;
         gpu_sim.set_ez(&bump(&s))?;
-        for d in compare(&mut cpu, &mut gpu_sim, &checkpoints())? {
-            eprintln!(
-                "  {name} step {}: worst {:.2e} {:?}",
-                d.step,
-                d.worst(),
-                d.fields
-            );
-            if d.worst().is_nan() || d.worst() >= 1e-4 {
-                return Err(format!("{name}: {d:?}").into());
-            }
-        }
-    }
-    Ok(())
-}
-
-/// Within the bound at every checkpoint, checked through `Kernel`.
-fn matches_cpu(gpu: &'static Gpu, name: &str, s: &Scene) -> Result<(), Failed> {
-    let mut cpu = SimTm::from_scene(s)?;
-    let mut gpu_sim = GpuSim::new(gpu, s)?;
-    for d in compare(&mut cpu, &mut gpu_sim, &checkpoints())? {
-        if d.worst().is_nan() || d.worst() >= 1e-4 {
-            return Err(format!("{name}: {d:?}").into());
-        }
-        if d.step == 2000 {
-            eprintln!(
-                "  {name} step 2000: worst {:.2e} fields {:?} probes {:.2e} spectra {:.2e}",
-                d.worst(),
-                d.fields,
-                d.probes,
-                d.spectra
-            );
-        }
-    }
-    Ok(())
-}
-
-/// Point sources of every waveform, soft and hard, two on one node, and a
-/// phased array, with the monitors left out.
-fn sources_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
-    for name in [
-        "hard_sources.json",
-        "phased_array_cpml.json",
-        "cavity_tm.json",
-        "line_source_cpml.json",
-        "materials_clutter.json",
-    ] {
-        let mut s = scene(name);
-        s.monitors.clear();
-        matches_cpu(gpu, name, &s)?;
-    }
-    Ok(())
-}
-
-/// Point, DFT and flux monitors (both normals, and periodic y) read the
-/// same values through the gather pass as the CPU reads directly.
-fn monitors_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
-    for name in [
-        "materials_clutter.json",
-        "phased_array_cpml.json",
-        "cavity_tm.json",
-        "waveguide_tm.json",
-    ] {
-        let s = scene(name);
-        if s.monitors.is_empty() {
-            return Err(format!("{name} has no monitors").into());
-        }
-        matches_cpu(gpu, name, &s)?;
-    }
-    Ok(())
-}
-
-/// TF/SF in all four directions, closed and periodic boxes, a box one
-/// node thick, and scatterers and monitors inside and outside the box.
-fn tfsf_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
-    for name in [
-        "slab_tfsf.json",
-        "tfsf_cylinder_plus_y.json",
-        "tfsf_rod_minus_x.json",
-        "tfsf_lossy_minus_y.json",
-        "tfsf_thin_plus_x.json",
-    ] {
-        let s = scene(name);
-        if s.plane_wave.is_none() {
-            return Err(format!("{name} has no plane wave").into());
-        }
-        matches_cpu(gpu, name, &s)?;
-    }
-    Ok(())
-}
-
-/// Hx row ny - 1 (unless y is periodic), Hy column nx - 1 and the wall ring
-/// of Ez stay exactly zero.
-fn padding_stays_zero(gpu: &'static Gpu) -> Result<(), Failed> {
-    for name in FIELD_SCENES {
-        let s = fields_only(name);
-        let (nx, ny) = (s.grid.nx, s.grid.ny);
-        let mut sim = GpuSim::new(gpu, &s)?;
-        sim.set_ez(&bump(&s))?;
-        sim.step_n(300);
-        let (ez, hx, hy) = (
-            sim.read(Component::Ez)?,
-            sim.read(Component::Hx)?,
-            sim.read(Component::Hy)?,
-        );
-        let live = s.live_rows();
-        for j in 0..ny {
-            for i in 0..nx {
-                let k = j * nx + i;
-                let wall = i == 0 || i == nx - 1 || !live.contains(&j);
-                if wall && ez[k] != 0.0 {
-                    return Err(format!("{name}: wall Ez ({i}, {j}) = {}", ez[k]).into());
-                }
-                if j == ny - 1 && !s.periodic_y && hx[k] != 0.0 {
-                    return Err(format!("{name}: padding Hx ({i}, {j}) = {}", hx[k]).into());
-                }
-                if i == nx - 1 && hy[k] != 0.0 {
-                    return Err(format!("{name}: padding Hy ({i}, {j}) = {}", hy[k]).into());
-                }
-            }
-        }
-        if ez.iter().all(|&v| v == 0.0) {
-            return Err(format!("{name}: nothing ran").into());
-        }
+        let diffs = compare(&mut cpu, &mut gpu_sim, &tier4::checkpoints(STEPS, 250))?;
+        within_gate(&format!("{name} (initial value)"), &diffs)?;
+        padding_is_zero(name, &s, &mut gpu_sim)?;
     }
     Ok(())
 }
@@ -279,18 +217,23 @@ fn main() {
         ("readback_round_trip", readback_round_trip),
         ("fields_zero_at_step_0", fields_zero_at_step_0),
         ("initial_value_matches_cpu", initial_value_matches_cpu),
-        ("sources_match_cpu", sources_match_cpu),
-        ("monitors_match_cpu", monitors_match_cpu),
-        ("tfsf_matches_cpu", tfsf_matches_cpu),
-        ("padding_stays_zero", padding_stays_zero),
         ("workgroup_size_independent", workgroup_size_independent),
     ];
-    let trials = checks
+    let mut trials: Vec<Trial> = checks
         .into_iter()
-        .map(|(name, check)| {
-            Trial::test(name, move || check(gpu.expect("ignored without a gpu")))
-                .with_ignored_flag(gpu.is_none())
-        })
+        .map(|(name, check)| Trial::test(name, move || check(gpu.expect("ignored without a gpu"))))
+        .collect();
+    let scenes = tier4::scenes().expect("validation/scenes is readable");
+    assert!(scenes.len() >= 8, "only {} tier 4 scenes", scenes.len());
+    for (name, s) in scenes {
+        let label = format!("scene {}", name.trim_end_matches(".json"));
+        trials.push(Trial::test(label, move || {
+            scene_matches_cpu(gpu.expect("ignored without a gpu"), &name, &s)
+        }));
+    }
+    let trials = trials
+        .into_iter()
+        .map(|t| t.with_ignored_flag(gpu.is_none()))
         .collect();
     libtest_mimic::run(&args, trials).exit();
 }
