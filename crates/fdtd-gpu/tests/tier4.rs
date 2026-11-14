@@ -190,6 +190,24 @@ fn workgroup_size_independent(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
+/// 50000 steps on a lossless cavity: the difference grows no faster than
+/// linearly, which rules out a hidden instability in the f32 kernel.
+fn long_run_growth(gpu: &'static Gpu) -> Result<(), Failed> {
+    let diffs = tier4::long_run(gpu)?;
+    for d in &diffs {
+        eprintln!("  long run step {:6}: worst {:.3e}", d.step, d.worst());
+    }
+    let e = tier4::growth_exponent(&diffs, tier4::LONG_EVERY);
+    eprintln!(
+        "  long run growth exponent {e:.3} (bound {})",
+        tier4::MAX_GROWTH
+    );
+    if e.is_nan() || e > tier4::MAX_GROWTH {
+        return Err(format!("difference grows like n^{e:.3}").into());
+    }
+    Ok(())
+}
+
 fn main() {
     let args = Arguments::from_args();
     let gpu = match Gpu::shared() {
@@ -218,6 +236,7 @@ fn main() {
         ("fields_zero_at_step_0", fields_zero_at_step_0),
         ("initial_value_matches_cpu", initial_value_matches_cpu),
         ("workgroup_size_independent", workgroup_size_independent),
+        ("long_run_growth", long_run_growth),
     ];
     let mut trials: Vec<Trial> = checks
         .into_iter()
