@@ -115,6 +115,38 @@ fn initial_value_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
+/// Within the bound at every checkpoint, checked through `Kernel`.
+fn matches_cpu(gpu: &'static Gpu, name: &str, s: &Scene) -> Result<(), Failed> {
+    let mut cpu = SimTm::from_scene(s)?;
+    let mut gpu_sim = GpuSim::new(gpu, s)?;
+    for d in compare(&mut cpu, &mut gpu_sim, &checkpoints())? {
+        if d.worst().is_nan() || d.worst() >= 1e-4 {
+            return Err(format!("{name}: {d:?}").into());
+        }
+        if d.step == 2000 {
+            eprintln!("  {name} step 2000: worst {:.2e} {:?}", d.worst(), d.fields);
+        }
+    }
+    Ok(())
+}
+
+/// Point sources of every waveform, soft and hard, two on one node, and a
+/// phased array, with the monitors left out.
+fn sources_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    for name in [
+        "hard_sources.json",
+        "phased_array_cpml.json",
+        "cavity_tm.json",
+        "line_source_cpml.json",
+        "materials_clutter.json",
+    ] {
+        let mut s = scene(name);
+        s.monitors.clear();
+        matches_cpu(gpu, name, &s)?;
+    }
+    Ok(())
+}
+
 /// Hx row ny - 1 (unless y is periodic), Hy column nx - 1 and the wall ring
 /// of Ez stay exactly zero.
 fn padding_stays_zero(gpu: &'static Gpu) -> Result<(), Failed> {
@@ -204,6 +236,7 @@ fn main() {
         ("readback_round_trip", readback_round_trip),
         ("fields_zero_at_step_0", fields_zero_at_step_0),
         ("initial_value_matches_cpu", initial_value_matches_cpu),
+        ("sources_match_cpu", sources_match_cpu),
         ("padding_stays_zero", padding_stays_zero),
         ("workgroup_size_independent", workgroup_size_independent),
     ];

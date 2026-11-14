@@ -9,7 +9,8 @@ use crate::device::Gpu;
 use crate::pipeline::{self, Access, Pass};
 use fdtd_core::grid::Component;
 use fdtd_core::kernel::{Kernel, Spectrum};
-use fdtd_core::scene::Scene;
+use fdtd_core::scene::{Scene, Source};
+use fdtd_core::source::SourceKind;
 use fdtd_core::{FdtdError, Result};
 use wgpu::util::DeviceExt;
 
@@ -25,21 +26,31 @@ const PSI_HYX: usize = 4;
 const PSI_EZX: usize = 5;
 const PSI_EZY: usize = 6;
 
+/// One compute dispatch of a step: its pass, storage bind group and
+/// workgroup counts.
+struct Stage {
+    pass: Pass,
+    group: wgpu::BindGroup,
+    count: (u32, u32),
+}
+
 /// The f32 GPU kernel for one scene.
 pub struct GpuSim {
     gpu: &'static Gpu,
-    nx: usize,
-    ny: usize,
     n: u64,
-    wg: u32,
+    /// The Courant number in f64, for source times; `base.s` is its f32 copy.
+    courant: f64,
     base: Params,
     /// Cb per node in f64, zero on walls and PEC nodes.
     cb: Vec<f64>,
     fields: Vec<wgpu::Buffer>,
     params: wgpu::Buffer,
     params_group: wgpu::BindGroup,
-    h: (Pass, wgpu::BindGroup),
-    e: (Pass, wgpu::BindGroup),
+    /// The dispatches of one step, in the order of `SimTm::step`.
+    stages: Vec<Stage>,
+    sources: Vec<Source>,
+    /// Per-step source values of the current batch, `[b * n_src + s]`.
+    src_values: wgpu::Buffer,
     /// The first error seen while stepping, returned by the next read.
     pending: Option<FdtdError>,
 }
@@ -64,9 +75,6 @@ impl GpuSim {
                 value: wg as f64,
             });
         }
-        if !scene.sources.is_empty() {
-            return Err(not_yet("sources"));
-        }
         if !scene.monitors.is_empty() {
             return Err(not_yet("monitors"));
         }
@@ -85,10 +93,14 @@ impl GpuSim {
         }
         let layout = Layout::new(scene);
         let device = &gpu.device;
+        // Storage buffers are never empty: a zero-sized binding is invalid,
+        // so a scene without sources still gets a 16-byte buffer.
         let storage = |label: &str, contents: &[u8]| {
+            let mut bytes = contents.to_vec();
+            bytes.resize(bytes.len().max(16), 0);
             device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some(label),
-                contents,
+                contents: &bytes,
                 usage: wgpu::BufferUsages::STORAGE
                     | wgpu::BufferUsages::COPY_SRC
                     | wgpu::BufferUsages::COPY_DST,
@@ -151,20 +163,62 @@ impl GpuSim {
                 &coef,
             ],
         );
+        let grid = (
+            nx.div_ceil(wg as usize) as u32,
+            ny.div_ceil(wg as usize) as u32,
+        );
+        let mut stages = vec![
+            Stage {
+                pass: h,
+                group: h_group,
+                count: grid,
+            },
+            Stage {
+                pass: e,
+                group: e_group,
+                count: grid,
+            },
+        ];
+        let n_src = scene.sources.len();
+        let nodes: Vec<[u32; 2]> = scene
+            .sources
+            .iter()
+            .map(|src| {
+                let hard = src.kind == SourceKind::Hard;
+                [(src.j * nx + src.i) as u32, hard as u32]
+            })
+            .collect();
+        let src_nodes = storage("source nodes", bytemuck::cast_slice(&nodes));
+        let src_values = storage("source values", &vec![0u8; BATCH as usize * n_src * 4]);
+        if n_src > 0 {
+            let pass = pipeline::pass(
+                device,
+                &params_layout,
+                "sources",
+                include_str!("../shaders/sources.wgsl"),
+                wg,
+                &[ReadWrite, Read, Read],
+            );
+            let group =
+                pipeline::storage_group(device, &pass, &[&fields[EZ], &src_nodes, &src_values]);
+            stages.push(Stage {
+                pass,
+                group,
+                count: (1, 1),
+            });
+        }
         gpu.check()?;
         Ok(GpuSim {
             gpu,
-            nx,
-            ny,
             n: 0,
-            wg,
+            courant: scene.grid.courant,
             base: Params {
                 nx: nx as u32,
                 ny: ny as u32,
                 periodic_y: scene.periodic_y as u32,
                 step: 0,
                 s: scene.grid.courant as f32,
-                n_src: 0,
+                n_src: n_src as u32,
                 n_taps: 0,
                 n_hgroups: 0,
                 n_egroups: 0,
@@ -175,8 +229,9 @@ impl GpuSim {
             fields,
             params,
             params_group,
-            h: (h, h_group),
-            e: (e, e_group),
+            stages,
+            sources: scene.sources.clone(),
+            src_values,
             pending: None,
         })
     }
@@ -220,10 +275,17 @@ impl GpuSim {
         }
         let gpu = self.gpu;
         gpu.queue.write_buffer(&self.params, 0, &slots);
-        let (gx, gy) = (
-            self.nx.div_ceil(self.wg as usize) as u32,
-            self.ny.div_ceil(self.wg as usize) as u32,
-        );
+        // Step b of the batch takes E to n + b + 1, at t = (n + b + 1) S.
+        if !self.sources.is_empty() {
+            let s = self.courant;
+            let mut values = Vec::with_capacity(steps as usize * self.sources.len());
+            for b in 0..steps {
+                let t = (self.n + b + 1) as f64 * s;
+                values.extend(self.sources.iter().map(|src| src.value_at(t) as f32));
+            }
+            gpu.queue
+                .write_buffer(&self.src_values, 0, bytemuck::cast_slice(&values));
+        }
         let mut encoder = gpu.device.create_command_encoder(&Default::default());
         {
             let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
@@ -232,11 +294,11 @@ impl GpuSim {
             });
             for b in 0..steps {
                 let offset = [(b * PARAMS_STRIDE) as u32];
-                for (stage, group) in [&self.h, &self.e] {
-                    pass.set_pipeline(&stage.pipeline);
+                for stage in &self.stages {
+                    pass.set_pipeline(&stage.pass.pipeline);
                     pass.set_bind_group(0, &self.params_group, &offset);
-                    pass.set_bind_group(1, group, &[]);
-                    pass.dispatch_workgroups(gx, gy, 1);
+                    pass.set_bind_group(1, &stage.group, &[]);
+                    pass.dispatch_workgroups(stage.count.0, stage.count.1, 1);
                 }
             }
         }
