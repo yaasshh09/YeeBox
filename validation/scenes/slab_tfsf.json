@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "grid": {"nx": 109, "ny": 3, "dx_phys_m": 0.001, "courant": 0.5},
+  "materials": [
+    {"kind": "dielectric", "eps_inf": 1, "sigma": 0},
+    {"kind": "dielectric", "eps_inf": 4, "sigma": 0}
+  ],
+  "geometry": [
+    {"shape": "rect", "x0": 44, "y0": -1, "x1": 63, "y1": 3, "material": 1}
+  ],
+  "monitors": [
+    {"type": "flux", "normal": "x", "at": 20, "from": 0, "to": 2, "freqs": [0.005, 0.01, 0.015, 0.02, 0.025]},
+    {"type": "flux", "normal": "x", "at": 84, "from": 0, "to": 2, "freqs": [0.005, 0.01, 0.015, 0.02, 0.025]}
+  ],
+  "pml": {"thickness": 16, "m": 4, "sigma_scale": 1, "kappa_max": 2, "alpha_max": 0},
+  "periodic_y": true,
+  "plane_wave": {"x0": 24, "y0": 0, "x1": 88, "y1": 2, "direction": "+x", "waveform": {"type": "ricker", "t0": 160, "f_peak": 0.0125}, "amplitude": 1}
+}
