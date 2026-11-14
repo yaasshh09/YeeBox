@@ -62,3 +62,25 @@ The layers are `PmlSpec::recommended`, tuned with `fdtd pml-sweep` against the w
          ![Slab R and T vs frequency](slab_rt.svg)
 
          The measured curves sit on the exact discrete slab to 1e-7; what separates them          from Airy is the grid's own dispersion, 4.9e-3 at the band edge, as the golden          file predicts. The numbers are in `slab_rt.csv`.
+
+## GPU against CPU (Tier 4)
+
+Adapter: NVIDIA GeForce GTX 1660 Ti (Vulkan). Each entry is max |gpu - cpu| over the array divided by the reference peak so far, the worst over checkpoints every 250 steps up to 2000; gate 0.0001.
+
+| Scene | Ez | Hx | Hy | Probes | Spectra | Result |
+|---|---|---|---|---|---|---|
+| cavity_tm | 1.02e-6 | 1.16e-6 | 1.07e-6 | 1.33e-6 | 0.00e0 | pass |
+| hard_sources | 1.22e-6 | 1.29e-6 | 1.03e-6 | 9.83e-7 | 0.00e0 | pass |
+| line_source_cpml | 5.70e-7 | 6.98e-7 | 9.48e-7 | 1.39e-6 | 0.00e0 | pass |
+| materials_clutter | 5.61e-7 | 1.37e-6 | 1.57e-6 | 6.21e-7 | 1.86e-7 | pass |
+| phased_array_cpml | 6.60e-7 | 1.03e-6 | 1.23e-6 | 1.29e-6 | 4.38e-8 | pass |
+| slab_tfsf | 3.75e-7 | 0.00e0 | 4.97e-7 | 0.00e0 | 6.05e-5 | pass |
+| tfsf_cylinder_plus_y | 3.85e-7 | 4.07e-7 | 8.21e-7 | 4.05e-7 | 5.28e-8 | pass |
+| tfsf_lossy_minus_y | 8.34e-7 | 1.53e-6 | 2.73e-6 | 8.14e-7 | 1.89e-7 | pass |
+| tfsf_rod_minus_x | 3.44e-7 | 1.02e-6 | 4.98e-7 | 3.26e-7 | 6.32e-6 | pass |
+| tfsf_thin_plus_x | 3.33e-6 | 5.91e-6 | 4.66e-6 | 2.28e-7 | 0.00e0 | pass |
+| waveguide_tm | 1.22e-6 | 2.01e-6 | 1.75e-6 | 0.00e0 | 6.10e-8 | pass |
+
+![GPU minus CPU vs step](gpu_cpu_diff.svg)
+
+Over 50000 steps the worst difference reaches 7.23e-6 of the peak field; a least-squares fit gives growth like n^0.44 (bound 1.2, linear would be 1).

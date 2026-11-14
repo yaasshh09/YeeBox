@@ -414,11 +414,143 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
     let md_path = a.dir.join("report.md");
     let mut md = std::fs::read_to_string(&md_path)?;
     md += &case_sections(&a.dir, &rows, &slab)?;
+    md += &gpu_section(&a.dir)?;
     std::fs::write(&md_path, md)?;
     let failed = rows.iter().filter(|r| !r.pass).count();
     println!("{} checks, {failed} failed", rows.len());
     println!("wrote {}", a.dir.display());
     Ok(())
+}
+
+/// Tier 4 in the report: every scene against the CPU for 2000 steps, and
+/// the 50000-step growth run written as `gpu_cpu_diff.csv` and `.svg`.
+/// Without an adapter the section says so and the files of the last run
+/// with a GPU stay as they are.
+fn gpu_section(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    use fdtd_gpu::{Gpu, tier4};
+    let title = "
+## GPU against CPU (Tier 4)
+
+";
+    let gpu = match Gpu::shared() {
+        Ok(gpu) => gpu,
+        Err(e) => {
+            println!("tier 4 skipped: {e}");
+            return Ok(format!(
+                "{title}Skipped on this run: no GPU adapter ({e}). The plot and CSV are from \
+                 the last run that had one.\n"
+            ));
+        }
+    };
+    let mut md = format!(
+        "{title}Adapter: {}. Each entry is max |gpu - cpu| over the array divided by the \
+         reference peak so far, the worst over checkpoints every 250 steps up to {}; gate {}.\n\n\
+         | Scene | Ez | Hx | Hy | Probes | Spectra | Result |\n\
+         |---|---|---|---|---|---|---|\n",
+        gpu.describe(),
+        tier4::STEPS,
+        tier4::GATE
+    );
+    let mut failed = 0;
+    for (name, scene) in tier4::scenes()? {
+        let diffs = tier4::run(gpu, &scene, &tier4::checkpoints(tier4::STEPS, 250))?;
+        let worst = |f: &dyn Fn(&fdtd_core::kernel::Diff) -> f64| {
+            diffs.iter().map(f).fold(0.0f64, f64::max)
+        };
+        let cols = [
+            worst(&|d| d.fields[0]),
+            worst(&|d| d.fields[1]),
+            worst(&|d| d.fields[2]),
+            worst(&|d| d.probes),
+            worst(&|d| d.spectra),
+        ];
+        let pass = cols.iter().all(|&c| c < tier4::GATE);
+        failed += !pass as usize;
+        md += &format!("| {} |", name.trim_end_matches(".json"));
+        for c in cols {
+            md += &format!(" {c:.2e} |");
+        }
+        md += if pass {
+            " pass |
+"
+        } else {
+            " FAIL |
+"
+        };
+    }
+    let long = tier4::long_run(gpu)?;
+    let exponent = tier4::growth_exponent(&long, tier4::LONG_EVERY);
+    let mut csv = String::from(
+        "step,ez,hx,hy,probes,spectra,worst
+",
+    );
+    for d in &long {
+        csv += &format!(
+            "{},{:e},{:e},{:e},{:e},{:e},{:e}
+",
+            d.step,
+            d.fields[0],
+            d.fields[1],
+            d.fields[2],
+            d.probes,
+            d.spectra,
+            d.worst()
+        );
+    }
+    std::fs::write(dir.join("gpu_cpu_diff.csv"), csv)?;
+    let pts = |f: fn(&fdtd_core::kernel::Diff) -> f64| -> Vec<(f64, f64)> {
+        long.iter().map(|d| (d.step as f64, f(d) * 1e6)).collect()
+    };
+    let (ez, hx, hy) = (
+        pts(|d| d.fields[0]),
+        pts(|d| d.fields[1]),
+        pts(|d| d.fields[2]),
+    );
+    let top = long.iter().map(|d| d.worst() * 1e6).fold(0.0f64, f64::max);
+    let series = [
+        svg::Series {
+            label: "Ez",
+            color: "#1f77b4",
+            points: &ez,
+        },
+        svg::Series {
+            label: "Hx",
+            color: "#d95f02",
+            points: &hx,
+        },
+        svg::Series {
+            label: "Hy",
+            color: "#1b9e77",
+            points: &hy,
+        },
+    ];
+    let plot = svg::Plot {
+        title: "GPU (f32) minus CPU (f64), cavity_tm, lossless closed box",
+        x_label: "step",
+        y_label: "max |gpu - cpu| / peak, units of 1e-6",
+        x: (0.0, tier4::LONG_STEPS as f64, 10_000.0),
+        // A whole-number tick step, so the labels are exact.
+        y: {
+            let step = (top / 4.0).ceil().max(1.0);
+            (0.0, (top / step).ceil().max(1.0) * step, step)
+        },
+        series: &series,
+        hlines: &[],
+    };
+    std::fs::write(dir.join("gpu_cpu_diff.svg"), plot.render())?;
+    let last = long.last().map_or(0.0, |d| d.worst());
+    md += &format!(
+        "\n![GPU minus CPU vs step](gpu_cpu_diff.svg)\n\n\
+         Over {} steps the worst difference reaches {last:.2e} of the peak field; a least-squares \
+         fit gives growth like n^{exponent:.2} (bound {}, linear would be 1).\n",
+        tier4::LONG_STEPS,
+        tier4::MAX_GROWTH
+    );
+    println!("tier 4: {failed} scenes failed, long run {last:.2e}, growth n^{exponent:.2}");
+    if failed > 0 {
+        return Err(format!("{failed} tier 4 scenes failed").into());
+    }
+    Ok(md)
 }
 
 #[derive(clap::Args)]
