@@ -5,6 +5,7 @@ mod svg;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use fdtd_core::FdtdError;
+use fdtd_core::cases::{self, CaseResult, fmt_num};
 use fdtd_core::cpml::PmlSpec;
 use fdtd_core::fdtd1d::{Boundary1d, Sim1d, Source1d};
 use fdtd_core::grid::Component;
@@ -38,6 +39,49 @@ enum Cmd {
     /// Regenerate the validation report: CPML reflection vs angle for the
     /// recommended 10 and 16 cell layers, as CSV, SVG plot, and report.md.
     Report(ReportArgs),
+    /// Run every Tier 2 acceptance case (A1 to A15) on the f64 reference
+    /// kernel and print measured value, gate and pass or fail. Exits with
+    /// an error if any case fails. Run it in release.
+    Validate,
+}
+
+/// The case rows as a markdown table: id, check, measured, gate, result, notes.
+fn case_table(rows: &[CaseResult]) -> String {
+    let mut t = String::from(
+        "| Case | Check | Measured | Gate | Result | Conditions |
+|---|---|---|---|---|---|
+",
+    );
+    for r in rows {
+        t += &format!(
+            "| {} | {} | {} {} | {} | {} | {} |
+",
+            r.id,
+            r.name,
+            fmt_num(r.measured),
+            r.unit,
+            r.gate,
+            if r.pass { "pass" } else { "FAIL" },
+            r.note.replace('|', "/")
+        );
+    }
+    t
+}
+
+fn validate() -> Result<(), Box<dyn std::error::Error>> {
+    let rows = cases::all();
+    print!("{}", case_table(&rows));
+    let failed: Vec<&str> = rows.iter().filter(|r| !r.pass).map(|r| r.id).collect();
+    if failed.is_empty() {
+        println!(
+            "
+all {} checks pass",
+            rows.len()
+        );
+        Ok(())
+    } else {
+        Err(format!("failed: {}", failed.join(", ")).into())
+    }
 }
 
 #[derive(clap::Args)]
@@ -516,6 +560,7 @@ fn main() -> std::process::ExitCode {
         },
         Cmd::PmlSweep(a) => pml_sweep(a),
         Cmd::Report(a) => report(a),
+        Cmd::Validate => validate(),
     };
     match result {
         Ok(()) => std::process::ExitCode::SUCCESS,
@@ -575,6 +620,36 @@ mod tests {
         let md = read("report.md");
         assert!(md.contains("| corner |") && md.contains("| A9 |") && md.contains("| A10 |"));
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The table has one line per row, the gate and unit in place, and a
+    /// FAIL for a failing row; pipes in notes cannot break the columns.
+    #[test]
+    fn case_table_rows() {
+        use fdtd_core::cases::Gate;
+        let rows = [
+            CaseResult::new(
+                "A1",
+                "shape",
+                0.0,
+                Gate::AtMost(1e-12),
+                "rel",
+                "S = 1".into(),
+            ),
+            CaseResult::new(
+                "A9",
+                "layer",
+                -50.0,
+                Gate::AtMost(-60.0),
+                "dB",
+                "a | b".into(),
+            ),
+        ];
+        let t = case_table(&rows);
+        assert_eq!(t.lines().count(), 4);
+        assert!(t.contains("| A1 | shape | 0 rel | <= 1.00e-12 | pass | S = 1 |"));
+        assert!(t.contains("| A9 | layer | -50 dB | <= -60 | FAIL | a / b |"));
+        assert!(Cli::try_parse_from(["fdtd", "validate"]).is_ok());
     }
 
     #[test]
