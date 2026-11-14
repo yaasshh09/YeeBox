@@ -124,7 +124,13 @@ fn matches_cpu(gpu: &'static Gpu, name: &str, s: &Scene) -> Result<(), Failed> {
             return Err(format!("{name}: {d:?}").into());
         }
         if d.step == 2000 {
-            eprintln!("  {name} step 2000: worst {:.2e} {:?}", d.worst(), d.fields);
+            eprintln!(
+                "  {name} step 2000: worst {:.2e} fields {:?} probes {:.2e} spectra {:.2e}",
+                d.worst(),
+                d.fields,
+                d.probes,
+                d.spectra
+            );
         }
     }
     Ok(())
@@ -142,6 +148,24 @@ fn sources_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
     ] {
         let mut s = scene(name);
         s.monitors.clear();
+        matches_cpu(gpu, name, &s)?;
+    }
+    Ok(())
+}
+
+/// Point, DFT and flux monitors (both normals, and periodic y) read the
+/// same values through the gather pass as the CPU reads directly.
+fn monitors_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    for name in [
+        "materials_clutter.json",
+        "phased_array_cpml.json",
+        "cavity_tm.json",
+        "waveguide_tm.json",
+    ] {
+        let s = scene(name);
+        if s.monitors.is_empty() {
+            return Err(format!("{name} has no monitors").into());
+        }
         matches_cpu(gpu, name, &s)?;
     }
     Ok(())
@@ -237,6 +261,7 @@ fn main() {
         ("fields_zero_at_step_0", fields_zero_at_step_0),
         ("initial_value_matches_cpu", initial_value_matches_cpu),
         ("sources_match_cpu", sources_match_cpu),
+        ("monitors_match_cpu", monitors_match_cpu),
         ("padding_stays_zero", padding_stays_zero),
         ("workgroup_size_independent", workgroup_size_independent),
     ];

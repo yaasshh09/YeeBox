@@ -9,7 +9,8 @@ use crate::device::Gpu;
 use crate::pipeline::{self, Access, Pass};
 use fdtd_core::grid::Component;
 use fdtd_core::kernel::{Kernel, Spectrum};
-use fdtd_core::scene::{Scene, Source};
+use fdtd_core::monitor::{Dft, FluxLine};
+use fdtd_core::scene::{Monitor, Scene, Source};
 use fdtd_core::source::SourceKind;
 use fdtd_core::{FdtdError, Result};
 use wgpu::util::DeviceExt;
@@ -34,6 +35,14 @@ struct Stage {
     count: (u32, u32),
 }
 
+/// A monitor as the GPU kernel runs it: its taps start at `at` in each
+/// step's gather row, and the accumulation is the `fdtd-core` code in f64.
+enum Mon {
+    Point(Vec<f64>),
+    Dft(Dft),
+    Flux(FluxLine),
+}
+
 /// The f32 GPU kernel for one scene.
 pub struct GpuSim {
     gpu: &'static Gpu,
@@ -51,6 +60,11 @@ pub struct GpuSim {
     sources: Vec<Source>,
     /// Per-step source values of the current batch, `[b * n_src + s]`.
     src_values: wgpu::Buffer,
+    /// Monitors in scene order, each with its first tap.
+    monitors: Vec<(usize, Mon)>,
+    n_taps: usize,
+    /// Gathered taps of the current batch, `[b * n_taps + t]`.
+    gathered: wgpu::Buffer,
     /// The first error seen while stepping, returned by the next read.
     pending: Option<FdtdError>,
 }
@@ -74,9 +88,6 @@ impl GpuSim {
                 name: "workgroup edge",
                 value: wg as f64,
             });
-        }
-        if !scene.monitors.is_empty() {
-            return Err(not_yet("monitors"));
         }
         if scene.plane_wave.is_some() {
             return Err(not_yet("plane waves"));
@@ -207,6 +218,57 @@ impl GpuSim {
                 count: (1, 1),
             });
         }
+        let mut taps: Vec<[u32; 2]> = Vec::new();
+        let mut monitors = Vec::new();
+        for m in &scene.monitors {
+            let at = taps.len();
+            taps.extend(m.taps(nx, ny)?.iter().map(|&(c, k)| {
+                let c = match c {
+                    Component::Ez => 0,
+                    Component::Hx => 1,
+                    Component::Hy => 2,
+                };
+                [c, k as u32]
+            }));
+            // Entry 0 of a point history is Ez at n = 0, which is zero.
+            monitors.push((
+                at,
+                match m {
+                    Monitor::Point { .. } => Mon::Point(vec![0.0]),
+                    Monitor::Dft { freqs, .. } => Mon::Dft(Dft::new(freqs, 1)?),
+                    &Monitor::Flux {
+                        normal,
+                        at,
+                        from,
+                        to,
+                        ref freqs,
+                    } => Mon::Flux(FluxLine::new(normal, at, from, to, freqs)?),
+                },
+            ));
+        }
+        let n_taps = taps.len();
+        let tap_buf = storage("taps", bytemuck::cast_slice(&taps));
+        let gathered = storage("gathered", &vec![0u8; BATCH as usize * n_taps * 4]);
+        if n_taps > 0 {
+            let pass = pipeline::pass(
+                device,
+                &params_layout,
+                "gather",
+                include_str!("../shaders/gather.wgsl"),
+                wg,
+                &[Read, Read, Read, Read, ReadWrite],
+            );
+            let group = pipeline::storage_group(
+                device,
+                &pass,
+                &[&fields[EZ], &fields[HX], &fields[HY], &tap_buf, &gathered],
+            );
+            stages.push(Stage {
+                pass,
+                group,
+                count: ((n_taps as u32).div_ceil(64), 1),
+            });
+        }
         gpu.check()?;
         Ok(GpuSim {
             gpu,
@@ -219,7 +281,7 @@ impl GpuSim {
                 step: 0,
                 s: scene.grid.courant as f32,
                 n_src: n_src as u32,
-                n_taps: 0,
+                n_taps: n_taps as u32,
                 n_hgroups: 0,
                 n_egroups: 0,
                 n_inc: 0,
@@ -232,6 +294,9 @@ impl GpuSim {
             stages,
             sources: scene.sources.clone(),
             src_values,
+            monitors,
+            n_taps,
+            gathered,
             pending: None,
         })
     }
@@ -303,7 +368,41 @@ impl GpuSim {
             }
         }
         gpu.queue.submit([encoder.finish()]);
+        let first = self.n;
         self.n += steps;
+        if self.n_taps > 0
+            && let Err(e) = self.take_taps(first, steps)
+        {
+            self.pending.get_or_insert(e);
+        }
+    }
+
+    /// Reads the gathered taps of a batch that started at step `first` and
+    /// feeds every monitor, step by step, as `SimTm::step` does: E samples
+    /// at t = n S, flux H at (n - 1/2) S (inside `record_taps`).
+    fn take_taps(&mut self, first: u64, steps: u64) -> Result<()> {
+        let bytes = self
+            .gpu
+            .read(&self.gathered, 0, steps * self.n_taps as u64 * 4)?;
+        let values: Vec<f64> = bytemuck::cast_slice::<u8, f32>(&bytes)
+            .iter()
+            .map(|&v| v as f64)
+            .collect();
+        let s = self.courant;
+        for (b, row) in values.chunks_exact(self.n_taps).enumerate() {
+            let n = first + b as u64 + 1;
+            for (at, m) in &mut self.monitors {
+                match m {
+                    Mon::Point(h) => h.push(row[*at]),
+                    Mon::Dft(d) => d.add(&row[*at..*at + 1], n as f64 * s, s),
+                    Mon::Flux(line) => {
+                        let len = 3 * (line.to - line.from + 1);
+                        line.record_taps(&row[*at..*at + len], n, s);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Advances `steps` full steps.
@@ -354,10 +453,35 @@ impl Kernel for GpuSim {
     }
 
     fn probe_history(&mut self) -> Result<Vec<Vec<f64>>> {
-        Ok(Vec::new())
+        if let Some(e) = self.pending.take() {
+            return Err(e);
+        }
+        Ok(self
+            .monitors
+            .iter()
+            .filter_map(|(_, m)| match m {
+                Mon::Point(h) => Some(h.clone()),
+                _ => None,
+            })
+            .collect())
     }
 
+    /// The same shapes as `SimTm`: point monitors skipped, one entry per
+    /// frequency.
     fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
-        Ok(Vec::new())
+        if let Some(e) = self.pending.take() {
+            return Err(e);
+        }
+        Ok(self
+            .monitors
+            .iter()
+            .filter_map(|(_, m)| match m {
+                Mon::Point(_) => None,
+                Mon::Dft(d) => Some(Spectrum::Field(
+                    (0..d.freqs().len()).map(|f| d.get(0, f)).collect(),
+                )),
+                Mon::Flux(line) => Some(Spectrum::Flux(line.flux())),
+            })
+            .collect())
     }
 }
