@@ -31,8 +31,8 @@
 use crate::cpml::Cpml;
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
-use crate::kernel::Kernel;
-use crate::monitor::PointProbe;
+use crate::kernel::{Kernel, Spectrum};
+use crate::monitor::{Dft, FluxLine, PointProbe};
 use crate::scene::{Monitor, Scene, Source};
 use crate::source::SourceKind;
 use crate::tfsf::Tfsf;
@@ -60,6 +60,16 @@ pub struct SimTm {
     probes: Vec<PointProbe>,
     /// TF/SF plane wave with its 1D auxiliary grid, if the scene has one.
     tfsf: Option<Tfsf>,
+    /// DFT and flux monitors in scene order.
+    spectral: Vec<Spectral>,
+}
+
+/// A spectral monitor as the solver runs it.
+#[derive(Debug, Clone)]
+enum Spectral {
+    /// Ez transform at node index k.
+    Field(usize, Dft),
+    Flux(FluxLine),
 }
 
 impl SimTm {
@@ -92,11 +102,25 @@ impl SimTm {
                 eps[k] = m.eps();
             }
         }
-        let mut probes: Vec<PointProbe> = scene
-            .monitors
-            .iter()
-            .map(|&Monitor::Point { i, j }| PointProbe::new(i, j))
-            .collect();
+        let mut probes = Vec::new();
+        let mut spectral = Vec::new();
+        for m in &scene.monitors {
+            match m {
+                &Monitor::Point { i, j } => probes.push(PointProbe::new(i, j)),
+                Monitor::Dft { i, j, freqs } => {
+                    spectral.push(Spectral::Field(j * nx + i, Dft::new(freqs, 1)?))
+                }
+                Monitor::Flux {
+                    normal,
+                    at,
+                    from,
+                    to,
+                    freqs,
+                } => spectral.push(Spectral::Flux(FluxLine::new(
+                    *normal, *at, *from, *to, freqs,
+                )?)),
+            }
+        }
         let ez = vec![0.0; nx * ny];
         for p in &mut probes {
             p.record(&ez, nx);
@@ -134,6 +158,7 @@ impl SimTm {
             sources: scene.sources.clone(),
             probes,
             tfsf,
+            spectral,
         })
     }
 
@@ -222,6 +247,17 @@ impl SimTm {
         for p in &mut self.probes {
             p.record(ez, nx);
         }
+        // Spectral monitors read the whole solver state, so they are taken
+        // out for the call and put back.
+        let mut spectral = std::mem::take(&mut self.spectral);
+        let n = self.n as f64;
+        for m in &mut spectral {
+            match m {
+                Spectral::Field(k, dft) => dft.add(&[self.ez[*k]], n * s, s),
+                Spectral::Flux(line) => line.record(self),
+            }
+        }
+        self.spectral = spectral;
     }
 
     /// Advances `steps` full steps.
@@ -331,6 +367,19 @@ impl Kernel for SimTm {
 
     fn probe_history(&mut self) -> Result<Vec<Vec<f64>>> {
         Ok(self.probes.iter().map(|p| p.history().to_vec()).collect())
+    }
+
+    fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
+        Ok(self
+            .spectral
+            .iter()
+            .map(|m| match m {
+                Spectral::Field(_, dft) => {
+                    Spectrum::Field((0..dft.freqs().len()).map(|f| dft.get(0, f)).collect())
+                }
+                Spectral::Flux(line) => Spectrum::Flux(line.flux()),
+            })
+            .collect())
     }
 }
 
@@ -928,6 +977,76 @@ pub(crate) mod tests {
             k.read_field(Component::Ez).unwrap(),
             k.probe_history().unwrap(),
         )
+    }
+
+    /// Spectral monitors from the scene equal hand-driven `Dft` and
+    /// `FluxLine` objects bit for bit, come back in scene order with the
+    /// point probes skipped, and leave the point probes untouched.
+    #[test]
+    fn monitor_spectra_from_the_scene() {
+        use crate::monitor::Normal;
+        let freqs = vec![0.03, 0.07];
+        let mut scene = vacuum_box(30, 24, 0.5);
+        scene.sources.push(Source {
+            i: 8,
+            j: 11,
+            waveform: Waveform::Ricker {
+                t0: 15.0,
+                f_peak: 0.08,
+            },
+            amplitude: 1.0,
+            kind: SourceKind::Soft,
+        });
+        scene.monitors = vec![
+            Monitor::Point { i: 3, j: 4 },
+            Monitor::Flux {
+                normal: Normal::X,
+                at: 20,
+                from: 2,
+                to: 21,
+                freqs: freqs.clone(),
+            },
+            Monitor::Dft {
+                i: 15,
+                j: 9,
+                freqs: freqs.clone(),
+            },
+            Monitor::Point { i: 15, j: 9 },
+            Monitor::Flux {
+                normal: Normal::Y,
+                at: 5,
+                from: 1,
+                to: 28,
+                freqs: freqs.clone(),
+            },
+        ];
+        let mut sim = SimTm::from_scene(&scene).unwrap();
+        let mut fx = FluxLine::new(Normal::X, 20, 2, 21, &freqs).unwrap();
+        let mut fy = FluxLine::new(Normal::Y, 5, 1, 28, &freqs).unwrap();
+        let mut d = Dft::new(&freqs, 1).unwrap();
+        for _ in 0..200 {
+            sim.step();
+            fx.record(&sim);
+            fy.record(&sim);
+            let n = sim.time_step() as f64;
+            d.add(&[sim.ez()[9 * 30 + 15]], n * 0.5, 0.5);
+        }
+        let got = Kernel::monitor_spectra(&mut sim).unwrap();
+        assert_eq!(
+            got,
+            vec![
+                Spectrum::Flux(fx.flux()),
+                Spectrum::Field(vec![d.get(0, 0), d.get(0, 1)]),
+                Spectrum::Flux(fy.flux()),
+            ]
+        );
+        assert!(
+            fx.flux().iter().any(|v| *v != 0.0),
+            "the line must see the wave"
+        );
+        let probes = Kernel::probe_history(&mut sim).unwrap();
+        assert_eq!(probes.len(), 2);
+        assert_eq!(*probes[1].last().unwrap(), sim.ez()[9 * 30 + 15]);
     }
 
     /// The trait path equals the direct path, and probe entry n is Ez at the

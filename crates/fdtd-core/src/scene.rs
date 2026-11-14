@@ -9,6 +9,7 @@ use crate::cpml::PmlSpec;
 use crate::dispersion::courant_limit;
 use crate::error::{FdtdError, Result};
 use crate::material::Material;
+use crate::monitor::{Dft, FluxLine, Normal};
 use crate::source::{SourceKind, Waveform};
 use crate::tfsf::{Direction, PlaneWave, PlaneWaveFault};
 use serde::{Deserialize, Serialize};
@@ -149,12 +150,23 @@ pub fn phased_array(
     Ok(out)
 }
 
-/// A field monitor.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+/// A field monitor. Frequencies are normalized (cycles per unit time).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Monitor {
     /// Records Ez at node (i, j) once at n = 0 and after every step.
     Point { i: usize, j: usize },
+    /// Running DFT of Ez at node (i, j), sampled at t = n S after every step.
+    Dft { i: usize, j: usize, freqs: Vec<f64> },
+    /// Poynting flux spectrum through the Ez nodes `from..=to` of column `at`
+    /// (x normal) or row `at` (y normal). See `monitor::FluxLine`.
+    Flux {
+        normal: Normal,
+        at: usize,
+        from: usize,
+        to: usize,
+        freqs: Vec<f64>,
+    },
 }
 
 fn finite(name: &'static str, value: f64) -> Result<()> {
@@ -390,17 +402,64 @@ impl Scene {
             }
         }
         for m in &self.monitors {
-            let Monitor::Point { i, j } = *m;
-            if i >= nx || j >= ny {
-                return Err(FdtdError::OutOfDomain {
-                    what: "monitor",
-                    i,
-                    j,
-                });
-            }
+            self.check_monitor(m)?;
         }
         if let Some(pw) = &self.plane_wave {
             self.check_plane_wave(pw)?;
+        }
+        Ok(())
+    }
+
+    /// Placement of one monitor. Points and DFT nodes must be grid nodes. An
+    /// x-normal flux line averages Hy from `at - 1/2` and `at + 1/2`, so `at`
+    /// is in `1..=nx-2`; a y-normal line averages Hx from `at -+ 1/2`, so `at`
+    /// is in `1..=ny-2`, or any row with periodic y, where the edges wrap. The
+    /// segment runs over existing nodes, and frequency lists are non-empty,
+    /// finite and positive.
+    fn check_monitor(&self, m: &Monitor) -> Result<()> {
+        let GridSpec { nx, ny, .. } = self.grid;
+        let out = |i, j| {
+            Err(FdtdError::OutOfDomain {
+                what: "monitor",
+                i,
+                j,
+            })
+        };
+        match m {
+            &Monitor::Point { i, j } => {
+                if i >= nx || j >= ny {
+                    return out(i, j);
+                }
+            }
+            Monitor::Dft { i, j, freqs } => {
+                Dft::new(freqs, 1)?;
+                if *i >= nx || *j >= ny {
+                    return out(*i, *j);
+                }
+            }
+            Monitor::Flux {
+                normal,
+                at,
+                from,
+                to,
+                freqs,
+            } => {
+                FluxLine::new(*normal, *at, *from, *to, freqs)?;
+                let (at, to) = (*at, *to);
+                match normal {
+                    Normal::X => {
+                        if !(1..nx - 1).contains(&at) || to >= ny {
+                            return out(at, to);
+                        }
+                    }
+                    Normal::Y => {
+                        let row_ok = self.periodic_y && at < ny || (1..ny - 1).contains(&at);
+                        if !row_ok || to >= nx {
+                            return out(to, at);
+                        }
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -1145,6 +1204,84 @@ pub(crate) mod tests {
         assert!(
             ok((5, 5), (1, 0), 0.0, &[1.0], 0.04, 2.0).is_err(),
             "ramp under 3"
+        );
+    }
+
+    /// DFT and flux monitors round trip through their tagged JSON form and
+    /// are placed by the same rules the kernels need: a DFT node inside the
+    /// grid; an x-normal line on a column with an Hy edge on both sides
+    /// (1..=nx-2), a y-normal line on a live row with an Hx edge on both
+    /// sides (1..=ny-2, any row with periodic y), segments inside the grid,
+    /// and valid frequency lists.
+    #[test]
+    fn spectral_monitors() {
+        use crate::monitor::Normal;
+        let freqs = vec![0.02, 0.05];
+        let mut s = sample();
+        s.monitors.push(Monitor::Dft {
+            i: 30,
+            j: 20,
+            freqs: freqs.clone(),
+        });
+        s.monitors.push(Monitor::Flux {
+            normal: Normal::X,
+            at: 20,
+            from: 1,
+            to: 28,
+            freqs: freqs.clone(),
+        });
+        let text = s.to_json().unwrap();
+        assert!(text.contains("\"type\": \"flux\"") && text.contains("\"normal\": \"x\""));
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+
+        let flux = |normal, at, from, to| Monitor::Flux {
+            normal,
+            at,
+            from,
+            to,
+            freqs: vec![0.05],
+        };
+        let check = |m: Monitor, periodic: bool| {
+            let mut s = sample();
+            s.periodic_y = periodic;
+            s.monitors = vec![m];
+            s.validate()
+        };
+        // sample() is 40 x 30.
+        for (m, ok) in [
+            (flux(Normal::X, 1, 0, 29), true),
+            (flux(Normal::X, 38, 0, 29), true),
+            (flux(Normal::X, 0, 0, 29), false),
+            (flux(Normal::X, 39, 0, 29), false),
+            (flux(Normal::X, 20, 0, 30), false),
+            (flux(Normal::X, 20, 5, 4), false),
+            (flux(Normal::Y, 1, 0, 39), true),
+            (flux(Normal::Y, 28, 0, 39), true),
+            (flux(Normal::Y, 0, 0, 39), false),
+            (flux(Normal::Y, 29, 0, 39), false),
+            (flux(Normal::Y, 10, 0, 40), false),
+        ] {
+            assert_eq!(check(m.clone(), false).is_ok(), ok, "{m:?}");
+        }
+        assert!(check(flux(Normal::Y, 0, 0, 39), true).is_ok());
+        assert!(check(flux(Normal::Y, 29, 0, 39), true).is_ok());
+        let dft = |i, j, freqs: Vec<f64>| Monitor::Dft { i, j, freqs };
+        assert!(check(dft(39, 29, vec![0.1]), false).is_ok());
+        assert!(check(dft(40, 0, vec![0.1]), false).is_err());
+        assert!(check(dft(5, 5, vec![]), false).is_err());
+        assert!(check(dft(5, 5, vec![0.1, -0.1]), false).is_err());
+        assert!(
+            check(
+                Monitor::Flux {
+                    normal: Normal::X,
+                    at: 5,
+                    from: 0,
+                    to: 3,
+                    freqs: vec![f64::NAN]
+                },
+                false
+            )
+            .is_err()
         );
     }
 

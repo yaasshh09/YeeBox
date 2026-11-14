@@ -22,4 +22,17 @@ pub trait Kernel: Sized {
     /// Ez history of every point monitor, in scene order. Each has
     /// `time_step() + 1` entries.
     fn probe_history(&mut self) -> Result<Vec<Vec<f64>>>;
+
+    /// The accumulated spectrum of every DFT and flux monitor, in scene
+    /// order (point monitors are skipped), one entry per scene frequency.
+    fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>>;
+}
+
+/// What a spectral monitor has accumulated so far, per frequency of its list.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Spectrum {
+    /// The Ez transform at a node, `(re, im)`, normalized.
+    Field(Vec<(f64, f64)>),
+    /// Poynting flux through a line, positive along its normal, normalized.
+    Flux(Vec<f64>),
 }
