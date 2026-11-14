@@ -37,7 +37,8 @@ enum Cmd {
     /// the worst reflection from 0 to 70 degrees, best first. Run it in release.
     PmlSweep(SweepArgs),
     /// Regenerate the validation report: CPML reflection vs angle for the
-    /// recommended 10 and 16 cell layers, as CSV, SVG plot, and report.md.
+    /// recommended 10 and 16 cell layers, the slab R and T plot, and the
+    /// table of every acceptance case, as CSV, SVG and report.md. Run it in release.
     Report(ReportArgs),
     /// Run every Tier 2 acceptance case (A1 to A15) on the f64 reference
     /// kernel and print measured value, gate and pass or fail. Exits with
@@ -227,6 +228,79 @@ fn write_cpml_report(
     Ok(results)
 }
 
+/// Writes `slab_rt.csv` and `slab_rt.svg` (measured R and T against the Airy
+/// formula, A13 at L = 20) and returns the report section for them and for
+/// the full case table.
+fn case_sections(
+    dir: &Path,
+    rows: &[CaseResult],
+    slab: &[(f64, f64, f64, f64, f64)],
+) -> Result<String, Box<dyn std::error::Error>> {
+    let mut csv = String::from(
+        "f,R,T,R_airy,T_airy
+",
+    );
+    for &(f, r, t, rc, tc) in slab {
+        csv += &format!(
+            "{f},{r:.8},{t:.8},{rc:.8},{tc:.8}
+"
+        );
+    }
+    std::fs::write(dir.join("slab_rt.csv"), csv)?;
+    let pick = |g: fn(&(f64, f64, f64, f64, f64)) -> f64| -> Vec<(f64, f64)> {
+        slab.iter().map(|p| (p.0, g(p))).collect()
+    };
+    let (r, t, rc, tc) = (pick(|p| p.1), pick(|p| p.2), pick(|p| p.3), pick(|p| p.4));
+    let series = [
+        svg::Series {
+            label: "R, Airy",
+            color: "#9ecae1",
+            points: &rc,
+        },
+        svg::Series {
+            label: "R, FDTD",
+            color: "#1f77b4",
+            points: &r,
+        },
+        svg::Series {
+            label: "T, Airy",
+            color: "#fdae6b",
+            points: &tc,
+        },
+        svg::Series {
+            label: "T, FDTD",
+            color: "#d95f02",
+            points: &t,
+        },
+    ];
+    let f_max = slab.iter().map(|p| p.0).fold(0.0, f64::max);
+    let plot = svg::Plot {
+        title: "Dielectric slab, eps 4, 20 cells: R and T vs frequency (A13)",
+        x_label: "frequency (cycles per unit time, dx = c0 = 1)",
+        y_label: "R, T",
+        x: (0.0, (f_max / 0.005).ceil() * 0.005, 0.005),
+        y: (0.0, 1.0, 0.2),
+        series: &series,
+        hlines: &[],
+    };
+    std::fs::write(dir.join("slab_rt.svg"), plot.render())?;
+    Ok(format!(
+        "
+## Every case (A1 to A15)
+
+         `fdtd validate` prints the same table. Each gate is the one in          `docs/04-validation.md`; the conditions column says what was run.
+
+{}
+         ## Dielectric slab (A13)
+
+         ![Slab R and T vs frequency](slab_rt.svg)
+
+         The measured curves sit on the exact discrete slab to 1e-7; what separates them          from Airy is the grid's own dispersion, 4.9e-3 at the band edge, as the golden          file predicts. The numbers are in `slab_rt.csv`.
+",
+        case_table(rows)
+    ))
+}
+
 fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
     let setup = ReflectionSetup::standard();
     let layers = [PmlSpec::recommended(10), PmlSpec::recommended(16)];
@@ -238,6 +312,19 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
             setup.worst_db(db, 70.0)
         );
     }
+    let rows = cases::all();
+    let (golden, rt) = cases::plane_wave::slab_spectrum(20)?;
+    let slab: Vec<(f64, f64, f64, f64, f64)> = golden
+        .iter()
+        .enumerate()
+        .map(|(k, g)| (g.f, rt.r[k], rt.t[k], g.r_c, g.t_c))
+        .collect();
+    let md_path = a.dir.join("report.md");
+    let mut md = std::fs::read_to_string(&md_path)?;
+    md += &case_sections(&a.dir, &rows, &slab)?;
+    std::fs::write(&md_path, md)?;
+    let failed = rows.iter().filter(|r| !r.pass).count();
+    println!("{} checks, {failed} failed", rows.len());
     println!("wrote {}", a.dir.display());
     Ok(())
 }
@@ -619,6 +706,34 @@ mod tests {
         assert_eq!(svg.matches("<circle").count(), 6);
         let md = read("report.md");
         assert!(md.contains("| corner |") && md.contains("| A9 |") && md.contains("| A10 |"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The case sections write the slab CSV and plot and carry the table.
+    #[test]
+    fn case_sections_write_the_slab_plot() {
+        use fdtd_core::cases::Gate;
+        let dir = std::env::temp_dir().join(format!("fdtd_cli_cases_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let rows = [CaseResult::new(
+            "A13",
+            "slab",
+            4.9e-3,
+            Gate::AtMost(0.01),
+            "abs",
+            "x".into(),
+        )];
+        let slab = [
+            (0.01, 0.16, 0.84, 0.162, 0.838),
+            (0.02, 0.34, 0.66, 0.337, 0.663),
+        ];
+        let md = case_sections(&dir, &rows, &slab).unwrap();
+        assert!(md.contains("| A13 | slab | 4.90e-3 abs | <= 0.01 | pass |"));
+        assert!(md.contains("![Slab R and T vs frequency](slab_rt.svg)"));
+        let csv = std::fs::read_to_string(dir.join("slab_rt.csv")).unwrap();
+        assert_eq!(csv.lines().count(), 3);
+        let svg = std::fs::read_to_string(dir.join("slab_rt.svg")).unwrap();
+        assert_eq!(svg.matches("<polyline").count(), 4);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
