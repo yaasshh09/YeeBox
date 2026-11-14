@@ -7,6 +7,8 @@
 //! the same thing written for H^(n + 1/2) stored under index n.
 
 use crate::error::{FdtdError, Result};
+use crate::grid::Component;
+use crate::scene::Monitor;
 use crate::tm::SimTm;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
@@ -131,29 +133,43 @@ impl FluxLine {
         })
     }
 
-    /// Adds the current step of `sim`: Ez at t = n S, the averaged H at
-    /// t = (n - 1/2) S. With periodic y, a y-normal line on row 0 averages
-    /// Hx rows ny - 1 and 0.
-    pub fn record(&mut self, sim: &SimTm) {
-        let (nx, ny, s) = (sim.nx(), sim.ny(), sim.courant());
-        let (ez, hx, hy) = (sim.ez(), sim.hx(), sim.hy());
-        for (p, q) in (self.from..=self.to).enumerate() {
-            let (k, prev) = match self.normal {
-                Normal::X => (q * nx + self.at, q * nx + self.at - 1),
+    /// The raw field samples one step of this line needs, three per node in
+    /// line order: Ez at the node, then the H edge before it and the H edge
+    /// after it along the normal (Hy at x - 1/2 and x + 1/2, or Hx at
+    /// y - 1/2 and y + 1/2). Indices are into the padded `j * nx + i`
+    /// arrays. With periodic y, a y-normal line on row 0 reads Hx row ny - 1
+    /// as its lower edge.
+    pub fn taps(&self, nx: usize, ny: usize) -> Vec<Tap> {
+        let mut out = Vec::with_capacity(3 * self.e_buf.len());
+        for q in self.from..=self.to {
+            let (h, k, prev) = match self.normal {
+                Normal::X => (Component::Hy, q * nx + self.at, q * nx + self.at - 1),
                 Normal::Y => {
                     let below = if self.at == 0 { ny - 1 } else { self.at - 1 };
-                    (self.at * nx + q, below * nx + q)
+                    (Component::Hx, self.at * nx + q, below * nx + q)
                 }
             };
-            self.e_buf[p] = ez[k];
-            self.h_buf[p] = match self.normal {
-                Normal::X => 0.5 * (hy[prev] + hy[k]),
-                Normal::Y => 0.5 * (hx[prev] + hx[k]),
-            };
+            out.extend([(Component::Ez, k), (h, prev), (h, k)]);
         }
-        let n = sim.time_step() as f64;
+        out
+    }
+
+    /// Adds one step from the samples named by `taps`, in that order, taken
+    /// after step `n`: Ez at t = n S, the averaged H at t = (n - 1/2) S.
+    pub fn record_taps(&mut self, values: &[f64], n: u64, s: f64) {
+        for (p, v) in values.as_chunks::<3>().0.iter().enumerate() {
+            self.e_buf[p] = v[0];
+            self.h_buf[p] = 0.5 * (v[1] + v[2]);
+        }
+        let n = n as f64;
         self.e.add(&self.e_buf, n * s, s);
         self.h.add(&self.h_buf, (n - 0.5) * s, s);
+    }
+
+    /// Adds the current step of `sim`, read through `taps`.
+    pub fn record(&mut self, sim: &SimTm) {
+        let values = read_taps(sim, &self.taps(sim.nx(), sim.ny()));
+        self.record_taps(&values, sim.time_step(), sim.courant());
     }
 
     pub fn freqs(&self) -> &[f64] {
@@ -176,6 +192,42 @@ impl FluxLine {
                     .sum()
             })
             .collect()
+    }
+}
+
+/// One field sample a kernel reads after a step: the component and its
+/// index in the padded `j * nx + i` array. Monitors are described by their
+/// taps so every kernel feeds the same f64 accumulation code.
+pub type Tap = (Component, usize);
+
+/// The values of `taps` in the current state of `sim`.
+pub fn read_taps(sim: &SimTm, taps: &[Tap]) -> Vec<f64> {
+    taps.iter()
+        .map(|&(c, k)| match c {
+            Component::Ez => sim.ez()[k],
+            Component::Hx => sim.hx()[k],
+            Component::Hy => sim.hy()[k],
+        })
+        .collect()
+}
+
+impl Monitor {
+    /// The samples this monitor reads after every step on an `nx` by `ny`
+    /// grid: one Ez tap for a point or DFT monitor, `FluxLine::taps` for a
+    /// flux line. Call on a validated scene.
+    pub fn taps(&self, nx: usize, ny: usize) -> Result<Vec<Tap>> {
+        Ok(match self {
+            &Monitor::Point { i, j } | &Monitor::Dft { i, j, .. } => {
+                vec![(Component::Ez, j * nx + i)]
+            }
+            Monitor::Flux {
+                normal,
+                at,
+                from,
+                to,
+                freqs,
+            } => FluxLine::new(*normal, *at, *from, *to, freqs)?.taps(nx, ny),
+        })
     }
 }
 
@@ -339,6 +391,42 @@ mod tests {
         for ((a, b), freq) in near.iter().zip(&far).zip(FREQS) {
             assert!(((a - b) / a).abs() < 1e-6, "f {freq}: {a} vs {b}");
         }
+    }
+
+    /// Taps name exactly the samples each monitor reads: the node for points
+    /// and DFTs; Ez then the two H edges per node for flux lines, with the
+    /// periodic row-0 line reading Hx row ny - 1 below it.
+    #[test]
+    fn monitor_taps_name_the_sampled_values() {
+        use crate::grid::Component::{Ez, Hx, Hy};
+        let (nx, ny) = (10, 6);
+        let point = Monitor::Point { i: 3, j: 2 };
+        assert_eq!(point.taps(nx, ny).unwrap(), vec![(Ez, 23)]);
+        let dft = Monitor::Dft {
+            i: 3,
+            j: 2,
+            freqs: vec![0.1],
+        };
+        assert_eq!(dft.taps(nx, ny).unwrap(), vec![(Ez, 23)]);
+        let fx = Monitor::Flux {
+            normal: Normal::X,
+            at: 5,
+            from: 1,
+            to: 2,
+            freqs: vec![0.1],
+        };
+        assert_eq!(
+            fx.taps(nx, ny).unwrap(),
+            vec![(Ez, 15), (Hy, 14), (Hy, 15), (Ez, 25), (Hy, 24), (Hy, 25)]
+        );
+        let fy = Monitor::Flux {
+            normal: Normal::Y,
+            at: 0,
+            from: 4,
+            to: 4,
+            freqs: vec![0.1],
+        };
+        assert_eq!(fy.taps(nx, ny).unwrap(), vec![(Ez, 4), (Hx, 54), (Hx, 4)]);
     }
 
     #[test]
