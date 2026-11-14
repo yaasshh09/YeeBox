@@ -8,11 +8,13 @@ Yee grid.
 That's the goal. Here's where it stands today, honestly:
 
 - **Done:** a plain f64 CPU reference solver in Rust (1D and 2D TMz), checked
-  against exact discrete identities and analytic physics, and a convolutional
-  PML absorbing boundary with its reflection measured in dB.
-- **Not done yet:** the GPU kernel, the browser app, plane waves, dispersive
-  materials, scattering and far-field checks. I'll only claim those once their
-  tests pass.
+  against exact discrete identities and analytic physics; a convolutional PML
+  absorbing boundary with its reflection measured in dB; an axis-aligned
+  total-field / scattered-field plane wave source; and frequency-domain
+  monitors that measure reflection, transmission and guided modes.
+- **Not done yet:** the GPU kernel, the browser app, oblique plane waves,
+  dispersive materials, scattering and far-field checks. I'll only claim those
+  once their tests pass.
 
 The reference solver stays deliberately simple. Its only job is to be
 obviously correct, so it can later prove the fast GPU kernel right.
@@ -49,12 +51,27 @@ picture. `fdtd report` regenerates the plot and
 | Energy drift, closed lossless cavity, 10000 steps | 3.1e-15 | 1e-10 |
 | Line source vs the Hankel solution, 2 to 5 wavelengths | 3.9e-4 | 0.02 |
 | Late time with the CPML, 100000 steps | decays to 4e-32 of peak, never grows | no growth |
+| Plane wave leakage into the scattered-field region | -303.9 dB | -120 dB |
+| Dielectric slab R and T vs the Airy formula | 4.9e-3 | 0.01 |
+| R + T for the lossless slab | 1 to 6.9e-8 | 1 to 0.005 |
+| Attenuation in a lossy medium | 0.40 percent | 1 percent |
+| Waveguide guided wavelength and cutoff | 0.030 percent | 0.5 percent |
+| Waveguide evanescent decay below cutoff | 0.060 percent | 1 percent |
 
-Every number comes from `cargo test`; the run prints them.
+For the slab, the lossy medium and the waveguide, the error that remains is
+the grid's own dispersion, and I can show it: the golden data also carries the
+exact answer of the discrete Yee scheme, and the measurements land on it to
+1e-7 or better. The bands were picked from that prediction before any run.
+
+![Slab R and T vs frequency](validation/report/slab_rt.svg)
+
+`fdtd validate` runs every case and prints this table with its gates;
+`cargo test` checks the same cases.
 
 ## Running it
 
-    cargo test --workspace                       # everything, about 15 s
+    cargo test --workspace                       # everything, under a minute
+    cargo run --release -p fdtd-cli -- validate  # every acceptance case, with gates
     cargo run --release -p fdtd-cli -- report    # regenerate validation/report
     cargo run --release -p fdtd-cli -- run --scene validation/scenes/line_source_cpml.json
 

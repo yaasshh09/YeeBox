@@ -5,9 +5,9 @@ entry at the top of the session log.
 
 ## Current state
 
-**Active phase:** Phase 3 (Phases 0, 1 and 2 done, CI not yet run on GitHub)
+**Active phase:** Phase 4 (Phases 0 to 3 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** Phase 3 commits 17 to 21 (cases module, fdtd validate, report, scenes, tables); plan in ~/.claude/plans/quirky-nibbling-fountain.md
+**Next action:** push so CI runs once, then plan Phase 4 (the wgpu kernel against the CPU reference) in detail
 
 ## Decisions log
 
@@ -50,6 +50,20 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-13 | Reflection harness lives in `fdtd-core::reflection`, shared by tests, sweep and report | one definition of the measurement |
 | 2026-11-13 | `PmlSpec::recommended` picked by the worst reflection over every probe, 80 degrees included | the 0 to 70 degree optimum (kappa_max = 1) leaks 27 dB more at grazing; users will paint near edges |
 | 2026-11-13 | `fdtd report` writes its SVG plot directly from Rust | no plotting stack in CI, output diffs cleanly, renders on GitHub; Python stays for golden data |
+| 2026-11-14 | `Scene.periodic_y`: Ez rows wrap, no y walls, CPML on the x faces only (`Cpml::x_only`) | a y-uniform plane wave cannot exist between PEC y walls in TMz; also what A24 needs later |
+| 2026-11-14 | Periodic loops use wrapped neighbor indices that equal `k + nx` / `k - nx` off the seam | non-periodic scenes stay bit for bit the Phase 2 solver |
+| 2026-11-14 | TF/SF box `Scene.plane_wave`, axis-aligned, faces and the nodes across them in material 0, outside the layer | the corrections assume the background on both sides of each face; typed `PlaneWaveFault` errors |
+| 2026-11-14 | The auxiliary grid is `Sim1d` with background eps, a hard launch on node 0 and a 32-cell far-end CPML without alpha | its update is written in the 2D operation order, so a y-uniform 2D field reproduces it bit for bit |
+| 2026-11-14 | TF/SF order: 2D H, H corrections from aux E^n, aux step, 2D E, E corrections from aux H^(n+1/2) | A15 at -302 dB, round-off |
+| 2026-11-14 | Phased array is a helper (`scene::phased_array`) that expands to `RampedCw` point sources | no scene type until the UI needs one |
+| 2026-11-14 | DFT samples enter at their true time; H at (n - 1/2) S | the half-step correction is the time argument, pinned by the plane-wave identity Hy_avg / Ez = -cos(k/2) |
+| 2026-11-14 | Spectral monitors (`Monitor::Dft`, `Monitor::Flux`) are scene objects; `Kernel::monitor_spectra` reads them | the GPU kernel must produce the same spectra |
+| 2026-11-14 | R from a flux line in the SF region behind the entry face, T in the TF region, both over a normalization run's incident flux (`spectra::rt_spectrum`) | no incident subtraction needed; one definition shared by tests, validate and report |
+| 2026-11-14 | Spectrum runs end when max abs(Ez) stays below 1e-6 of peak for one pulse length, else `NotDecayed` | no guessed step counts, no ringing spectra |
+| 2026-11-14 | Golden files carry both the continuum answer (the gate) and the exact discrete Yee answer (a guard at 1e-4) | separates the grid's own error from measurement error |
+| 2026-11-14 | A13 and A14 bands picked from the discrete model before any run, predicted error at most half the gate | choosing the experiment from theory, not tuning to a result |
+| 2026-11-14 | Normal-incidence scenes (A13, A14, the TF/SF aux grid) use the graded preset with alpha_max = 0 | the CFS alpha stops absorption below w of about alpha (-41 dB at f = 0.0025); a normal-incidence problem has no evanescent waves for alpha to help |
+| 2026-11-14 | The acceptance cases live in `fdtd-core::cases`; tests, `fdtd validate` and `fdtd report` all run them | the table cannot drift from what the tests check |
 
 ## Measured numbers
 
@@ -60,7 +74,18 @@ Fill in as they become available. These go in the README.
 | CPML reflection, 10 cells | -86.5 dB worst over 0 to 70 deg (worst probe is the interface corner); -85.5 dB at 80 deg | m 3, sigma_scale 1.25, kappa_max 2, alpha_max 0.15; Ricker peak at 20 cpw, S = 0.5, 1000 steps; gate -60 | 2026-11-13 |
 | CPML reflection, best tuned | -127.3 dB worst over 0 to 70 deg at 16 cells; -125.4 dB at 80 deg | m 4, sigma_scale 1.0, kappa_max 2, alpha_max 0.1; target -80 | 2026-11-13 |
 | CPML sweep extremes | 0 to 70 deg only: -91.9 dB at 10 cells, -134.5 at 16, -144.9 at 20 (all kappa_max = 1); doc start values (m 3, scale 1, kappa 5, alpha 0.05): -75.1 / -99.1 / -104.9 | 720 + 1120 + 288 setting sweeps, `fdtd pml-sweep` | 2026-11-13 |
-| TF/SF leakage | | | |
+| TF/SF leakage (A15) | -303.9 dB worst | empty 100 x 100 domain, all four directions, closed box and periodic y; gate -120 | 2026-11-14 |
+| Dielectric slab R, T vs Airy (A13) | 4.88e-3 (the discrete model predicts 4.88e-3); 1.4e-7 from the exact discrete slab; order 2.006 over L = 20, 40, 80 | eps 4, 20 cells, f 0.0025 to 0.025, alpha 0 layer; gate 0.01 | 2026-11-14 |
+| R + T, lossless slab | 1 to 6.9e-8 | the A13 slab; gate 0.005 | 2026-11-14 |
+| Lossy attenuation (A14) | 0.400 percent worst (the discrete model's own error); 2.5e-6 from the exact discrete alpha | eps 2.25, sigma 0.05, f 0.008 to 0.02, background medium, line source; gate 1 percent | 2026-11-14 |
+| Waveguide guided wavelength, cutoff (A11) | 0.030 percent, 0.002 percent; beta 1.6e-6 from discrete | TM1, a = 40, 1.30 and 1.60 f_c, CW, DFT over whole periods; gate 0.5 percent | 2026-11-14 |
+| Waveguide evanescent decay (A12) | 0.060 percent; 7.8e-8 from discrete | 0.70 f_c; gate 1 percent | 2026-11-14 |
+| Half-step identity Hy_avg / Ez = -cos(k/2) | 3.6e-8 (the wrong time gives a phase of w S / 2, 0.03 to 0.13 rad) | periodic TF/SF plane wave, 5 frequencies | 2026-11-14 |
+| Flux line vs analytic launch spectrum | about 1e-8 relative | periodic TF/SF, +x and -x, and normal y | 2026-11-14 |
+| Reciprocity with TF/SF and monitors present | 6.1e-14 of peak | cluttered PEC box, differences against a TF/SF-only run; gate 1e-9 | 2026-11-14 |
+| CPML reflection vs frequency, 16 cells, 1D | alpha 0.1: -40.8 dB at f = 0.0025, -101 to -113 dB at 0.005 to 0.01, -91 dB at 0.025; alpha 0: -157 dB or better | Ricker peak 0.01, hard launch | 2026-11-14 |
+| 1D far-end CPML | 16 cells -127 / -136 dB, 32 cells -158 / -160 dB (vacuum / eps 4) | Ricker at 20 cpw in the medium | 2026-11-14 |
+| `fdtd validate` runtime | about 35 s for 16 checks | release build | 2026-11-14 |
 | GPU vs CPU max difference | | 2000 steps | |
 | Throughput, integrated GPU | | grid, steps per frame | |
 | Throughput, discrete GPU | | grid, steps per frame | |
@@ -89,13 +114,18 @@ Fill in as they become available. These go in the README.
 | 02-numerics `kappa_max` 5 to 15 | Recommended layers use kappa_max = 2 | the sweep found 2 best over all angles; 5 costs about 8 dB at 10 cells | yes, measured |
 | Phase 2 late-time "energy decays monotonically" | Checked on 2000-step window maxima of the field energy | psi holds part of the energy; with alpha > 0 a slow beat makes 500-step maxima rise 1.5x at the 1e-14 level, while 2000-step maxima fall for alpha 0, 0.15, 0.5 and kappa 1 | yes |
 | A10 "target, record" | Also asserted at -80 dB | it clears the target by 47 dB; the bound comes from the spec, not from my output | yes |
-| 04-validation report "one plot per Tier 2 case" | report.md covers A9, A10 and links the A7 plot; A8 numbers live in the test output and here | putting A8 in the report means moving golden-data handling into a library for a printout | yes, revisit when the report grows |
+| 04-validation report "one plot per Tier 2 case" | report.md has the full A1 to A15 table, the CPML and slab plots, and links the A7 plot; the other cases have a table row, not a plot | the golden handling moved into `cases` in Phase 3, so plots can follow case by case | yes, add plots as the report grows |
 | 04-validation "Gaussian has zero DC" | Zero-DC tests target Ricker and the sine-modulated Gaussian; the plain Gaussian test checks DC = sqrt(pi) tau | a plain Gaussian has nonzero integral | yes |
-| A4 at S = 0.72 | Runs through a test-only `from_scene_unchecked` inside fdtd-core | the public constructor must reject S above the limit | yes, done |
+| A4 at S = 0.72 | Runs through `from_scene_unchecked`, crate-private (no longer test-only, since `cases::tier2d::a4` uses it) | the public constructor must reject S above the limit | yes, done |
 | Energy W | No stored copy of H after all; H^(n+1/2) is recomputed from the current state | simpler than a copy and bit-identical to the solver's own update | yes, done |
 | A5 "along the axis" | Measured on the lowest guided mode of a wide PEC guide, 4.4 deg (10 cpw) and 9.0 deg (20 cpw) off axis, not at exactly 0 | a closed PEC domain cannot hold a ky = 0 wave; exact axis behaviour is already covered by A2 and `axis_2d_equals_1d` | yes |
 | A6, A7 records | Probe records start after the Ricker pulse ends (t > 2 t0) | while the source drives the cavity, the spectrum carries a smooth background that biased the peaks by about 5e-6 and pulled the A7 order to 1.90 | yes |
 | `courant_limit(dims)` | Returns `Result` and rejects dims outside 1..3 | no panics reachable from input | yes |
+| 02-numerics "multiply the H transform by exp(-j w dt / 2)" | H samples enter the DFT at their true time (n - 1/2) S instead | the same correction written for H^(n+1/2) stored under index n; my storage labels H by the step that produced it | yes, documented in `monitor.rs` |
+| A14 "lossy slab attenuation" | Measured as the attenuation constant of a lossy background medium driven by a line source, not a slab | a lossy slab inside a TF/SF box would put lossy material across the exit face, which the TF/SF rules forbid; the background medium has no interface at all | yes |
+| Recommended CPML presets at long wavelengths | The preset's CFS alpha leaves the layer weak below w of about alpha_max (-41 dB at 400 cells per wavelength) | alpha is there for evanescent and grazing waves; normal-incidence scenes use alpha 0 | open: the UI phase needs a low-frequency preset or guidance for CW sources |
+| A13 slab thickness | eps on Ez nodes i0..i1 makes a slab i1 - i0 + 1 cells thick, faces at half cells | the exact discrete transfer agrees with this to 1.4e-7 | yes |
+| `fdtd run --scene` probes | It sized its probe array by every monitor; now it counts point monitors only | flux and DFT monitors have no time record | yes, fixed in 1042571 |
 
 ## CI coverage
 
@@ -105,8 +135,8 @@ software adapter being available on the runner).
 | Tier | CI | Local only | Notes |
 |---|---|---|---|
 | 1 Unit | yes | | units, grid, dispersion, waveforms, 1D solver, npz |
-| 2 Analytic | yes | | A1 to A3 (1D), A4 to A7 (2D TMz), A8 to A10 and late-time stability (CPML) |
-| 3 Invariant | yes | | quiescence, linearity (1D and 2D); energy conservation and decay, reciprocity, mirror symmetry, padding (2D); mirror symmetry, padding, quiescence, linearity with CPML |
+| 2 Analytic | yes | | A1 to A15 through `fdtd_core::cases` (and R + T = 1), plus late-time stability with CPML |
+| 3 Invariant | yes | | quiescence, linearity (1D and 2D); energy conservation and decay, reciprocity, mirror symmetry, padding (2D); the same with CPML; periodic y (1D equivalence, energy, translation); TF/SF linearity, quiescence, mirror and transpose; reciprocity with TF/SF and monitors |
 | Report | | yes | `fdtd report` regenerates `validation/report`; not wired into CI yet |
 | 4 GPU vs CPU | | | |
 | 5 External | | | |
@@ -123,6 +153,28 @@ Format:
 
 Write the Broke field carefully, especially when the cause was embarrassing.
 It becomes the devlog.
+
+### 2026-11-14 (Phase 3, part 2)
+**Landed:** Phase 3 is done. The acceptance cases moved into
+`fdtd-core::cases` (A1 to A15 plus R + T), and the tests now assert on them,
+so the numbers are the same everywhere: every value reproduced exactly after
+the move. `fdtd validate` prints the 16 checks with gates and exits non-zero
+on a failure; all pass. `fdtd report` adds the full table and a slab R/T plot
+(`slab_rt.svg`, `slab_rt.csv`). New example scenes: `slab_tfsf.json` (the
+exact A13 scene, guarded by a test) and `waveguide_tm.json`. README and these
+tables are up to date.
+**Broke:** Two things. SVG tick labels printed 0.6000000000000001 (ticks are
+min + k step); labels now round to the step's decimals. And `fdtd run --scene`
+failed on any scene with flux or DFT monitors, because it sized the probe
+array by every monitor; it counts point monitors now, with a regression test.
+That fix commit (1042571) also carries the slab drift-guard test, which reads
+`slab_tfsf.json` from the next commit, so the tests are red at 1042571 alone
+and green from 19678fc on.
+**Open:** CI has still never run on GitHub. The recommended CPML presets are
+weak at long wavelengths (see deviations), which matters for CW sources in
+the UI.
+**Next:** push, watch CI, then plan Phase 4 (wgpu kernel matched to the CPU
+reference) in detail.
 
 ### 2026-11-14 (Phase 3, part 1)
 **Landed:** I added periodic y, with the CPML on the x faces only when it's
