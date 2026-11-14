@@ -35,6 +35,7 @@ use crate::kernel::Kernel;
 use crate::monitor::PointProbe;
 use crate::scene::{Monitor, Scene, Source};
 use crate::source::SourceKind;
+use crate::tfsf::Tfsf;
 
 /// TMz grid state built from a validated scene.
 #[derive(Debug, Clone)]
@@ -57,6 +58,8 @@ pub struct SimTm {
     psi_ezy: Vec<f64>,
     sources: Vec<Source>,
     probes: Vec<PointProbe>,
+    /// TF/SF plane wave with its 1D auxiliary grid, if the scene has one.
+    tfsf: Option<Tfsf>,
 }
 
 impl SimTm {
@@ -64,7 +67,7 @@ impl SimTm {
     /// node Ca, Cb. All fields start at zero, at time step 0.
     pub fn from_scene(scene: &Scene) -> Result<Self> {
         scene.validate()?;
-        Ok(Self::build(scene))
+        Self::build(scene)
     }
 
     /// Same as `from_scene` but accepts a Courant number above the 2D limit.
@@ -72,10 +75,10 @@ impl SimTm {
     #[cfg(test)]
     pub(crate) fn from_scene_unchecked(scene: &Scene) -> Result<Self> {
         scene.validate_inner(false)?;
-        Ok(Self::build(scene))
+        Self::build(scene)
     }
 
-    fn build(scene: &Scene) -> Self {
+    fn build(scene: &Scene) -> Result<Self> {
         let (nx, ny, s) = (scene.grid.nx, scene.grid.ny, scene.grid.courant);
         let ids = scene.rasterize();
         let mut ca = vec![0.0; nx * ny];
@@ -106,7 +109,12 @@ impl SimTm {
             Some(spec) => Cpml::new(spec, nx, ny, s, eps_r),
             None => Cpml::none(nx, ny),
         };
-        Self {
+        // Validated: material 0 is a lossless dielectric when there is a plane wave.
+        let tfsf = match &scene.plane_wave {
+            Some(pw) => Some(Tfsf::new(pw, scene.materials[0].eps(), s)?),
+            None => None,
+        };
+        Ok(Self {
             nx,
             ny,
             s,
@@ -125,12 +133,14 @@ impl SimTm {
             psi_ezy: vec![0.0; nx * ny],
             sources: scene.sources.clone(),
             probes,
-        }
+            tfsf,
+        })
     }
 
-    /// Advances one full step: H to n + 1/2, E to n + 1, then the sources,
-    /// which use the waveform at t = (n + 1) * S, then the probes. Soft
-    /// sources add to Ez, hard sources overwrite it.
+    /// Advances one full step: H to n + 1/2, then the TF/SF H corrections
+    /// and the auxiliary grid step, E to n + 1, the TF/SF E corrections, then
+    /// the point sources, which use the waveform at t = (n + 1) * S, then the
+    /// probes. Soft sources add to Ez, hard sources overwrite it.
     pub fn step(&mut self) {
         let (nx, ny, s) = (self.nx, self.ny, self.s);
         let (ez, hx, hy) = (&mut self.ez, &mut self.hx, &mut self.hy);
@@ -169,6 +179,12 @@ impl SimTm {
                 hy[k] += s * (ez[k + 1] * ik - ez[k] * ik + *psi);
             }
         }
+        // TF/SF: take the incident Ez out of the H edges that read across a
+        // face (the auxiliary grid is still at E^n), then step it to H^(n+1/2).
+        if let Some(t) = &mut self.tfsf {
+            t.correct_h(hx, hy, nx, s, self.periodic_y);
+            t.advance();
+        }
         // Ez[i, j] at (i, j), interior only, profiles at the integer
         // positions. Summed in the order of the stencil table so the oracle
         // tests can compare bit for bit.
@@ -187,6 +203,10 @@ impl SimTm {
                         - self.psi_ezy[k];
                 ez[k] = self.ca[k] * ez[k] + self.cb[k] * curl;
             }
+        }
+        // TF/SF: add the incident H^(n+1/2) back on the face nodes.
+        if let Some(t) = &self.tfsf {
+            t.correct_e(ez, &self.cb, nx);
         }
 
         self.n += 1;
