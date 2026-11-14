@@ -7,5 +7,8 @@
 
 pub mod buffers;
 pub mod device;
+pub mod pipeline;
+pub mod sim;
 
 pub use device::Gpu;
+pub use sim::GpuSim;

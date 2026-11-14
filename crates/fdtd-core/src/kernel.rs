@@ -38,9 +38,13 @@ pub enum Spectrum {
 }
 
 /// How far kernel `b` is from the reference kernel `a` after `step` steps.
-/// Every entry is `max |b - a| / max |a|` over the whole array (0 when both
-/// are all zero, infinite when only `a` is), so 1e-4 means "within 1e-4 of
-/// the reference peak".
+/// Every entry is `max |b - a|` over the whole array divided by the peak
+/// `max |a|` of that array over this and every earlier checkpoint of the
+/// run (0 when both are all zero, infinite when only `a` is). So 1e-4 means
+/// "within 1e-4 of the reference peak field". An f32 kernel carries
+/// round-off relative to the largest field it has held, so once a pulse has
+/// left through the CPML the residue is compared against that, not against
+/// itself.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Diff {
     pub step: u64,
@@ -62,9 +66,14 @@ impl Diff {
     }
 }
 
-/// `max |b - a| / max |a|`, with the conventions of `Diff`. Mismatched
-/// lengths are an error.
+/// `max |b - a| / max |a|` of one snapshot, with the conventions of
+/// `Diff`. Mismatched lengths are an error.
 pub fn relative_diff(a: &[f64], b: &[f64]) -> Result<f64> {
+    diff_against(a, b, &mut 0.0)
+}
+
+/// `max |b - a| / peak`, after raising `peak` to `max |a|`.
+fn diff_against(a: &[f64], b: &[f64], peak: &mut f64) -> Result<f64> {
     if a.len() != b.len() {
         return Err(FdtdError::Case(format!(
             "compared arrays of length {} and {}",
@@ -72,12 +81,12 @@ pub fn relative_diff(a: &[f64], b: &[f64]) -> Result<f64> {
             b.len()
         )));
     }
-    let peak = a.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+    *peak = a.iter().fold(*peak, |m, v| m.max(v.abs()));
     let worst = a
         .iter()
         .zip(b)
         .fold(0.0f64, |m, (x, y)| m.max((y - x).abs()));
-    Ok(if worst == 0.0 { 0.0 } else { worst / peak })
+    Ok(if worst == 0.0 { 0.0 } else { worst / *peak })
 }
 
 fn flatten(spectra: &[Spectrum]) -> Vec<f64> {
@@ -101,6 +110,8 @@ pub fn compare<A: Kernel, B: Kernel>(
     checkpoints: &[u64],
 ) -> Result<Vec<Diff>> {
     let mut out = Vec::with_capacity(checkpoints.len());
+    // Running peaks of the reference: Ez, Hx, Hy, probes, spectra.
+    let mut peak = [0.0f64; 5];
     for &step in checkpoints {
         for k in [a.time_step(), b.time_step()] {
             if step < k {
@@ -112,11 +123,11 @@ pub fn compare<A: Kernel, B: Kernel>(
         a.step(step - a.time_step());
         b.step(step - b.time_step());
         let mut fields = [0.0; 3];
-        for (d, c) in fields
-            .iter_mut()
-            .zip([Component::Ez, Component::Hx, Component::Hy])
+        for (f, c) in [Component::Ez, Component::Hx, Component::Hy]
+            .into_iter()
+            .enumerate()
         {
-            *d = relative_diff(&a.read_field(c)?, &b.read_field(c)?)?;
+            fields[f] = diff_against(&a.read_field(c)?, &b.read_field(c)?, &mut peak[f])?;
         }
         let pa: Vec<f64> = a.probe_history()?.concat();
         let pb: Vec<f64> = b.probe_history()?.concat();
@@ -125,8 +136,8 @@ pub fn compare<A: Kernel, B: Kernel>(
         out.push(Diff {
             step,
             fields,
-            probes: relative_diff(&pa, &pb)?,
-            spectra: relative_diff(&sa, &sb)?,
+            probes: diff_against(&pa, &pb, &mut peak[3])?,
+            spectra: diff_against(&sa, &sb, &mut peak[4])?,
         });
     }
     Ok(out)
@@ -211,6 +222,59 @@ mod tests {
         assert_eq!(relative_diff(&[0.0], &[1.0]).unwrap(), f64::INFINITY);
         assert_eq!(relative_diff(&[2.0, -4.0], &[2.0, -3.0]).unwrap(), 0.25);
         assert!(relative_diff(&[1.0], &[1.0, 2.0]).is_err());
+    }
+
+    /// A kernel whose fields read high by a fixed absolute amount on the
+    /// wall ring, where the reference is exactly zero.
+    struct Offset(SimTm);
+
+    impl Kernel for Offset {
+        fn from_scene(scene: &Scene) -> Result<Self> {
+            SimTm::from_scene(scene).map(Offset)
+        }
+        fn step(&mut self, n: u64) {
+            self.0.step_n(n)
+        }
+        fn time_step(&self) -> u64 {
+            self.0.time_step()
+        }
+        fn read_field(&mut self, which: Component) -> Result<Vec<f64>> {
+            let mut v = self.0.read_field(which)?;
+            v[0] += 1e-6;
+            Ok(v)
+        }
+        fn probe_history(&mut self) -> Result<Vec<Vec<f64>>> {
+            self.0.probe_history()
+        }
+        fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
+            self.0.monitor_spectra()
+        }
+    }
+
+    /// The denominator is the peak so far, not the current peak: as the
+    /// pulse of a CPML scene leaves, a fixed absolute error keeps the ratio
+    /// it had at the peak instead of growing with the decay.
+    #[test]
+    fn normalized_by_the_running_peak() {
+        let s = scene("line_source_cpml.json");
+        let mut s = s;
+        s.sources[0].waveform = crate::source::Waveform::Ricker {
+            t0: 60.0,
+            f_peak: 0.05,
+        };
+        let mut a = SimTm::from_scene(&s).unwrap();
+        let mut b = Offset::from_scene(&s).unwrap();
+        let d = compare(&mut a, &mut b, &[200, 3000]).unwrap();
+        let ez_at = |n: u64| {
+            let mut c = SimTm::from_scene(&s).unwrap();
+            c.step_n(n);
+            c.ez().iter().fold(0.0f64, |m, v| m.max(v.abs()))
+        };
+        let (p200, p3000) = (ez_at(200), ez_at(3000));
+        assert!(p3000 < 1e-2 * p200, "pulse did not leave: {p200} {p3000}");
+        let peak = p200.max(p3000);
+        assert!((d[1].fields[0] - 1e-6 / peak).abs() < 1e-9 / peak, "{d:?}");
+        assert!(d[1].fields[0] <= d[0].fields[0] * (1.0 + 1e-9), "{d:?}");
     }
 
     #[test]
