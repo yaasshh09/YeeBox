@@ -278,3 +278,129 @@ fn a8_line_source_matches_hankel() {
     );
     assert!(worst <= 0.02, "A8 error {worst}");
 }
+
+/// Periodic y with a layer: the CPML sits on the x faces only. A y-uniform
+/// line source must stay exactly y-uniform (a y layer near the seam would
+/// absorb the rows next to it), and the x layer's normal-incidence
+/// reflection must meet the A9 gate. Reflection is the reference-domain
+/// method: the same grid extended 400 cells to the right, so the right
+/// face's echo cannot reach the probe within the run, and the left face
+/// echoes the same way in both and cancels in the difference.
+#[test]
+fn periodic_y_layer_on_x_faces_only() {
+    use fdtd_core::material::Material;
+    use fdtd_core::scene::{GridSpec, Monitor, SCENE_VERSION, Scene, Source};
+    use fdtd_core::source::{SourceKind, Waveform};
+    use fdtd_core::tm::SimTm;
+
+    let ny = 6;
+    let line = |nx: usize| Scene {
+        version: SCENE_VERSION,
+        grid: GridSpec {
+            nx,
+            ny,
+            dx_phys_m: 1e-3,
+            courant: 0.5,
+        },
+        materials: vec![Material::VACUUM],
+        geometry: vec![],
+        sources: (0..ny)
+            .map(|j| Source {
+                i: 40,
+                j,
+                waveform: Waveform::Ricker {
+                    t0: 40.0,
+                    f_peak: 0.05,
+                },
+                amplitude: 1.0,
+                kind: SourceKind::Soft,
+            })
+            .collect(),
+        monitors: vec![Monitor::Point { i: 70, j: 0 }],
+        pml: Some(PmlSpec::recommended(10)),
+        periodic_y: true,
+    };
+    let steps = 700;
+    let run = |nx: usize| {
+        let mut sim = SimTm::from_scene(&line(nx)).unwrap();
+        for _ in 0..steps {
+            sim.step();
+            for j in 1..ny {
+                let (r0, rj) = (&sim.ez()[..nx], &sim.ez()[j * nx..(j + 1) * nx]);
+                assert_eq!(
+                    r0,
+                    rj,
+                    "nx {nx}: row {j} differs at step {}",
+                    sim.time_step()
+                );
+            }
+        }
+        sim.probes()[0].history().to_vec()
+    };
+    let test = run(130);
+    let reference = run(530);
+    let peak = common::max_abs(&reference);
+    let diff: Vec<f64> = test.iter().zip(&reference).map(|(a, b)| a - b).collect();
+    let db = 20.0 * (common::max_abs(&diff) / peak).log10();
+    eprintln!("periodic y, x layer, normal incidence, 10 cells: {db:.2} dB");
+    assert!(db <= -60.0, "{db} dB");
+}
+
+/// Periodic y with an x layer is translation invariant along y: moving a
+/// point source by m rows moves every field by m rows, bit for bit, because
+/// with no y layer every row runs exactly the same arithmetic. A y-uniform
+/// drive cannot catch a stray y layer (every d/dy is zero there); this can.
+#[test]
+fn periodic_y_with_layer_is_translation_invariant() {
+    use fdtd_core::material::Material;
+    use fdtd_core::scene::{GridSpec, SCENE_VERSION, Scene, Source};
+    use fdtd_core::source::{SourceKind, Waveform};
+    use fdtd_core::tm::SimTm;
+
+    let (nx, ny) = (60, 24);
+    let at = |j: usize| Scene {
+        version: SCENE_VERSION,
+        grid: GridSpec {
+            nx,
+            ny,
+            dx_phys_m: 1e-3,
+            courant: 0.5,
+        },
+        materials: vec![Material::VACUUM],
+        geometry: vec![],
+        sources: vec![Source {
+            i: 30,
+            j,
+            waveform: Waveform::Ricker {
+                t0: 20.0,
+                f_peak: 0.08,
+            },
+            amplitude: 1.0,
+            kind: SourceKind::Soft,
+        }],
+        monitors: vec![],
+        pml: Some(PmlSpec::recommended(10)),
+        periodic_y: true,
+    };
+    let run = |j: usize| {
+        let mut sim = SimTm::from_scene(&at(j)).unwrap();
+        sim.step_n(150);
+        (sim.ez().to_vec(), sim.hx().to_vec(), sim.hy().to_vec())
+    };
+    let base = run(12);
+    assert!(
+        common::max_abs(&base.0) > 1e-3,
+        "the pulse must be on the grid"
+    );
+    for m in [1, 5, 12, 23] {
+        let shifted = run((12 + m) % ny);
+        let roll = |v: &[f64]| -> Vec<f64> {
+            (0..nx * ny)
+                .map(|k| v[((k / nx + ny - m) % ny) * nx + k % nx])
+                .collect()
+        };
+        assert_eq!(roll(&base.0), shifted.0, "ez, shift {m}");
+        assert_eq!(roll(&base.1), shifted.1, "hx, shift {m}");
+        assert_eq!(roll(&base.2), shifted.2, "hy, shift {m}");
+    }
+}

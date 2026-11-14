@@ -102,6 +102,7 @@ impl SimTm {
         // has no wave impedance, so it falls back to vacuum.
         let eps_r = scene.materials[0].eps().max(1.0);
         let pml = match &scene.pml {
+            Some(spec) if scene.periodic_y => Cpml::new(spec, nx, ny, s, eps_r).x_only(),
             Some(spec) => Cpml::new(spec, nx, ny, s, eps_r),
             None => Cpml::none(nx, ny),
         };

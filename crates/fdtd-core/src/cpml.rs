@@ -119,6 +119,18 @@ impl Cpml {
         }
     }
 
+    /// The same layer on the x faces only, for periodic y: the y profiles are
+    /// replaced by the identity, so every row runs the plain y update.
+    pub fn x_only(self) -> Self {
+        let ny = self.y_int.b.len();
+        let id = Cpml::none(1, ny);
+        Cpml {
+            y_int: id.y_int,
+            y_half: id.y_half,
+            ..self
+        }
+    }
+
     /// No layer: every entry is the identity.
     pub fn none(nx: usize, ny: usize) -> Self {
         let spec = PmlSpec {
@@ -237,6 +249,20 @@ pub(crate) mod tests {
         assert_eq!(p.x_half.inv_kappa[nx - 1], 1.0);
         let none = Cpml::none(40, 30);
         for prof in [&none.x_int, &none.x_half, &none.y_int, &none.y_half] {
+            assert!(all(prof).all(|t| t == (0.0, 0.0, 1.0)));
+        }
+    }
+
+    /// `x_only` keeps the x profiles bit for bit and makes both y profiles
+    /// the identity at full length, so periodic rows see no layer.
+    #[test]
+    fn x_only_drops_the_y_layer() {
+        let full = Cpml::new(&spec(8), 37, 29, S, 1.0);
+        let x = full.clone().x_only();
+        assert_eq!((&x.x_int, &x.x_half), (&full.x_int, &full.x_half));
+        assert!(all(&full.y_int).any(|t| t != (0.0, 0.0, 1.0)));
+        for prof in [&x.y_int, &x.y_half] {
+            assert_eq!(prof.b.len(), 29);
             assert!(all(prof).all(|t| t == (0.0, 0.0, 1.0)));
         }
     }
