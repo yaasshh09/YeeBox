@@ -326,3 +326,90 @@ fn quiescence_and_linearity_with_cpml() {
     }
     assert!(max_abs(one.ez()) > 1e-6);
 }
+
+/// Reciprocity with a TF/SF plane wave and spectral monitors present. The
+/// plane wave lights the cluttered box from the left; by linearity, the run
+/// with the plane wave and a source at A, minus the run with the plane wave
+/// alone, is A's own response. That response, recorded at B, equals B's
+/// response recorded at A. DFT and flux monitors sit in every run, and they
+/// are passive: the plane-wave-only fields are bit for bit the same with
+/// and without them.
+#[test]
+fn reciprocity_with_tfsf_and_monitors() {
+    use fdtd_core::monitor::Normal;
+    use fdtd_core::tfsf::{Direction, PlaneWave};
+    let (a, b) = ((12, 15), (47, 38));
+    let base = |with_monitors: bool| {
+        let mut scene = cluttered(60, 50);
+        scene.plane_wave = Some(PlaneWave {
+            x0: 8,
+            y0: 3,
+            x1: 52,
+            y1: 47,
+            direction: Direction::PlusX,
+            waveform: Waveform::Ricker {
+                t0: 30.0,
+                f_peak: 0.05,
+            },
+            amplitude: 1.0,
+        });
+        if with_monitors {
+            scene.monitors = vec![
+                Monitor::Dft {
+                    i: 25,
+                    j: 30,
+                    freqs: vec![0.03, 0.05],
+                },
+                Monitor::Flux {
+                    normal: Normal::X,
+                    at: 45,
+                    from: 4,
+                    to: 46,
+                    freqs: vec![0.05],
+                },
+                Monitor::Flux {
+                    normal: Normal::Y,
+                    at: 2,
+                    from: 1,
+                    to: 58,
+                    freqs: vec![0.05],
+                },
+            ];
+        }
+        scene
+    };
+    let probe_at = |scene: &Scene, src: Option<(usize, usize)>, to: (usize, usize)| {
+        let mut scene = scene.clone();
+        scene.sources = src.map(|p| ricker_at(p.0, p.1, 1.0)).into_iter().collect();
+        scene.monitors.push(Monitor::Point { i: to.0, j: to.1 });
+        let mut sim = SimTm::from_scene(&scene).unwrap();
+        sim.step_n(1500);
+        (sim.probes()[0].history().to_vec(), sim.ez().to_vec())
+    };
+    let scene = base(true);
+    let response = |from, to| {
+        let (with, _) = probe_at(&scene, Some(from), to);
+        let (alone, _) = probe_at(&scene, None, to);
+        with.iter()
+            .zip(&alone)
+            .map(|(x, y)| x - y)
+            .collect::<Vec<f64>>()
+    };
+    let (ab, ba) = (response(a, b), response(b, a));
+    let peak = max_abs(&ab);
+    let diff = ab
+        .iter()
+        .zip(&ba)
+        .fold(0.0_f64, |m, (x, y)| m.max((x - y).abs()));
+    eprintln!(
+        "reciprocity with tf/sf: diff {:.2e} of peak {peak:.3e}",
+        diff / peak
+    );
+    assert!(peak > 1e-3, "signal must reach the probe");
+    assert!(diff < 1e-9 * peak, "relative diff {:e}", diff / peak);
+
+    let (_, with) = probe_at(&base(true), None, a);
+    let (_, without) = probe_at(&base(false), None, a);
+    assert_eq!(with, without, "monitors must not touch the fields");
+    assert!(max_abs(&with) > 1e-3, "the plane wave must light the box");
+}
