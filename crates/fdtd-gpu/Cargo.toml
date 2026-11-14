@@ -1,0 +1,21 @@
+[package]
+name = "fdtd-gpu"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+description = "f32 wgpu kernel for the 2D TMz solver. Validated against fdtd-core, never against physics directly."
+
+[dependencies]
+fdtd-core.workspace = true
+wgpu.workspace = true
+bytemuck.workspace = true
+pollster.workspace = true
+
+[dev-dependencies]
+libtest-mimic.workspace = true
+
+# GPU trials report "ignored" at runtime when no adapter exists, which the
+# built-in harness cannot do, so tier 4 uses its own main.
+[[test]]
+name = "tier4"
+harness = false
