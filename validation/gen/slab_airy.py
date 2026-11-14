@@ -27,15 +27,15 @@ A13 is gated at the base resolution (L = 20, band down to 20 cells per
 wavelength inside the slab); L = 40 and 80 cover the same physical slab with
 frequencies scaled by 20 / L, for the convergence order.
 
-A14: a lossy half-space. The attenuation constant alpha = -Im k per cell,
-continuum (gate) and discrete (recorded).
+A14: a uniform lossy medium. The attenuation constant alpha = -Im k per
+cell, continuum (gate) and discrete (recorded).
 
 Normalized units: dx = 1, c0 = 1, dt = S, sigma normalized as in
 `Material::Dielectric` (eps0 = 1). Frequencies are cycles per unit time.
 
 Usage (from the repo root):
     python validation/gen/slab_airy.py
-Output: validation/golden/slab_airy.csv, validation/golden/lossy_halfspace.csv
+Output: validation/golden/slab_airy.csv, validation/golden/lossy_medium.csv
 """
 
 from pathlib import Path
@@ -44,7 +44,7 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT_SLAB = ROOT / "validation" / "golden" / "slab_airy.csv"
-OUT_LOSSY = ROOT / "validation" / "golden" / "lossy_halfspace.csv"
+OUT_LOSSY = ROOT / "validation" / "golden" / "lossy_medium.csv"
 
 S = 0.5
 SLAB_EPS = 4.0

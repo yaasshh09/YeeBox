@@ -182,3 +182,119 @@ fn a13_dielectric_slab() {
     eprintln!("A13 convergence: orders {o1:.3}, {o2:.3}, fitted {fit:.3}");
     assert!((1.8..=2.2).contains(&fit), "order {fit}");
 }
+
+const LOSSY_GOLDEN: &str = include_str!("../../../validation/golden/lossy_medium.csv");
+
+/// A14: attenuation in a lossy medium (eps 2.25, sigma 0.05, normalized).
+/// The medium is the background, and a soft source on every row of a
+/// periodic-y line launches a y-uniform pulse. To the right of the source
+/// the grid then carries exactly one outgoing discrete wave, so
+/// |E(x)| = |A| exp(-alpha (x - xs)), and alpha is minus the least-squares
+/// slope of ln |E| over x = xs + 10 .. xs + 60. Gate: within 1 percent of
+/// the continuum alpha = -Im(w sqrt(eps - j sigma / w)). The exact discrete
+/// alpha is matched to 1e-4, which checks the measurement itself. The band
+/// (f = 0.008 to 0.02, at least 33 cells per wavelength) was picked before
+/// any run so the predicted discretization error stays under half the gate.
+#[test]
+fn a14_lossy_attenuation() {
+    use fdtd_core::kernel::{Kernel, Spectrum};
+    use fdtd_core::scene::{Monitor, Source};
+    use fdtd_core::source::SourceKind;
+    use fdtd_core::spectra::run_until_quiet;
+    use fdtd_core::tm::SimTm;
+
+    let mut lines = LOSSY_GOLDEN.lines();
+    assert_eq!(lines.nth(1), Some("# S = 0.5, eps = 2.25, sigma = 0.05"));
+    let rows: Vec<Vec<f64>> = lines
+        .filter(|l| !l.starts_with('#') && !l.starts_with('f'))
+        .map(|l| l.split(',').map(|x| x.parse().unwrap()).collect())
+        .collect();
+    let freqs: Vec<f64> = rows.iter().map(|r| r[0]).collect();
+
+    let (nx, ny, xs) = (220, 3, 100);
+    let xs_probe: Vec<usize> = (xs + 10..=xs + 60).step_by(5).collect();
+    let scene = Scene {
+        version: SCENE_VERSION,
+        grid: GridSpec {
+            nx,
+            ny,
+            dx_phys_m: 1e-3,
+            courant: 0.5,
+        },
+        materials: vec![Material::Dielectric {
+            eps_inf: 2.25,
+            sigma: 0.05,
+        }],
+        geometry: vec![],
+        sources: (0..ny)
+            .map(|j| Source {
+                i: xs,
+                j,
+                waveform: Waveform::Ricker {
+                    t0: 2.0 / 0.014,
+                    f_peak: 0.014,
+                },
+                amplitude: 1.0,
+                kind: SourceKind::Soft,
+            })
+            .collect(),
+        monitors: xs_probe
+            .iter()
+            .map(|&i| Monitor::Dft {
+                i,
+                j: 1,
+                freqs: freqs.clone(),
+            })
+            .collect(),
+        // Normal incidence only, as in A13: graded preset without alpha.
+        pml: Some(PmlSpec {
+            alpha_max: 0.0,
+            ..PmlSpec::recommended(16)
+        }),
+        periodic_y: true,
+        plane_wave: None,
+    };
+    let mut sim = SimTm::from_scene(&scene).unwrap();
+    let steps = run_until_quiet(&mut sim, 600, 200_000).unwrap();
+    let spectra = Kernel::monitor_spectra(&mut sim).unwrap();
+
+    let (mut worst_c, mut worst_d) = (0.0_f64, 0.0_f64);
+    for (f, row) in rows.iter().enumerate() {
+        // Least-squares slope of ln |E| against x.
+        let pts: Vec<(f64, f64)> = xs_probe
+            .iter()
+            .zip(&spectra)
+            .map(|(&x, s)| match s {
+                Spectrum::Field(v) => (x as f64, v[f].0.hypot(v[f].1).ln()),
+                Spectrum::Flux(_) => unreachable!(),
+            })
+            .collect();
+        let n = pts.len() as f64;
+        let (mx, my) = (
+            pts.iter().map(|p| p.0).sum::<f64>() / n,
+            pts.iter().map(|p| p.1).sum::<f64>() / n,
+        );
+        let slope = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum::<f64>()
+            / pts.iter().map(|p| (p.0 - mx).powi(2)).sum::<f64>();
+        let alpha = -slope;
+        let (ec, ed) = ((alpha / row[1] - 1.0).abs(), (alpha / row[2] - 1.0).abs());
+        eprintln!(
+            "A14 f {:.3}: alpha {alpha:.8} (continuum {:.8}, discrete {:.8}), {:.3}% off continuum, {ed:.1e} off discrete",
+            row[0],
+            row[1],
+            row[2],
+            100.0 * ec
+        );
+        worst_c = worst_c.max(ec);
+        worst_d = worst_d.max(ed);
+    }
+    eprintln!(
+        "A14: worst {:.3}% off continuum (gate 1%), {worst_d:.1e} off discrete, {steps} steps",
+        100.0 * worst_c
+    );
+    assert!(
+        worst_d <= 1e-4,
+        "measurement off the discrete alpha by {worst_d:e}"
+    );
+    assert!(worst_c <= 0.01, "A14 {worst_c}");
+}
