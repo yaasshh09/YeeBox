@@ -28,10 +28,13 @@ pub fn energy(sim: &SimTm) -> f64 {
         e += eps[k] * ez[k] * ez[k];
     }
     let mut h = 0.0;
-    for j in 0..ny - 1 {
+    // With periodic y, Hx row ny - 1 is live and its upper neighbor is row 0.
+    let hx_rows = if sim.periodic_y() { ny } else { ny - 1 };
+    for j in 0..hx_rows {
+        let jn = if j + 1 == ny { 0 } else { j + 1 };
         for i in 0..nx {
-            let k = j * nx + i;
-            h += hx[k] * (hx[k] - s * (ez[k + nx] - ez[k]));
+            let (k, up) = (j * nx + i, jn * nx + i);
+            h += hx[k] * (hx[k] - s * (ez[up] - ez[k]));
         }
     }
     for j in 0..ny {
@@ -97,6 +100,43 @@ mod tests {
         );
         assert!(drift < 1e-10, "relative drift {drift:e}");
         assert!((naive_hi - naive_lo) / w0 > 1e-3);
+    }
+
+    /// The same cavity with periodic y (x walls only, every row live): W is
+    /// still conserved to 1e-10 over 1e4 steps. A wrong wrap in the solver or
+    /// in this function, or a missing Hx row, breaks the discrete identity.
+    /// The block sits on rows 0 and ny - 1, so energy really crosses the seam.
+    #[test]
+    fn conserved_lossless_periodic_y() {
+        let mut scene = cavity_with_block(Material::Dielectric {
+            eps_inf: 4.0,
+            sigma: 0.0,
+        });
+        scene.periodic_y = true;
+        scene.geometry.push(Shape::Rect {
+            x0: 25.0,
+            y0: -0.5,
+            x1: 30.0,
+            y1: 2.0,
+            material: 1,
+        });
+        scene.geometry.push(Shape::Rect {
+            x0: 25.0,
+            y0: 27.0,
+            x1: 30.0,
+            y1: 29.5,
+            material: 1,
+        });
+        let mut sim = started(&scene);
+        assert!(sim.ez()[3].abs() > 0.0, "row 0 must start with a field");
+        let w0 = energy(&sim);
+        let mut drift = 0.0_f64;
+        for _ in 0..10_000 {
+            sim.step();
+            drift = drift.max(((energy(&sim) - w0) / w0).abs());
+        }
+        eprintln!("periodic energy drift {drift:.2e}");
+        assert!(drift < 1e-10, "relative drift {drift:e}");
     }
 
     /// With a lossy block and no source, W never increases.

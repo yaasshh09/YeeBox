@@ -93,6 +93,7 @@ fn late_time_decay_no_growth() {
         }],
         monitors: vec![],
         pml: Some(PmlSpec::recommended(10)),
+        periodic_y: false,
     };
     let mut sim = SimTm::from_scene(&scene).unwrap();
     let energy = |sim: &SimTm| -> f64 {
@@ -233,6 +234,7 @@ fn a8_line_source_matches_hankel() {
             })
             .collect(),
         pml: Some(PmlSpec::recommended(16)),
+        periodic_y: false,
     };
     let mut sim = SimTm::from_scene(&scene).unwrap();
     let (steps, period) = (3000, 40);

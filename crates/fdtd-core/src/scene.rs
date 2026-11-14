@@ -35,6 +35,14 @@ pub struct Scene {
     /// CPML layer inside the PEC wall. Absent means a closed PEC box.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pml: Option<PmlSpec>,
+    /// Wrap y: Ez row 0 neighbors row ny - 1, there are no y walls, and the
+    /// CPML (if any) sits on the x faces only. For y-uniform plane waves.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub periodic_y: bool,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 /// Grid size in Ez nodes, physical cell size, and Courant number.
@@ -212,11 +220,23 @@ impl Scene {
     }
 
     /// Whether Ez node (i, j) is strictly inside the CPML layer (the wall
-    /// ring counts as inside). Interface nodes, at depth 0, are not.
+    /// ring counts as inside). Interface nodes, at depth 0, are not. With
+    /// `periodic_y` only the x faces have a layer.
     pub fn in_pml(&self, i: usize, j: usize) -> bool {
         let d = self.pml_thickness();
         let GridSpec { nx, ny, .. } = self.grid;
-        d > 0 && (i < d || j < d || i > nx - 1 - d || j > ny - 1 - d)
+        let in_y = !self.periodic_y && (j < d || j > ny - 1 - d);
+        d > 0 && (i < d || i > nx - 1 - d || in_y)
+    }
+
+    /// Rows of Ez nodes the solver updates: all of them when y is periodic,
+    /// otherwise everything but the two wall rows.
+    pub fn live_rows(&self) -> std::ops::Range<usize> {
+        if self.periodic_y {
+            0..self.grid.ny
+        } else {
+            1..self.grid.ny - 1
+        }
     }
 
     /// Parses and validates a scene.
@@ -286,7 +306,7 @@ impl Scene {
         if let Some(p) = &self.pml {
             p.validate()?;
             let d = p.thickness;
-            if nx < 2 * d + 3 || ny < 2 * d + 3 {
+            if nx < 2 * d + 3 || (!self.periodic_y && ny < 2 * d + 3) {
                 return Err(FdtdError::PmlTooThick {
                     thickness: d,
                     nx,
@@ -299,7 +319,7 @@ impl Scene {
             src.waveform.validate()?;
             finite("amplitude", src.amplitude)?;
             // Wall nodes are PEC and never updated, so a source there is wrong.
-            if !(1..nx - 1).contains(&src.i) || !(1..ny - 1).contains(&src.j) {
+            if !(1..nx - 1).contains(&src.i) || !self.live_rows().contains(&src.j) {
                 return Err(FdtdError::OutOfDomain {
                     what: "source",
                     i: src.i,
@@ -333,12 +353,17 @@ impl Scene {
         let d = self.pml_thickness();
         let GridSpec { nx, ny, .. } = self.grid;
         let ids = self.rasterize();
-        for j in 1..ny - 1 {
+        for j in self.live_rows() {
             for i in 1..nx - 1 {
                 if !self.in_pml(i, j) {
                     continue;
                 }
-                let (ci, cj) = (i.clamp(d, nx - 1 - d), j.clamp(d, ny - 1 - d));
+                let cj = if self.periodic_y {
+                    j
+                } else {
+                    j.clamp(d, ny - 1 - d)
+                };
+                let ci = i.clamp(d, nx - 1 - d);
                 if ids[j * nx + i] != ids[cj * nx + ci] {
                     return Err(FdtdError::PmlNotUniform { i, j });
                 }
@@ -401,6 +426,7 @@ pub(crate) mod tests {
             }],
             monitors: vec![Monitor::Point { i: 30, j: 20 }],
             pml: None,
+            periodic_y: false,
         }
     }
 
@@ -725,6 +751,67 @@ pub(crate) mod tests {
         assert!(with(rect(0.0, 3.0, 20.0, 14.0)).is_err());
         // Wall nodes are PEC whatever the raster says, so they are not checked.
         assert!(with(rect(0.0, 0.0, 0.0, 29.0)).is_ok());
+    }
+
+    /// `periodic_y` round trips, is omitted from the JSON when false (so
+    /// older files are unchanged), and changes the rules: rows 0 and ny - 1
+    /// take sources, the layer exists on the x faces only, so it only has to
+    /// fit along x, and only the x faces need uniform materials.
+    #[test]
+    fn periodic_y_rules() {
+        assert!(!sample().to_json().unwrap().contains("periodic_y"));
+        let mut s = open_sample();
+        s.periodic_y = true;
+        let text = s.to_json().unwrap();
+        assert!(text.contains("\"periodic_y\": true"));
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+
+        for (i, j) in [(20, 0), (20, 29), (20, 2)] {
+            let mut s = open_sample();
+            s.periodic_y = true;
+            (s.sources[0].i, s.sources[0].j) = (i, j);
+            assert!(s.validate().is_ok(), "({i}, {j})");
+            s.periodic_y = false;
+            assert!(s.validate().is_err(), "({i}, {j}) without the wrap");
+        }
+        // Still rejected inside the x layer and on the x walls.
+        let mut s = open_sample();
+        s.periodic_y = true;
+        (s.sources[0].i, s.sources[0].j) = (3, 0);
+        assert_eq!(s.validate(), Err(FdtdError::SourceInPml { i: 3, j: 0 }));
+        assert!(s.in_pml(3, 15) && !s.in_pml(20, 0) && !s.in_pml(20, 29));
+
+        // A 14-cell layer does not fit 30 rows, but with the wrap it needs
+        // only 2 * 14 + 3 = 31 <= 40 columns.
+        s.sources[0].i = 20;
+        s.pml.as_mut().unwrap().thickness = 14;
+        assert!(s.validate().is_ok());
+        s.pml.as_mut().unwrap().thickness = 19;
+        assert!(matches!(
+            s.validate(),
+            Err(FdtdError::PmlTooThick { thickness: 19, .. })
+        ));
+
+        // A block touching the old y faces inside the would-be y layer is
+        // fine; one ending inside an x layer is still rejected.
+        let mut s = open_sample();
+        s.periodic_y = true;
+        s.geometry = vec![Shape::Rect {
+            x0: 10.0,
+            y0: 0.0,
+            x1: 20.0,
+            y1: 2.0,
+            material: 1,
+        }];
+        assert!(s.validate().is_ok());
+        s.geometry[0] = Shape::Rect {
+            x0: 3.0,
+            y0: 0.0,
+            x1: 20.0,
+            y1: 2.0,
+            material: 1,
+        };
+        assert_eq!(s.validate(), Err(FdtdError::PmlNotUniform { i: 1, j: 0 }));
     }
 
     #[test]

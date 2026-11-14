@@ -16,6 +16,10 @@
 //! The outer ring of Ez nodes is a PEC wall: the E loop covers interior nodes
 //! only, so those values never leave zero. PEC material nodes have Ca = Cb = 0.
 //!
+//! With `periodic_y` there are no y walls: every Ez row is live, row 0 and
+//! row ny - 1 are neighbors, and Hx row ny - 1 is the live edge between them
+//! (y = ny - 1/2, the same edge as y = -1/2). The period is ny cells.
+//!
 //! CPML (`cpml.rs`) runs through the same loops. Each difference term is
 //! scaled by the 1/kappa of its axis, and the psi of each derivative is added
 //! on. Outside the layer 1/kappa = 1 and b = c = 0, so psi stays zero and every
@@ -38,6 +42,7 @@ pub struct SimTm {
     nx: usize,
     ny: usize,
     s: f64,
+    periodic_y: bool,
     n: u64,
     ez: Vec<f64>,
     hx: Vec<f64>,
@@ -76,7 +81,7 @@ impl SimTm {
         let mut ca = vec![0.0; nx * ny];
         let mut cb = vec![0.0; nx * ny];
         let mut eps = vec![0.0; nx * ny];
-        for j in 1..ny - 1 {
+        for j in scene.live_rows() {
             for i in 1..nx - 1 {
                 let k = j * nx + i;
                 let m = scene.materials[ids[k]];
@@ -104,6 +109,7 @@ impl SimTm {
             nx,
             ny,
             s,
+            periodic_y: scene.periodic_y,
             n: 0,
             ez,
             hx: vec![0.0; nx * ny],
@@ -129,15 +135,26 @@ impl SimTm {
         let (ez, hx, hy) = (&mut self.ez, &mut self.hx, &mut self.hy);
         let p = &self.pml;
 
+        // Rows: with periodic y, Hx row ny - 1 is a live edge whose upper
+        // neighbor is Ez row 0, and every Ez row is updated, row 0 reading Hx
+        // row ny - 1. Otherwise the wrap never triggers inside these ranges,
+        // so `up` and `down` are exactly k + nx and k - nx.
+        let (hx_rows, ez_rows) = if self.periodic_y {
+            (0..ny, 0..ny)
+        } else {
+            (0..ny - 1, 1..ny - 1)
+        };
+
         // Hx[i, j] at (i, j + 1/2): minus the y-difference of Ez. y profile
         // at the half position j + 1/2.
-        for j in 0..ny - 1 {
+        for j in hx_rows {
             let (b, c, ik) = (p.y_half.b[j], p.y_half.c[j], p.y_half.inv_kappa[j]);
+            let jn = if j + 1 == ny { 0 } else { j + 1 };
             for i in 0..nx {
-                let k = j * nx + i;
+                let (k, up) = (j * nx + i, jn * nx + i);
                 let psi = &mut self.psi_hxy[k];
-                *psi = b * *psi + c * (ez[k + nx] - ez[k]);
-                hx[k] -= s * (ez[k + nx] * ik - ez[k] * ik + *psi);
+                *psi = b * *psi + c * (ez[up] - ez[k]);
+                hx[k] -= s * (ez[up] * ik - ez[k] * ik + *psi);
             }
         }
         // Hy[i, j] at (i + 1/2, j): the x-difference of Ez. x profile at the
@@ -154,19 +171,19 @@ impl SimTm {
         // Ez[i, j] at (i, j), interior only, profiles at the integer
         // positions. Summed in the order of the stencil table so the oracle
         // tests can compare bit for bit.
-        for j in 1..ny - 1 {
+        for j in ez_rows {
             let (by, cy, iky) = (p.y_int.b[j], p.y_int.c[j], p.y_int.inv_kappa[j]);
+            let jp = if j == 0 { ny - 1 } else { j - 1 };
             for i in 1..nx - 1 {
                 let (bx, cx, ikx) = (p.x_int.b[i], p.x_int.c[i], p.x_int.inv_kappa[i]);
-                let k = j * nx + i;
+                let (k, down) = (j * nx + i, jp * nx + i);
                 let px = &mut self.psi_ezx[k];
                 *px = bx * *px + cx * (hy[k] - hy[k - 1]);
                 let py = &mut self.psi_ezy[k];
-                *py = by * *py + cy * (hx[k] - hx[k - nx]);
-                let curl = hy[k] * ikx - hy[k - 1] * ikx - hx[k] * iky
-                    + hx[k - nx] * iky
-                    + self.psi_ezx[k]
-                    - self.psi_ezy[k];
+                *py = by * *py + cy * (hx[k] - hx[down]);
+                let curl =
+                    hy[k] * ikx - hy[k - 1] * ikx - hx[k] * iky + hx[down] * iky + self.psi_ezx[k]
+                        - self.psi_ezy[k];
                 ez[k] = self.ca[k] * ez[k] + self.cb[k] * curl;
             }
         }
@@ -225,9 +242,15 @@ impl SimTm {
         &self.ez
     }
 
-    /// Hx on y-edges (i, j + 1/2), normalized, `nx * ny` with row ny - 1 padding.
+    /// Hx on y-edges (i, j + 1/2), normalized, `nx * ny`. Row ny - 1 is padding,
+    /// except with periodic y, where it is the live edge between row ny - 1 and row 0.
     pub fn hx(&self) -> &[f64] {
         &self.hx
+    }
+
+    /// Whether y wraps (no y walls, every row live).
+    pub fn periodic_y(&self) -> bool {
+        self.periodic_y
     }
 
     /// Hy on x-edges (i + 1/2, j), normalized, `nx * ny` with column nx - 1 padding.
@@ -314,6 +337,7 @@ pub(crate) mod tests {
             sources: vec![],
             monitors: vec![],
             pml: None,
+            periodic_y: false,
         }
     }
 
@@ -351,17 +375,26 @@ pub(crate) mod tests {
                         Component::Hx => &self.hx,
                         Component::Hy => &self.hy,
                     };
-                    let (si, sj) = ((i as i64 + t.di) as usize, (j as i64 + t.dj) as usize);
+                    // y wraps modulo ny. Inside the non-periodic loop ranges
+                    // the offset never leaves the grid, so this is the identity there.
+                    let si = (i as i64 + t.di) as usize;
+                    let sj = (j as i64 + t.dj).rem_euclid(self.ny as i64) as usize;
                     t.sign * src[sj * self.nx + si]
                 })
                 .sum()
         }
 
         /// One step driven by the stencil table in `grid.rs` over the
-        /// meaningful entries of each padded array, Ez on interior nodes only.
-        fn stencil_step(&mut self, s: f64) {
+        /// meaningful entries of each padded array. Without `periodic` that is
+        /// Hx rows 0..ny-1 and Ez on interior nodes; with it every Hx and Ez row.
+        fn stencil_step(&mut self, s: f64, periodic: bool) {
             let (nx, ny) = (self.nx, self.ny);
-            for j in 0..ny - 1 {
+            let (hx_rows, ez_rows) = if periodic {
+                (0..ny, 0..ny)
+            } else {
+                (0..ny - 1, 1..ny - 1)
+            };
+            for j in hx_rows {
                 for i in 0..nx {
                     let d = self.apply(Component::Hx, i, j);
                     self.hx[j * nx + i] += s * d;
@@ -373,7 +406,7 @@ pub(crate) mod tests {
                     self.hy[j * nx + i] += s * d;
                 }
             }
-            for j in 1..ny - 1 {
+            for j in ez_rows {
                 for i in 1..nx - 1 {
                     let k = j * nx + i;
                     let d = self.apply(Component::Ez, i, j);
@@ -568,11 +601,137 @@ pub(crate) mod tests {
 
             for _ in 0..3 {
                 sim.step();
-                f.stencil_step(s);
+                f.stencil_step(s, false);
             }
             assert_eq!(sim.hx, f.hx, "hx differs, seed {seed}");
             assert_eq!(sim.hy, f.hy, "hy differs, seed {seed}");
             assert_eq!(sim.ez, f.ez, "ez differs, seed {seed}");
+        }
+    }
+
+    /// Periodic y: the loops equal the stencil table with y taken modulo ny,
+    /// with every Hx row (row ny - 1 is a live edge now) and every Ez row
+    /// updated. Random fields everywhere, so a missed or doubled wrap shows.
+    #[test]
+    fn stencil_oracle_periodic_y() {
+        let (nx, ny, s) = (23, 17, 0.5);
+        for seed in 1..=4 {
+            let mut f = Fields {
+                nx,
+                ny,
+                ez: random_fields(seed + 50, nx * ny),
+                hx: random_fields(seed + 60, nx * ny),
+                hy: random_fields(seed + 70, nx * ny),
+                ca: random_fields(seed + 80, nx * ny),
+                cb: random_fields(seed + 90, nx * ny)
+                    .iter()
+                    .map(|v| 0.5 * (v + 1.0))
+                    .collect(),
+            };
+            for j in 0..ny {
+                f.hy[j * nx + nx - 1] = 0.0;
+            }
+            let mut scene = vacuum_box(nx, ny, s);
+            scene.periodic_y = true;
+            let mut sim = SimTm::from_scene(&scene).unwrap();
+            (sim.ez, sim.hx, sim.hy) = (f.ez.clone(), f.hx.clone(), f.hy.clone());
+            (sim.ca, sim.cb) = (f.ca.clone(), f.cb.clone());
+
+            for _ in 0..3 {
+                sim.step();
+                f.stencil_step(s, true);
+            }
+            assert_eq!(sim.hx, f.hx, "hx differs, seed {seed}");
+            assert_eq!(sim.hy, f.hy, "hy differs, seed {seed}");
+            assert_eq!(sim.ez, f.ez, "ez differs, seed {seed}");
+        }
+    }
+
+    /// A y-uniform drive on a periodic vacuum grid is the 1D problem: the
+    /// same soft source on every row gives, row by row and bit for bit, the
+    /// fields of `Sim1d` with PEC ends, and Hx stays exactly zero. This ties
+    /// the wrap to an independent solver, not just to the stencil table.
+    #[test]
+    fn periodic_y_uniform_equals_1d() {
+        use crate::fdtd1d::{Boundary1d, Sim1d, Source1d};
+        let (nx, ny, s) = (60, 5, 0.5);
+        let w = Waveform::Ricker {
+            t0: 20.0,
+            f_peak: 0.08,
+        };
+        let mut scene = vacuum_box(nx, ny, s);
+        scene.periodic_y = true;
+        scene.sources = (0..ny)
+            .map(|j| Source {
+                i: 17,
+                j,
+                waveform: w,
+                amplitude: 1.0,
+                kind: SourceKind::Soft,
+            })
+            .collect();
+        let mut sim = SimTm::from_scene(&scene).unwrap();
+        let mut one = Sim1d::new(nx, s, Boundary1d::Pec, Boundary1d::Pec).unwrap();
+        one.add_source(Source1d {
+            node: 17,
+            waveform: w,
+            amplitude: 1.0,
+            kind: SourceKind::Soft,
+        })
+        .unwrap();
+        for n in 0..300 {
+            sim.step();
+            one.step();
+            for j in 0..ny {
+                let row = j * nx..(j + 1) * nx;
+                assert_eq!(&sim.ez()[row.clone()], one.ez(), "ez row {j}, step {n}");
+                assert_eq!(&sim.hy()[j * nx..j * nx + nx - 1], one.hy(), "hy row {j}");
+                assert!(sim.hx()[row].iter().all(|&v| v == 0.0), "hx row {j}");
+            }
+        }
+        assert!(
+            one.ez().iter().any(|v| v.abs() > 0.1),
+            "the pulse must be on the grid"
+        );
+    }
+
+    /// With periodic y the rows next to the old walls are live: a source on
+    /// row 0 is accepted and drives row 0, and its field reaches row ny - 1
+    /// through the wrap.
+    #[test]
+    fn periodic_y_rows_are_live() {
+        let (nx, ny) = (20, 12);
+        let mut scene = vacuum_box(nx, ny, 0.5);
+        scene.sources.push(Source {
+            i: 9,
+            j: 0,
+            waveform: Waveform::Ricker {
+                t0: 15.0,
+                f_peak: 0.1,
+            },
+            amplitude: 1.0,
+            kind: SourceKind::Soft,
+        });
+        assert!(matches!(
+            SimTm::from_scene(&scene),
+            Err(FdtdError::OutOfDomain { .. })
+        ));
+        scene.periodic_y = true;
+        let mut sim = SimTm::from_scene(&scene).unwrap();
+        assert!(!sim.is_pec(9, 0) && !sim.is_pec(9, ny - 1) && sim.is_pec(0, 0));
+        sim.step_n(40);
+        assert!(sim.ez()[9].abs() > 0.0);
+        assert!(
+            sim.ez()[(ny - 1) * nx + 9].abs() > 1e-3,
+            "no wrap into row ny - 1"
+        );
+        // The wrap is symmetric about row 0: row 1 and row ny - 1 agree to
+        // round-off (the mirrored curl sums the same terms in another order,
+        // so it can be an ulp off).
+        let peak = max_abs(sim.ez());
+        for i in 0..nx {
+            let (a, b) = (sim.ez()[nx + i], sim.ez()[(ny - 1) * nx + i]);
+            assert!((a - b).abs() <= 1e-14 * peak, "column {i}: {a} vs {b}");
         }
     }
 

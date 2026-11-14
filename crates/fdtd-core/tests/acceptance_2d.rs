@@ -25,6 +25,7 @@ fn vacuum(nx: usize, ny: usize, s: f64) -> Scene {
         sources: vec![],
         monitors: vec![],
         pml: None,
+        periodic_y: false,
     }
 }
 

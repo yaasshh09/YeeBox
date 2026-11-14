@@ -71,6 +71,7 @@ fn cluttered(nx: usize, ny: usize) -> Scene {
         sources: vec![],
         monitors: vec![],
         pml: None,
+        periodic_y: false,
     }
 }
 
