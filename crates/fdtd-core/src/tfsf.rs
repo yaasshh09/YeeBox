@@ -21,6 +21,18 @@ use serde::{Deserialize, Serialize};
 /// nothing, so 32.
 const AUX_PML: usize = 32;
 
+/// The auxiliary layer: the graded preset without the CFS alpha. alpha is
+/// for evanescent and grazing waves in 2D, and a 1D line has neither; with
+/// it the layer stops absorbing below w of about alpha (-41 dB at f = 0.0025
+/// against -157 dB without, `fdtd1d` layer_reflection_against_frequency),
+/// which put a 3e-3 error into the A13 slab at its lowest frequencies.
+fn aux_layer() -> PmlSpec {
+    PmlSpec {
+        alpha_max: 0.0,
+        ..PmlSpec::recommended(AUX_PML)
+    }
+}
+
 /// The running TF/SF source: the 1D auxiliary grid and the map from 2D
 /// indices along the travel axis to its nodes.
 ///
@@ -53,12 +65,7 @@ impl Tfsf {
         };
         // Nodes 0..=span + 2 are used; 4 spare nodes, then the layer.
         let n = (span + 7 + AUX_PML).max(2 * AUX_PML + 3);
-        let mut aux = Sim1d::new(
-            n,
-            s,
-            Boundary1d::Pec,
-            Boundary1d::Cpml(PmlSpec::recommended(AUX_PML)),
-        )?;
+        let mut aux = Sim1d::new(n, s, Boundary1d::Pec, Boundary1d::Cpml(aux_layer()))?;
         aux.set_eps(eps)?;
         aux.add_source(Source1d {
             node: 0,

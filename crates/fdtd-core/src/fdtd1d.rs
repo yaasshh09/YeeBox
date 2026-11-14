@@ -481,6 +481,71 @@ mod tests {
         }
     }
 
+    /// Layer reflection per frequency, |DFT(test - reference) / DFT(reference)|
+    /// at the probe, for the 16-cell preset with its CFS alpha and with alpha
+    /// = 0. The CFS term sigma / (alpha + j w) turns real below w of about
+    /// alpha, so the layer stretches but barely absorbs: the preset is
+    /// excellent at the 20 cells per wavelength it was tuned for and poor at
+    /// long wavelengths. alpha exists for evanescent and grazing waves in 2D;
+    /// a 1D line has neither, so alpha = 0 is the right layer there.
+    #[test]
+    fn layer_reflection_against_frequency() {
+        use crate::cpml::PmlSpec;
+        use crate::monitor::Dft;
+        // The Ricker (peak 0.01) carries energy over this band; above about
+        // 0.035 it has none and the ratio would be noise over noise.
+        let freqs = [0.0025, 0.005, 0.01, 0.025];
+        let w = Waveform::Ricker {
+            t0: 200.0,
+            f_peak: 0.01,
+        };
+        let spectrum = |spec: PmlSpec, n: usize| {
+            let mut sim = Sim1d::new(n, 0.5, Boundary1d::Pec, Boundary1d::Cpml(spec)).unwrap();
+            sim.add_source(Source1d {
+                node: 0,
+                waveform: w,
+                amplitude: 1.0,
+                kind: SourceKind::Hard,
+            })
+            .unwrap();
+            let mut d = Dft::new(&freqs, 1).unwrap();
+            for _ in 0..8000 {
+                sim.step();
+                let t = sim.time_step() as f64 * 0.5;
+                d.add(&[sim.ez()[100]], t, 0.5);
+            }
+            d
+        };
+        let preset = PmlSpec::recommended(16);
+        let no_alpha = PmlSpec {
+            alpha_max: 0.0,
+            ..preset
+        };
+        let reference = spectrum(preset, 6000);
+        let db = |spec| {
+            let test = spectrum(spec, 220);
+            (0..freqs.len())
+                .map(|f| {
+                    let (a, b) = (test.get(0, f), reference.get(0, f));
+                    let (dr, di) = (a.0 - b.0, a.1 - b.1);
+                    10.0 * ((dr * dr + di * di) / (b.0 * b.0 + b.1 * b.1)).log10()
+                })
+                .collect::<Vec<f64>>()
+        };
+        let (with, without) = (db(preset), db(no_alpha));
+        for (k, f) in freqs.iter().enumerate() {
+            eprintln!(
+                "layer reflection at f {f}: alpha 0.1 {:7.1} dB, alpha 0 {:7.1} dB",
+                with[k], without[k]
+            );
+        }
+        assert!(without.iter().all(|&v| v <= -80.0), "alpha 0: {without:?}");
+        assert!(
+            with[0] > -60.0,
+            "the preset was expected to be weak at f = 0.0025"
+        );
+    }
+
     /// The Mur end uses the wave speed of the medium, v = 1 / sqrt(eps). In
     /// eps = 4 at S = 0.5 it is not exact (S v = 0.25), but what it reflects
     /// comes from grid dispersion only, far below -30 dB at 20 cells per
