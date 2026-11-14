@@ -335,9 +335,9 @@ mod tests {
             FluxLine::new(Normal::X, 150, 0, 2, &FREQS).unwrap(),
         ];
         run_flux(&scene, &mut lines, 1500);
-        for f in 0..FREQS.len() {
-            let (a, b) = (lines[0].flux()[f], lines[1].flux()[f]);
-            assert!(((a - b) / a).abs() < 1e-6, "f {}: {a} vs {b}", FREQS[f]);
+        let (near, far) = (lines[0].flux(), lines[1].flux());
+        for ((a, b), freq) in near.iter().zip(&far).zip(FREQS) {
+            assert!(((a - b) / a).abs() < 1e-6, "f {freq}: {a} vs {b}");
         }
     }
 
