@@ -9,6 +9,9 @@ description = "f32 wgpu kernel for the 2D TMz solver. Validated against fdtd-cor
 fdtd-core.workspace = true
 wgpu.workspace = true
 bytemuck.workspace = true
+
+# Blocking waits are native only; the browser awaits instead.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster.workspace = true
 
 [dev-dependencies]

@@ -9,6 +9,7 @@ pub mod buffers;
 pub mod device;
 pub mod pipeline;
 pub mod sim;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod tier4;
 
 pub use device::Gpu;

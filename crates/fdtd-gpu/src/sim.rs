@@ -8,7 +8,9 @@ use crate::buffers::{Layout, PARAMS_STRIDE, Params, field_id, pack_corrections};
 use crate::device::Gpu;
 use crate::pipeline::{self, Access, Pass};
 use fdtd_core::grid::Component;
-use fdtd_core::kernel::{BuildKey, Kernel, Spectrum, material_edit};
+use fdtd_core::kernel::{BuildKey, material_edit};
+#[cfg(not(target_arch = "wasm32"))]
+use fdtd_core::kernel::{Kernel, Spectrum};
 use fdtd_core::monitor::{Dft, FluxLine};
 use fdtd_core::scene::{Monitor, Scene, Source};
 use fdtd_core::source::SourceKind;
@@ -398,6 +400,65 @@ impl GpuSim {
         Ok(())
     }
 
+    /// Rewrites the edited rows of the id buffer and the f64 Cb copy. The
+    /// write lands between the batches already submitted and the next.
+    pub fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
+        self.key.check(scene)?;
+        let Some(edit) = material_edit(scene, bounds)? else {
+            return Ok(());
+        };
+        let nx = self.base.nx as usize;
+        let w = edit.i1 - edit.i0 + 1;
+        for (r, j) in edit.rows.clone().enumerate() {
+            let row = &edit.ids[r * w..(r + 1) * w];
+            let k0 = j * nx + edit.i0;
+            for (c, &id) in row.iter().enumerate() {
+                self.cb[k0 + c] = self.table[id].1;
+            }
+            let ids: Vec<u32> = row.iter().map(|&id| id as u32).collect();
+            self.gpu
+                .queue
+                .write_buffer(&self.ids, (k0 * 4) as u64, bytemuck::cast_slice(&ids));
+        }
+        Ok(())
+    }
+
+    /// Rebuilds the source node and value buffers and the sources stage's
+    /// bind group for the new list.
+    pub fn set_sources(&mut self, scene: &Scene) -> Result<()> {
+        self.key.check(scene)?;
+        for src in &scene.sources {
+            scene.check_source(src)?;
+        }
+        let nx = self.base.nx as usize;
+        let nodes: Vec<[u32; 2]> = scene
+            .sources
+            .iter()
+            .map(|src| {
+                [
+                    (src.j * nx + src.i) as u32,
+                    (src.kind == SourceKind::Hard) as u32,
+                ]
+            })
+            .collect();
+        let device = &self.gpu.device;
+        let src_nodes = storage_buffer(device, "source nodes", bytemuck::cast_slice(&nodes));
+        self.src_values = storage_buffer(
+            device,
+            "source values",
+            &vec![0u8; BATCH as usize * nodes.len() * 4],
+        );
+        let stage = &mut self.stages[self.src_stage];
+        stage.group = pipeline::storage_group(
+            device,
+            &stage.pass,
+            &[&self.fields[EZ], &src_nodes, &self.src_values],
+        );
+        self.sources = scene.sources.clone();
+        self.base.n_src = nodes.len() as u32;
+        Ok(())
+    }
+
     /// Encodes and submits `steps` (at most `BATCH`) steps.
     fn run_batch(&mut self, steps: u64) {
         let mut slots = vec![0u8; (steps * PARAMS_STRIDE) as usize];
@@ -534,6 +595,7 @@ impl GpuSim {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Kernel for GpuSim {
     /// Uses the shared device, `Gpu::shared()`.
     fn from_scene(scene: &Scene) -> Result<Self> {
@@ -566,63 +628,12 @@ impl Kernel for GpuSim {
             .collect())
     }
 
-    /// Rewrites the edited rows of the id buffer and the f64 Cb copy. The
-    /// write lands between the batches already submitted and the next.
     fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
-        self.key.check(scene)?;
-        let Some(edit) = material_edit(scene, bounds)? else {
-            return Ok(());
-        };
-        let nx = self.base.nx as usize;
-        let w = edit.i1 - edit.i0 + 1;
-        for (r, j) in edit.rows.clone().enumerate() {
-            let row = &edit.ids[r * w..(r + 1) * w];
-            let k0 = j * nx + edit.i0;
-            for (c, &id) in row.iter().enumerate() {
-                self.cb[k0 + c] = self.table[id].1;
-            }
-            let ids: Vec<u32> = row.iter().map(|&id| id as u32).collect();
-            self.gpu
-                .queue
-                .write_buffer(&self.ids, (k0 * 4) as u64, bytemuck::cast_slice(&ids));
-        }
-        Ok(())
+        GpuSim::set_materials(self, scene, bounds)
     }
 
-    /// Rebuilds the source node and value buffers and the sources stage's
-    /// bind group for the new list.
     fn set_sources(&mut self, scene: &Scene) -> Result<()> {
-        self.key.check(scene)?;
-        for src in &scene.sources {
-            scene.check_source(src)?;
-        }
-        let nx = self.base.nx as usize;
-        let nodes: Vec<[u32; 2]> = scene
-            .sources
-            .iter()
-            .map(|src| {
-                [
-                    (src.j * nx + src.i) as u32,
-                    (src.kind == SourceKind::Hard) as u32,
-                ]
-            })
-            .collect();
-        let device = &self.gpu.device;
-        let src_nodes = storage_buffer(device, "source nodes", bytemuck::cast_slice(&nodes));
-        self.src_values = storage_buffer(
-            device,
-            "source values",
-            &vec![0u8; BATCH as usize * nodes.len() * 4],
-        );
-        let stage = &mut self.stages[self.src_stage];
-        stage.group = pipeline::storage_group(
-            device,
-            &stage.pass,
-            &[&self.fields[EZ], &src_nodes, &self.src_values],
-        );
-        self.sources = scene.sources.clone();
-        self.base.n_src = nodes.len() as u32;
-        Ok(())
+        GpuSim::set_sources(self, scene)
     }
 
     /// The same shapes as `SimTm`: point monitors skipped, one entry per

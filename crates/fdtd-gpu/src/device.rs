@@ -1,7 +1,9 @@
 //! Adapter and device setup, and blocking buffer readback for native use.
 
 use fdtd_core::{FdtdError, Result};
-use std::sync::{Arc, Mutex, OnceLock};
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::OnceLock;
+use std::sync::{Arc, Mutex};
 
 /// A device and its queue, plus the first error the device reported since
 /// the last check. Errors from `wgpu` arrive through a callback, not as
@@ -18,30 +20,36 @@ fn gpu_err(e: impl std::fmt::Display) -> FdtdError {
 }
 
 impl Gpu {
-    /// Picks the high-performance adapter, falling back to a software one,
-    /// and opens a device with the default WebGPU limits, so whatever runs
-    /// here also fits a browser.
-    pub fn new() -> Result<Gpu> {
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = [false, true]
-            .into_iter()
-            .find_map(|force_fallback_adapter| {
-                pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-                    power_preference: wgpu::PowerPreference::HighPerformance,
-                    force_fallback_adapter,
-                    compatible_surface: None,
-                    ..Default::default()
-                }))
-                .ok()
+    /// Picks the high-performance adapter of `instance` that can present to
+    /// `surface` (if given), falling back to a software one, and opens a
+    /// device with the default WebGPU limits, so whatever runs natively also
+    /// fits a browser. The browser awaits this; native code calls `new`.
+    pub async fn request(
+        instance: &wgpu::Instance,
+        surface: Option<&wgpu::Surface<'_>>,
+    ) -> Result<Gpu> {
+        let mut adapter = None;
+        for force_fallback_adapter in [false, true] {
+            let options = wgpu::RequestAdapterOptions {
+                power_preference: wgpu::PowerPreference::HighPerformance,
+                force_fallback_adapter,
+                compatible_surface: surface,
+                ..Default::default()
+            };
+            if let Ok(a) = instance.request_adapter(&options).await {
+                adapter = Some(a);
+                break;
+            }
+        }
+        let adapter = adapter.ok_or_else(|| gpu_err("no adapter"))?;
+        let (device, queue) = adapter
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("fdtd"),
+                required_limits: wgpu::Limits::default(),
+                ..Default::default()
             })
-            .ok_or_else(|| gpu_err("no adapter"))?;
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("fdtd"),
-            required_limits: wgpu::Limits::default(),
-            ..Default::default()
-        }))
-        .map_err(gpu_err)?;
+            .await
+            .map_err(gpu_err)?;
         let error = Arc::new(Mutex::new(None));
         let sink = error.clone();
         device.on_uncaptured_error(Arc::new(move |e: wgpu::Error| {
@@ -56,8 +64,18 @@ impl Gpu {
         })
     }
 
+    /// `request` without a surface, blocking. Native only.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn new() -> Result<Gpu> {
+        let instance =
+            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
+        pollster::block_on(Gpu::request(&instance, None))
+    }
+
     /// One device for the whole process, made on first use. Every caller
-    /// gets the same error if no adapter exists.
+    /// gets the same error if no adapter exists. Native only: a browser
+    /// device is neither `Send` nor `Sync`, and the page makes its own.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn shared() -> Result<&'static Gpu> {
         static GPU: OnceLock<std::result::Result<Gpu, String>> = OnceLock::new();
         GPU.get_or_init(|| Gpu::new().map_err(|e| e.to_string()))
