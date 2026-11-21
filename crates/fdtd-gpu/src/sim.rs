@@ -5,7 +5,7 @@
 //! step reads its slot of the `Params` uniform through a dynamic offset.
 
 use crate::buffers::{Layout, PARAMS_STRIDE, Params, field_id, pack_corrections};
-use crate::device::Gpu;
+use crate::device::{Gpu, Mapped};
 use crate::pipeline::{self, Access, Pass};
 use fdtd_core::grid::Component;
 use fdtd_core::kernel::{BuildKey, material_edit};
@@ -16,6 +16,7 @@ use fdtd_core::scene::{Monitor, Scene, Source};
 use fdtd_core::source::SourceKind;
 use fdtd_core::tfsf::Tfsf;
 use fdtd_core::{FdtdError, Result};
+use std::collections::VecDeque;
 use wgpu::util::DeviceExt;
 
 /// Most steps encoded into one submission.
@@ -83,6 +84,16 @@ pub struct GpuSim {
     gathered: wgpu::Buffer,
     /// The first error seen while stepping, returned by the next read.
     pending: Option<FdtdError>,
+    /// Gathered taps of submitted batches, oldest first, on their way to
+    /// the CPU. Drained strictly in order.
+    tap_queue: VecDeque<QueuedTaps>,
+}
+
+/// The taps of one batch, copied to a staging buffer and being mapped.
+struct QueuedTaps {
+    first: u64,
+    buf: wgpu::Buffer,
+    mapped: Mapped,
 }
 
 /// A storage buffer with `contents`, at least 16 bytes: a zero-sized
@@ -371,6 +382,7 @@ impl GpuSim {
             n_taps,
             gathered,
             pending: None,
+            tap_queue: VecDeque::new(),
         })
     }
 
@@ -515,24 +527,79 @@ impl GpuSim {
                 }
             }
         }
+        let taps = (self.n_taps > 0).then(|| {
+            let size = steps * self.n_taps as u64 * 4;
+            let buf = gpu.staging(size);
+            encoder.copy_buffer_to_buffer(&self.gathered, 0, &buf, 0, size);
+            buf
+        });
         gpu.queue.submit([encoder.finish()]);
-        let first = self.n;
+        if let Some(buf) = taps {
+            let mapped = Mapped::read(&buf);
+            self.tap_queue.push_back(QueuedTaps {
+                first: self.n,
+                buf,
+                mapped,
+            });
+        }
         self.n += steps;
-        if self.n_taps > 0
-            && let Err(e) = self.take_taps(first, steps)
-        {
+        if let Err(e) = self.drain_taps() {
             self.pending.get_or_insert(e);
+        }
+    }
+
+    /// Feeds every batch whose taps have reached the CPU to the monitors,
+    /// oldest first, stopping at the first still in flight. Never blocks.
+    /// The browser calls it each frame; stepping calls it too.
+    pub fn drain_taps(&mut self) -> Result<()> {
+        // Drives the map callbacks natively; a no-op on WebGPU.
+        self.gpu
+            .device
+            .poll(wgpu::PollType::Poll)
+            .map_err(|e| FdtdError::Gpu(e.to_string()))?;
+        while let Some(state) = self.tap_queue.front().map(|q| q.mapped.state()) {
+            match state {
+                None => break,
+                Some(Err(e)) => {
+                    self.tap_queue.clear();
+                    return Err(FdtdError::Gpu(e));
+                }
+                Some(Ok(())) => {
+                    if let Some(q) = self.tap_queue.pop_front() {
+                        let bytes = q
+                            .buf
+                            .get_mapped_range(..)
+                            .map_err(|e| FdtdError::Gpu(e.to_string()))?
+                            .to_vec();
+                        q.buf.unmap();
+                        self.take_taps(q.first, &bytes);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Waits for every queued batch and drains it. Native only.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn settle_taps(&mut self) -> Result<()> {
+        self.gpu
+            .device
+            .poll(wgpu::PollType::wait_indefinitely())
+            .map_err(|e| FdtdError::Gpu(e.to_string()))?;
+        self.drain_taps()?;
+        if self.tap_queue.is_empty() {
+            Ok(())
+        } else {
+            Err(FdtdError::Gpu("taps still in flight after a wait".into()))
         }
     }
 
     /// Reads the gathered taps of a batch that started at step `first` and
     /// feeds every monitor, step by step, as `SimTm::step` does: E samples
     /// at t = n S, flux H at (n - 1/2) S (inside `record_taps`).
-    fn take_taps(&mut self, first: u64, steps: u64) -> Result<()> {
-        let bytes = self
-            .gpu
-            .read(&self.gathered, 0, steps * self.n_taps as u64 * 4)?;
-        let values: Vec<f64> = bytemuck::cast_slice::<u8, f32>(&bytes)
+    fn take_taps(&mut self, first: u64, bytes: &[u8]) {
+        let values: Vec<f64> = bytemuck::cast_slice::<u8, f32>(bytes)
             .iter()
             .map(|&v| v as f64)
             .collect();
@@ -550,7 +617,6 @@ impl GpuSim {
                 }
             }
         }
-        Ok(())
     }
 
     /// Advances `steps` full steps.
@@ -564,16 +630,26 @@ impl GpuSim {
     }
 
     /// One field read back, widened to f64, `nx * ny`, index `j * nx + i`.
-    pub fn read(&mut self, which: Component) -> Result<Vec<f64>> {
+    pub async fn read_async(&mut self, which: Component) -> Result<Vec<f64>> {
         if let Some(e) = self.pending.take() {
             return Err(e);
         }
-        let k = match which {
+        let buf = &self.fields[match which {
             Component::Ez => EZ,
             Component::Hx => HX,
             Component::Hy => HY,
-        };
-        self.gpu.read_f32(&self.fields[k])
+        }];
+        let bytes = self.gpu.read_async(buf, 0, buf.size()).await?;
+        Ok(bytemuck::cast_slice::<u8, f32>(&bytes)
+            .iter()
+            .map(|&v| v as f64)
+            .collect())
+    }
+
+    /// `read_async`, blocking. Native only.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn read(&mut self, which: Component) -> Result<Vec<f64>> {
+        pollster::block_on(self.read_async(which))
     }
 
     /// Full steps taken so far. E is at time n S, H at (n - 1/2) S.
@@ -582,7 +658,8 @@ impl GpuSim {
     }
 
     /// Blocks until every submitted step has finished on the device, then
-    /// reports any device error. For timing.
+    /// reports any device error. For timing. Native only.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn sync(&mut self) -> Result<()> {
         if let Some(e) = self.pending.take() {
             return Err(e);
@@ -618,6 +695,7 @@ impl Kernel for GpuSim {
         if let Some(e) = self.pending.take() {
             return Err(e);
         }
+        self.settle_taps()?;
         Ok(self
             .monitors
             .iter()
@@ -642,6 +720,7 @@ impl Kernel for GpuSim {
         if let Some(e) = self.pending.take() {
             return Err(e);
         }
+        self.settle_taps()?;
         Ok(self
             .monitors
             .iter()
