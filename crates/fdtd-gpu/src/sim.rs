@@ -93,7 +93,16 @@ pub struct GpuSim {
     /// Gathered taps of submitted batches, oldest first, on their way to
     /// the CPU. Drained strictly in order.
     tap_queue: VecDeque<QueuedTaps>,
+    /// The tap list; its last entry is the live probe's slot.
+    tap_buf: wgpu::Buffer,
+    /// The live probe's node, if one is set, and the Ez samples it has
+    /// taken since they were last collected.
+    probe: Option<usize>,
+    probe_samples: Vec<f32>,
 }
+
+/// Most live probe samples kept between collections; older ones drop.
+const MAX_PROBE_SAMPLES: usize = 1 << 16;
 
 /// The taps of one batch, copied to a staging buffer and being mapped.
 struct QueuedTaps {
@@ -329,6 +338,10 @@ impl GpuSim {
                 },
             ));
         }
+        // One more slot at the end for the live probe (`set_probe`), so it
+        // can move without changing the row layout of batches in flight.
+        // It starts on wall node 0, which is always zero.
+        taps.push([field_id(Component::Ez), 0]);
         let n_taps = taps.len();
         let tap_buf = storage("taps", bytemuck::cast_slice(&taps));
         let gathered = storage("gathered", &vec![0u8; BATCH as usize * n_taps * 4]);
@@ -409,6 +422,9 @@ impl GpuSim {
             gathered,
             pending: None,
             tap_queue: VecDeque::new(),
+            tap_buf,
+            probe: None,
+            probe_samples: Vec::new(),
         })
     }
 
@@ -532,6 +548,40 @@ impl GpuSim {
     /// The intensity mean buffer, for the render pass.
     pub(crate) fn mean_buffer(&self) -> &wgpu::Buffer {
         &self.mean
+    }
+
+    /// Puts the live probe on Ez node (i, j), or removes it. Its samples,
+    /// Ez after every step, collect until `take_probe_samples`; moving it
+    /// drops the old ones. Batches already in flight finish at the old node.
+    pub fn set_probe(&mut self, node: Option<(usize, usize)>) -> Result<()> {
+        let (nx, ny) = (self.base.nx as usize, self.base.ny as usize);
+        self.probe_samples.clear();
+        self.probe = match node {
+            None => None,
+            Some((i, j)) => {
+                if i >= nx || j >= ny {
+                    return Err(FdtdError::OutOfDomain {
+                        what: "probe",
+                        i,
+                        j,
+                    });
+                }
+                let k = j * nx + i;
+                let tap = [field_id(Component::Ez), k as u32];
+                let at = ((self.n_taps - 1) * 8) as u64;
+                self.gpu
+                    .queue
+                    .write_buffer(&self.tap_buf, at, bytemuck::cast_slice(&tap));
+                Some(k)
+            }
+        };
+        Ok(())
+    }
+
+    /// The live probe's samples since the last call, oldest first, at most
+    /// the latest 65536.
+    pub fn take_probe_samples(&mut self) -> Vec<f32> {
+        std::mem::take(&mut self.probe_samples)
     }
 
     /// The Ez buffer, for the render pass.
@@ -690,7 +740,12 @@ impl GpuSim {
                     }
                 }
             }
+            if self.probe.is_some() {
+                self.probe_samples.push(row[self.n_taps - 1] as f32);
+            }
         }
+        let excess = self.probe_samples.len().saturating_sub(MAX_PROBE_SAMPLES);
+        self.probe_samples.drain(..excess);
     }
 
     /// Advances `steps` full steps.

@@ -371,6 +371,52 @@ fn intensity_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
+/// The live probe samples Ez at its node after every step, matching the
+/// CPU field there, through uneven batches; moving it starts a new trace.
+fn live_probe_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    let mut s = scene("painted_walls.json");
+    s.sources[0].waveform = cw(0.05);
+    let k = 30 * s.grid.nx + 60;
+    let mut cpu = SimTm::from_scene(&s)?;
+    let mut gpu_sim = GpuSim::new(gpu, &s)?;
+    gpu_sim.set_probe(Some((60, 30)))?;
+    let mut want = Vec::new();
+    for _ in 0..300 {
+        cpu.step_n(1);
+        want.push(cpu.ez()[k]);
+    }
+    for _ in 0..42 {
+        gpu_sim.step_n(7);
+    }
+    gpu_sim.step_n(6);
+    gpu_sim.sync()?;
+    gpu_sim.drain_taps()?;
+    let got: Vec<f64> = gpu_sim
+        .take_probe_samples()
+        .iter()
+        .map(|&v| v as f64)
+        .collect();
+    if got.len() != want.len() {
+        return Err(format!("{} samples, want {}", got.len(), want.len()).into());
+    }
+    let d = fdtd_core::kernel::relative_diff(&want, &got)?;
+    eprintln!("  live probe over 300 steps: {d:.2e} of peak");
+    if d.is_nan() || d >= GATE {
+        return Err(format!("live probe off by {d:e}").into());
+    }
+    if gpu_sim.set_probe(Some((80, 0))).is_ok() {
+        return Err("probe off the grid accepted".into());
+    }
+    gpu_sim.set_probe(None)?;
+    gpu_sim.step_n(10);
+    gpu_sim.sync()?;
+    gpu_sim.drain_taps()?;
+    if !gpu_sim.take_probe_samples().is_empty() {
+        return Err("samples without a probe".into());
+    }
+    Ok(())
+}
+
 /// A buffer written on the CPU reads back bit for bit.
 fn readback_round_trip(gpu: &'static Gpu) -> Result<(), Failed> {
     let values: Vec<f32> = (0..1000).map(|k| (k as f32 * 0.37).sin()).collect();
@@ -493,6 +539,7 @@ fn main() {
         ("first_source_added_live", first_source_added_live),
         ("render_pixels_match_tables", render_pixels_match_tables),
         ("intensity_matches_cpu", intensity_matches_cpu),
+        ("live_probe_matches_cpu", live_probe_matches_cpu),
     ];
     let mut trials: Vec<Trial> = checks
         .into_iter()
