@@ -27,7 +27,6 @@ pub fn error_code(e: &FdtdError) -> &'static str {
         FdtdError::GridSize { .. } => "grid_size",
         FdtdError::PmlTooThick { .. } => "pml_too_thick",
         FdtdError::SourceInPml { .. } => "source_in_pml",
-        FdtdError::PmlNotUniform { .. } => "pml_not_uniform",
         FdtdError::PlaneWave(_) => "plane_wave",
         FdtdError::NotDecayed { .. } => "not_decayed",
         FdtdError::Case(_) => "case",
@@ -126,7 +125,6 @@ mod tests {
                 ny: 3,
             },
             FdtdError::SourceInPml { i: 1, j: 1 },
-            FdtdError::PmlNotUniform { i: 1, j: 1 },
             FdtdError::PlaneWave(PlaneWaveFault::EmptyBox),
             FdtdError::NotDecayed {
                 steps: 1,

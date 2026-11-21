@@ -45,10 +45,6 @@ pub enum FdtdError {
     /// A source sits strictly inside the CPML layer.
     #[error("source at node ({i}, {j}) is inside the pml")]
     SourceInPml { i: usize, j: usize },
-    /// A node in the CPML layer has a different material from the interior
-    /// node it faces along the layer normal.
-    #[error("material at pml node ({i}, {j}) is not uniform along the pml normal")]
-    PmlNotUniform { i: usize, j: usize },
     /// The TF/SF plane wave box breaks a placement rule.
     #[error("plane wave: {0}")]
     PlaneWave(crate::tfsf::PlaneWaveFault),

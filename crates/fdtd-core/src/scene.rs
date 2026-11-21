@@ -133,7 +133,8 @@ pub struct StrokeOutcome {
     /// the nodes across them.
     pub skipped: usize,
     /// `[i0, j0, i1, j1]`, inclusive, around every node whose paint was
-    /// written, layer nodes included; `None` when nothing was.
+    /// written; `None` when nothing was. Layer nodes that follow them are
+    /// covered by `kernel::material_edit`.
     pub bounds: Option<[usize; 4]>,
 }
 
@@ -633,10 +634,30 @@ impl Shape {
 }
 
 impl Scene {
-    /// Material index of Ez node (i, j): its paint if painted, else the last
-    /// shape containing the node's position (i, j), else 0. Assumes a
-    /// validated scene.
+    /// The node whose material Ez node (i, j) takes: itself in the interior,
+    /// and in the CPML layer (or on the wall ring) the interface node it is
+    /// clamped to along each normal (along x only with periodic y). So the
+    /// layer always continues the medium it terminates, uniform along its
+    /// normal, whatever the shapes or paint say inside it.
+    pub fn material_node(&self, i: usize, j: usize) -> (usize, usize) {
+        let d = self.pml_thickness();
+        let GridSpec { nx, ny, .. } = self.grid;
+        if d == 0 || nx < 2 * d + 1 || (!self.periodic_y && ny < 2 * d + 1) {
+            return (i, j);
+        }
+        let cj = if self.periodic_y {
+            j
+        } else {
+            j.clamp(d, ny - 1 - d)
+        };
+        (i.clamp(d, nx - 1 - d), cj)
+    }
+
+    /// Material index of Ez node (i, j), read at `material_node(i, j)`: its
+    /// paint if painted, else the last shape containing that position, else
+    /// 0. Assumes a validated scene.
     pub fn material_at(&self, i: usize, j: usize) -> usize {
+        let (i, j) = self.material_node(i, j);
         if let Some(id) = self
             .paint
             .as_ref()
@@ -795,7 +816,6 @@ impl Scene {
                     ny,
                 });
             }
-            self.check_pml_uniform()?;
         }
         for src in &self.sources {
             self.check_source(src)?;
@@ -1008,10 +1028,9 @@ impl Scene {
     /// segment `from` to `to` (cell units, node (i, j) at (i, j)): a capsule
     /// brush. `material` 0 erases to the background. Nodes the scene needs
     /// as they are, sources and the TF/SF faces with the nodes across them,
-    /// are skipped and counted. The brush itself never paints inside the
-    /// CPML; instead every layer node takes the paint of the interface node
-    /// it is clamped to, so a wall drawn up to the layer runs on through it
-    /// and the layer stays uniform along its normal. Off-grid parts of a
+    /// are skipped and counted. The brush never paints inside the CPML: the
+    /// layer takes its material from the interface (`material_node`), so a
+    /// wall drawn up to the layer runs on through it. Off-grid parts of a
     /// stroke are ignored. A stroke on a valid scene leaves it valid.
     pub fn paint_stroke(
         &mut self,
@@ -1038,7 +1057,6 @@ impl Scene {
             return Err(FdtdError::UnknownMaterial { id: material });
         }
         let GridSpec { nx, ny, .. } = self.grid;
-        let d = self.pml_thickness();
         let rows = self.live_rows();
         let mut protected: std::collections::HashSet<(usize, usize)> =
             self.sources.iter().map(|s| (s.i, s.j)).collect();
@@ -1081,71 +1099,17 @@ impl Scene {
             }
         }
         out.painted = hit.len();
-        // Layer nodes clamped to a painted interface node: along the normal
-        // on an edge, over the whole corner block at a corner.
-        let mut layer = Vec::new();
-        if d > 0 {
-            let span = |c: usize, n: usize| {
-                if c == d {
-                    1..=d
-                } else if c == n - 1 - d {
-                    c..=n - 2
-                } else {
-                    c..=c
-                }
-            };
-            for &(ci, cj) in &hit {
-                let js = if self.periodic_y {
-                    cj..=cj
-                } else {
-                    span(cj, ny)
-                };
-                for j in js {
-                    for i in span(ci, nx) {
-                        if (i, j) != (ci, cj) {
-                            layer.push((i, j));
-                        }
-                    }
-                }
-            }
-        }
         if hit.is_empty() {
             return Ok(out);
         }
         let paint = self.paint.get_or_insert_with(|| Paint::blank(nx * ny));
         let mut b = [usize::MAX, usize::MAX, 0, 0];
-        for (i, j) in hit.into_iter().chain(layer) {
+        for (i, j) in hit {
             paint.set(j * nx + i, Some(material));
             b = [b[0].min(i), b[1].min(j), b[2].max(i), b[3].max(j)];
         }
         out.bounds = Some(b);
         Ok(out)
-    }
-
-    /// Every non-wall node in the layer must have the material of the
-    /// interior node it is clamped to. That covers the edges (uniform along
-    /// the normal) and the corners (uniform along both) with one rule.
-    fn check_pml_uniform(&self) -> Result<()> {
-        let d = self.pml_thickness();
-        let GridSpec { nx, ny, .. } = self.grid;
-        let ids = self.rasterize();
-        for j in self.live_rows() {
-            for i in 1..nx - 1 {
-                if !self.in_pml(i, j) {
-                    continue;
-                }
-                let cj = if self.periodic_y {
-                    j
-                } else {
-                    j.clamp(d, ny - 1 - d)
-                };
-                let ci = i.clamp(d, nx - 1 - d);
-                if ids[j * nx + i] != ids[cj * nx + ci] {
-                    return Err(FdtdError::PmlNotUniform { i, j });
-                }
-            }
-        }
-        Ok(())
     }
 }
 
@@ -1503,11 +1467,13 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn pml_materials_uniform_along_normal() {
+    fn pml_takes_the_interface_material() {
+        // open_sample: 40 x 30 with a 5-cell layer, interior 5..=34 x 5..=24.
         let with = |shape: Shape| {
             let mut s = open_sample();
             s.geometry = vec![shape];
-            s.validate()
+            s.validate().unwrap();
+            s
         };
         let rect = |x0, y0, x1, y1| Shape::Rect {
             x0,
@@ -1516,26 +1482,32 @@ pub(crate) mod tests {
             y1,
             material: 1,
         };
-        // A slab crossing the left layer along x is uniform along the normal.
-        assert!(with(rect(0.0, 10.0, 20.0, 14.0)).is_ok());
-        // A block ending inside the layer is not.
-        assert_eq!(
-            with(rect(3.0, 10.0, 20.0, 14.0)),
-            Err(FdtdError::PmlNotUniform { i: 1, j: 10 })
-        );
-        // A block that only touches the interface column from inside is not either.
-        assert!(with(rect(5.0, 10.0, 20.0, 14.0)).is_err());
-        // A slab reaching the bottom-left corner region must fill the corner too.
-        assert!(with(rect(0.0, 0.0, 20.0, 14.0)).is_ok());
-        assert!(with(rect(0.0, 3.0, 20.0, 14.0)).is_err());
-        // Wall nodes are PEC whatever the raster says, so they are not checked.
-        assert!(with(rect(0.0, 0.0, 0.0, 29.0)).is_ok());
+        // A block ending inside the layer, or touching the interface from
+        // inside, fills the layer out to the wall along its rows.
+        for x0 in [3.0, 5.0] {
+            let s = with(rect(x0, 10.0, 20.0, 14.0));
+            for i in 0..=4 {
+                assert_eq!(s.material_at(i, 12), 1, "x0 {x0}, column {i}");
+            }
+            assert_eq!(s.material_at(2, 9), 0);
+        }
+        // Inside the layer only, it reaches no interface node: nothing.
+        let s = with(rect(1.0, 10.0, 3.0, 14.0));
+        assert_eq!(s.material_at(2, 12), 0);
+        // At a corner the whole corner block follows the corner node.
+        let s = with(rect(5.0, 5.0, 20.0, 14.0));
+        assert_eq!((s.material_at(1, 1), s.material_at(4, 3)), (1, 1));
+        let s = with(rect(6.0, 5.0, 20.0, 14.0));
+        assert_eq!(s.material_at(1, 1), 0);
+        let base = open_sample();
+        assert_eq!(base.material_node(20, 12), (20, 12));
+        assert_eq!(base.material_node(0, 29), (5, 24));
     }
 
     /// `periodic_y` round trips, is omitted from the JSON when false (so
     /// older files are unchanged), and changes the rules: rows 0 and ny - 1
     /// take sources, the layer exists on the x faces only, so it only has to
-    /// fit along x, and only the x faces need uniform materials.
+    /// fit along x, and only x is clamped for layer materials.
     #[test]
     fn periodic_y_rules() {
         assert!(!sample().to_json().unwrap().contains("periodic_y"));
@@ -1572,7 +1544,7 @@ pub(crate) mod tests {
         ));
 
         // A block touching the old y faces inside the would-be y layer is
-        // fine; one ending inside an x layer is still rejected.
+        // fine, and one ending inside an x layer runs out to the x wall.
         let mut s = open_sample();
         s.periodic_y = true;
         s.geometry = vec![Shape::Rect {
@@ -1590,7 +1562,9 @@ pub(crate) mod tests {
             y1: 2.0,
             material: 1,
         };
-        assert_eq!(s.validate(), Err(FdtdError::PmlNotUniform { i: 1, j: 0 }));
+        // With the wrap only x is clamped: the block runs out along x.
+        s.validate().unwrap();
+        assert_eq!((s.material_at(1, 0), s.material_at(1, 29)), (1, 0));
     }
 
     /// A 60 x 50 grid with a 5-cell layer and a +x plane wave box over
@@ -2293,10 +2267,11 @@ pub(crate) mod tests {
             s.validate()
                 .unwrap_or_else(|e| panic!("{from:?} to {to:?}: {e}"));
         }
-        // A horizontal wall through the left face runs out to the wall ring.
+        // A horizontal wall through the left face runs out to the wall ring
+        // (whose raster entry follows too; the kernels hold it PEC anyway).
         let mut s = base();
         s.paint_stroke((0.0, 15.0), (8.0, 15.0), 0.0, 2).unwrap();
-        assert_eq!(cells(&s, 2), (1..=8).map(|i| (i, 15)).collect::<Vec<_>>());
+        assert_eq!(cells(&s, 2), (0..=8).map(|i| (i, 15)).collect::<Vec<_>>());
         // Paint only inside the layer has no interior node to follow.
         let mut s = base();
         let out = s.paint_stroke((2.0, 15.0), (3.0, 15.0), 0.0, 2).unwrap();

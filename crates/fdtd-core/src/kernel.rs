@@ -92,8 +92,27 @@ pub struct MaterialEdit {
 /// every live node. Ids outside the material table are refused, so an
 /// unvalidated scene cannot index past it.
 pub fn material_edit(scene: &Scene, bounds: [usize; 4]) -> Result<Option<MaterialEdit>> {
-    let [i0, j0, i1, j1] = bounds;
-    let nx = scene.grid.nx;
+    let [mut i0, mut j0, mut i1, mut j1] = bounds;
+    let (nx, ny) = (scene.grid.nx, scene.grid.ny);
+    // Layer nodes follow the interface (`Scene::material_node`), so bounds
+    // that reach an interface line reach on to the wall behind it.
+    let d = scene.pml_thickness();
+    if d > 0 {
+        if i0 <= d {
+            i0 = 0;
+        }
+        if i1 >= nx - 1 - d {
+            i1 = nx - 1;
+        }
+        if !scene.periodic_y {
+            if j0 <= d {
+                j0 = 0;
+            }
+            if j1 >= ny - 1 - d {
+                j1 = ny - 1;
+            }
+        }
+    }
     let live = scene.live_rows();
     let (i0, i1) = (i0.max(1), i1.min(nx - 2));
     let rows = j0.max(live.start)..(j1.saturating_add(1)).min(live.end);
