@@ -335,6 +335,42 @@ fn render_pixels_match_tables(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
+/// The GPU running mean of Ez^2 against the same mean of the CPU fields in
+/// f64, step by step, over a CW run; then switched off, it stays put.
+fn intensity_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    let mut s = scene("painted_walls.json");
+    s.sources[0].waveform = cw(0.05);
+    let tau = 40.0;
+    let mut cpu = SimTm::from_scene(&s)?;
+    let mut gpu_sim = GpuSim::new(gpu, &s)?;
+    gpu_sim.step_n(100);
+    cpu.step_n(100);
+    gpu_sim.set_intensity(Some(tau))?;
+    let mut mean = vec![0.0f64; s.grid.nx * s.grid.ny];
+    for _ in 0..400 {
+        cpu.step_n(1);
+        for (m, e) in mean.iter_mut().zip(cpu.ez()) {
+            *m += (e * e - *m) / tau;
+        }
+    }
+    gpu_sim.step_n(400);
+    let got = pollster::block_on(gpu_sim.read_intensity_async())?;
+    let d = fdtd_core::kernel::relative_diff(&mean, &got)?;
+    eprintln!("  intensity after 400 steps: {d:.2e} of peak");
+    if d.is_nan() || d >= GATE {
+        return Err(format!("intensity mean off by {d:e}").into());
+    }
+    gpu_sim.set_intensity(None)?;
+    gpu_sim.step_n(50);
+    if pollster::block_on(gpu_sim.read_intensity_async())? != got {
+        return Err("intensity mean moved while off".into());
+    }
+    if gpu_sim.set_intensity(Some(0.5)).is_ok() {
+        return Err("tau below one step accepted".into());
+    }
+    Ok(())
+}
+
 /// A buffer written on the CPU reads back bit for bit.
 fn readback_round_trip(gpu: &'static Gpu) -> Result<(), Failed> {
     let values: Vec<f32> = (0..1000).map(|k| (k as f32 * 0.37).sin()).collect();
@@ -456,6 +492,7 @@ fn main() {
         ("live_edits_match_cpu", live_edits_match_cpu),
         ("first_source_added_live", first_source_added_live),
         ("render_pixels_match_tables", render_pixels_match_tables),
+        ("intensity_matches_cpu", intensity_matches_cpu),
     ];
     let mut trials: Vec<Trial> = checks
         .into_iter()

@@ -25,6 +25,8 @@ struct R {
 @group(0) @binding(3) var<storage, read> luts: array<u32>;
 // Overlay color and opacity per material id, the wall entry last.
 @group(0) @binding(4) var<storage, read> mats: array<vec4<f32>>;
+// Running mean of Ez^2 (intensity view).
+@group(0) @binding(5) var<storage, read> mean: array<f32>;
 
 const PML_TINT: vec3<f32> = vec3<f32>(0.20, 0.22, 0.30);
 
@@ -51,8 +53,15 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     let i = u32(fi);
     let j = u32(fj);
     let k = j * r.nx + i;
-    let v = clamp(ez[k] * r.gain, -1.0, 1.0);
-    var c = unpack(luts[u32(round((v + 1.0) * 128.0))]);
+    var c: vec3<f32>;
+    if (r.mode == 1u) {
+        // A sinusoid of amplitude 1 / gain has mean square 1 / (2 gain^2).
+        let u = clamp(2.0 * mean[k] * r.gain * r.gain, 0.0, 1.0);
+        c = unpack(luts[257u + u32(round(u * 256.0))]);
+    } else {
+        let v = clamp(ez[k] * r.gain, -1.0, 1.0);
+        c = unpack(luts[u32(round((v + 1.0) * 128.0))]);
+    }
     let d = r.pml;
     let in_y = r.periodic_y == 0u && (j < d || j > r.ny - 1u - d);
     if (d > 0u && (i < d || i > r.nx - 1u - d || in_y)) {

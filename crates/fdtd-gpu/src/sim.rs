@@ -64,6 +64,12 @@ pub struct GpuSim {
     key: BuildKey,
     /// Index in `stages` of the sources stage, which always exists.
     src_stage: usize,
+    /// Running mean of Ez^2 for the intensity view, and its 1 / tau.
+    mean: wgpu::Buffer,
+    alpha: wgpu::Buffer,
+    /// The mean's stage, dispatched last in a step while the view is on.
+    intensity: Stage,
+    intensity_on: bool,
     fields: Vec<wgpu::Buffer>,
     params: wgpu::Buffer,
     params_group: wgpu::BindGroup,
@@ -346,6 +352,22 @@ impl GpuSim {
                 count: ((n_taps as u32).div_ceil(64), 1),
             });
         }
+        let mean = storage("intensity mean", bytemuck::cast_slice(&zeros));
+        let alpha = storage("intensity alpha", &[0u8; 4]);
+        let pass = pipeline::pass(
+            device,
+            &params_layout,
+            "intensity",
+            include_str!("../shaders/intensity.wgsl"),
+            wg,
+            &[Read, ReadWrite, Read],
+        );
+        let group = pipeline::storage_group(device, &pass, &[&fields[EZ], &mean, &alpha]);
+        let intensity = Stage {
+            pass,
+            group,
+            count: grid,
+        };
         gpu.check()?;
         Ok(GpuSim {
             gpu,
@@ -369,6 +391,10 @@ impl GpuSim {
             table: layout.table.clone(),
             key: BuildKey::of(scene),
             src_stage,
+            mean,
+            alpha,
+            intensity,
+            intensity_on: false,
             fields,
             params,
             params_group,
@@ -471,6 +497,43 @@ impl GpuSim {
         Ok(())
     }
 
+    /// Starts a fresh running mean of Ez^2 for the intensity view, with a
+    /// time constant of `tau` steps (at least 1): after each step,
+    /// `mean += (ez^2 - mean) / tau`. `None` stops updating it. A display
+    /// quantity only; the fields are untouched.
+    pub fn set_intensity(&mut self, tau: Option<f64>) -> Result<()> {
+        match tau {
+            None => self.intensity_on = false,
+            Some(t) => {
+                if !(t.is_finite() && t >= 1.0) {
+                    return Err(FdtdError::InvalidParameter {
+                        name: "intensity tau",
+                        value: t,
+                    });
+                }
+                let q = &self.gpu.queue;
+                q.write_buffer(&self.mean, 0, &vec![0u8; self.cb.len() * 4]);
+                q.write_buffer(&self.alpha, 0, bytemuck::bytes_of(&((1.0 / t) as f32)));
+                self.intensity_on = true;
+            }
+        }
+        Ok(())
+    }
+
+    /// The running mean of Ez^2, `nx * ny`, index `j * nx + i`.
+    pub async fn read_intensity_async(&mut self) -> Result<Vec<f64>> {
+        let bytes = self.gpu.read_async(&self.mean, 0, self.mean.size()).await?;
+        Ok(bytemuck::cast_slice::<u8, f32>(&bytes)
+            .iter()
+            .map(|&v| v as f64)
+            .collect())
+    }
+
+    /// The intensity mean buffer, for the render pass.
+    pub(crate) fn mean_buffer(&self) -> &wgpu::Buffer {
+        &self.mean
+    }
+
     /// The Ez buffer, for the render pass.
     pub(crate) fn ez_buffer(&self) -> &wgpu::Buffer {
         &self.fields[EZ]
@@ -529,7 +592,8 @@ impl GpuSim {
             });
             for b in 0..steps {
                 let offset = [(b * PARAMS_STRIDE) as u32];
-                for stage in &self.stages {
+                let extra = self.intensity_on.then_some(&self.intensity);
+                for stage in self.stages.iter().chain(extra) {
                     pass.set_pipeline(&stage.pass.pipeline);
                     pass.set_bind_group(0, &self.params_group, &offset);
                     pass.set_bind_group(1, &stage.group, &[]);

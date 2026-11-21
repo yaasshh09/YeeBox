@@ -202,19 +202,27 @@ impl Renderer {
                 entry(2, read),
                 entry(3, read),
                 entry(4, read),
+                entry(5, read),
             ],
         });
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("render"),
             layout: &layout,
-            entries: &[&uniforms, sim.ez_buffer(), sim.ids_buffer(), &luts, &mats]
-                .iter()
-                .enumerate()
-                .map(|(b, buf)| wgpu::BindGroupEntry {
-                    binding: b as u32,
-                    resource: buf.as_entire_binding(),
-                })
-                .collect::<Vec<_>>(),
+            entries: &[
+                &uniforms,
+                sim.ez_buffer(),
+                sim.ids_buffer(),
+                &luts,
+                &mats,
+                sim.mean_buffer(),
+            ]
+            .iter()
+            .enumerate()
+            .map(|(b, buf)| wgpu::BindGroupEntry {
+                binding: b as u32,
+                resource: buf.as_entire_binding(),
+            })
+            .collect::<Vec<_>>(),
         });
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("render"),
