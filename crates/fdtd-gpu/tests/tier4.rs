@@ -164,6 +164,7 @@ fn cw(f0: f64) -> fdtd_core::source::Waveform {
         f0,
         ramp_periods: 3.0,
         phase: 0.0,
+        start: 0.0,
     }
 }
 

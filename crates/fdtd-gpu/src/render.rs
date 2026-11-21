@@ -389,6 +389,7 @@ mod tests {
             f0: 0.025,
             ramp_periods: 3.0,
             phase: 0.0,
+            start: 0.0,
         };
         s.sources.push(slow);
         assert_eq!(intensity_tau(&s), 320.0);

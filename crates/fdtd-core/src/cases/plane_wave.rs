@@ -325,6 +325,7 @@ fn guide_phasors(steps_per_period: usize, row: usize, xs: &[usize]) -> Result<Ve
                     f0: f,
                     ramp_periods: 10.0,
                     phase: 0.0,
+                    start: 0.0,
                 },
                 amplitude: (PI * j as f64 / ny as f64).sin(),
                 kind: SourceKind::Soft,

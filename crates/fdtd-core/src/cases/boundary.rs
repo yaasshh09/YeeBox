@@ -87,6 +87,7 @@ pub fn a8() -> Result<Vec<CaseResult>> {
                 f0,
                 ramp_periods: 3.0,
                 phase: 0.0,
+                start: 0.0,
             },
             amplitude: 1.0,
             kind: SourceKind::Soft,

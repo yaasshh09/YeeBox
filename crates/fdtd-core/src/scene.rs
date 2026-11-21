@@ -281,6 +281,7 @@ pub fn phased_array(
             f0,
             ramp_periods,
             phase: k as f64 * phase_step,
+            start: 0.0,
         };
         waveform.validate()?;
         out.push(Source {
@@ -374,10 +375,12 @@ impl SourcePatch {
                     f0,
                     ramp_periods,
                     phase,
+                    start,
                 } => Waveform::RampedCw {
                     f0: f,
                     ramp_periods,
                     phase: phase + 2.0 * std::f64::consts::PI * (f0 - f) * t_now,
+                    start,
                 },
                 Waveform::Ricker { t0, .. } => Waveform::Ricker { t0, f_peak: f },
                 Waveform::ModulatedGaussian { t0, tau, .. } => {
@@ -1774,6 +1777,7 @@ pub(crate) mod tests {
                     f0: 0.04,
                     ramp_periods: 4.0,
                     phase: 0.25 * k as f64,
+                    start: 0.0,
                 }
             );
         }
@@ -1878,6 +1882,7 @@ pub(crate) mod tests {
             f0: 0.08,
             ramp_periods: 3.0,
             phase: 0.0,
+            start: 0.0,
         };
         let mut g = s.sources[0];
         g.waveform = Waveform::Gaussian {
@@ -1909,6 +1914,7 @@ pub(crate) mod tests {
             f0: 0.05,
             ramp_periods: 3.0,
             phase: 0.0,
+            start: 0.0,
         };
         s
     }

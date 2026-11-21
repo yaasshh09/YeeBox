@@ -23,14 +23,23 @@ pub enum Waveform {
     /// Spectral peak at `f_peak`, zero DC exactly.
     Ricker { t0: f64, f_peak: f64 },
     /// `sin(2 pi f0 t + phase)` turned on over `ramp_periods` periods by the
-    /// raised-cosine ramp `(1 - cos(pi t / T)) / 2`, with `T = ramp_periods / f0`.
-    /// Zero for t < 0, value and slope continuous everywhere. At least 3
-    /// periods, because a hard turn-on injects broadband junk and DC.
+    /// raised-cosine ramp `(1 - cos(pi (t - start) / T)) / 2`, with
+    /// `T = ramp_periods / f0`. Zero for t <= start, value and slope
+    /// continuous everywhere. At least 3 periods, because a hard turn-on
+    /// injects broadband junk and DC. `start` (default 0) lets a source
+    /// placed into a running simulation turn on as gently; the phase stays
+    /// absolute, so elements of an array keep their relative phases.
     RampedCw {
         f0: f64,
         ramp_periods: f64,
         phase: f64,
+        #[serde(default, skip_serializing_if = "is_zero")]
+        start: f64,
     },
+}
+
+fn is_zero(v: &f64) -> bool {
+    *v == 0.0
 }
 
 /// How a source couples into its node.
@@ -73,10 +82,12 @@ impl Waveform {
                 f0,
                 ramp_periods,
                 phase,
+                start,
             } => {
                 check("f0", f0, f0 > 0.0)?;
                 check("ramp_periods", ramp_periods, ramp_periods >= 3.0)?;
-                check("phase", phase, true)
+                check("phase", phase, true)?;
+                check("start", start, start >= 0.0)
             }
         }
     }
@@ -110,13 +121,16 @@ impl Waveform {
                 f0,
                 ramp_periods,
                 phase,
+                start,
             } => {
-                if t <= 0.0 {
+                // With start = 0, `t - start` is exactly t: unchanged values.
+                let since = t - start;
+                if since <= 0.0 {
                     return 0.0;
                 }
                 let t_ramp = ramp_periods / f0;
-                let ramp = if t < t_ramp {
-                    0.5 * (1.0 - (PI * t / t_ramp).cos())
+                let ramp = if since < t_ramp {
+                    0.5 * (1.0 - (PI * since / t_ramp).cos())
                 } else {
                     1.0
                 };
@@ -180,6 +194,7 @@ mod tests {
             f0,
             ramp_periods: periods,
             phase: 0.7,
+            start: 0.0,
         };
         let t_ramp = periods / f0;
         let h = 1e-6;
@@ -195,11 +210,46 @@ mod tests {
     }
 
     #[test]
+    fn cw_ramp_can_start_late() {
+        // A source dropped in at t = 400 turns on as smoothly as one present
+        // from the start, and keeps the absolute phase 2 pi f0 t + phase.
+        let (f0, periods, start) = (0.05, 3.0, 400.0);
+        let w = Waveform::RampedCw {
+            f0,
+            ramp_periods: periods,
+            phase: 0.7,
+            start,
+        };
+        assert_eq!(w.value(start), 0.0);
+        assert_eq!(w.value(start - 37.0), 0.0);
+        let t_ramp = periods / f0;
+        let h = 1e-6;
+        for t in [start, start + t_ramp] {
+            let (l, c, r) = (w.value(t - h), w.value(t), w.value(t + h));
+            assert!((r - l).abs() < 1e-5, "value jump at {t}");
+            let (sl, sr) = ((c - l) / h, (r - c) / h);
+            assert!((sr - sl).abs() < 1e-4, "slope jump at {t}: {sl} vs {sr}");
+        }
+        let t = start + t_ramp + 3.3;
+        assert!((w.value(t) - (2.0 * PI * f0 * t + 0.7).sin()).abs() < 1e-15);
+        for bad in [-1.0, f64::INFINITY] {
+            let w = Waveform::RampedCw {
+                f0,
+                ramp_periods: periods,
+                phase: 0.0,
+                start: bad,
+            };
+            assert!(w.validate().is_err(), "start {bad}");
+        }
+    }
+
+    #[test]
     fn cw_ramp_rejects_short_ramp() {
         let w = Waveform::RampedCw {
             f0: 0.05,
             ramp_periods: 2.9,
             phase: 0.0,
+            start: 0.0,
         };
         assert!(w.validate().is_err());
     }
@@ -247,6 +297,7 @@ mod tests {
                 f0: 0.1,
                 ramp_periods: 3.0,
                 phase: 0.5,
+                start: 0.0,
             },
         ];
         for w in all {
