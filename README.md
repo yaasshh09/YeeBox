@@ -1,5 +1,9 @@
 # YeeBox
 
+![The double slit running live: painting over one slit turns the fringes into a single wave, and erasing it brings them back](docs/media/demo.gif)
+
+Try it at https://yaasshh09.github.io/YeeBox/ (live once the site is published).
+
 Working name. I'm building a real-time solver for Maxwell's equations that runs
 in a browser tab on the GPU: you paint materials, drop a source, and watch
 waves reflect, diffract, and resonate, with every frame a live FDTD solve on a
@@ -13,8 +17,10 @@ That's the goal. Here's where it stands today, honestly:
   total-field / scattered-field plane wave source; and frequency-domain
   monitors that measure reflection, transmission and guided modes. On top of
   that, an f32 GPU kernel (wgpu and WGSL compute shaders) that matches the
-  reference on every committed scene.
-- **Not done yet:** the browser app, oblique plane waves,
+  reference on every committed scene, and a browser app that runs it live:
+  paint walls and glass, drop and drag sources, probe the field, share the
+  exact scene as a link.
+- **Not done yet:** oblique plane waves,
   dispersive materials, scattering and far-field checks. I'll only claim those
   once their tests pass.
 
@@ -95,6 +101,30 @@ lossy and dielectric shapes, every waveform, soft and hard sources, a phased
 array, plane waves in all four directions and every monitor type. Any new
 feature has to add a scene there.
 
+## The browser app
+
+The page runs the same GPU kernel through WebGPU, or the f64 CPU reference in a
+Web Worker on a smaller grid when the browser has no WebGPU. It opens on a
+double slit, and a drag paints a wall. There are three presets (double slit,
+waveguide and cutoff, lens), tools for paint, erase, rectangles, circles, slit
+pairs, sources and a probe with an oscilloscope, and a time-averaged intensity
+view. Share puts the whole scene, paint included, in the URL; opening it
+reproduces the scene byte for byte.
+
+What I measured on my machine (GTX 1660 Ti):
+
+| | |
+|---|---|
+| 1024 x 1024 grid in Chrome | about 2.2 Gcells/s, around 30 steps per 60 fps frame |
+| Load to a running solver | 367 ms, local production build |
+| First-load weight | 562 kB gzipped, budget 2 MB |
+| Browser GPU vs native CPU (self-test page) | 5.1e-6 of the peak field worst, gate 1e-4 |
+| Browsers checked | Chrome 157 and Firefox 159 (GPU path), headless Chromium (CPU path) |
+
+The Verify button lists every acceptance case, and `selftest.html` runs the
+GPU kernel in your browser against native reference fields shipped with the
+page. I haven't measured an integrated laptop GPU, Safari, or Edge yet.
+
 ## Running it
 
     cargo test --workspace                       # everything, under a minute
@@ -102,6 +132,15 @@ feature has to add a scene there.
     cargo run --release -p fdtd-cli -- report    # regenerate validation/report
     cargo run --release -p fdtd-cli -- bench     # GPU and CPU throughput
     cargo run --release -p fdtd-cli -- run --scene validation/scenes/line_source_cpml.json
+
+For the web app (Node 24, and `wasm-bindgen-cli` 0.2.130 to match the crate):
+
+    cd web
+    npm ci
+    npm run wasm      # build the Rust side and its JS bindings
+    npm run dev       # http://localhost:5173
+    npm test          # unit tests
+    npm run build && npx playwright test
 
 The GPU tests need an adapter. Without one they show up as ignored, with a
 banner, never as passed. `fdtd pml-sweep` reruns the layer tuning and writes a CSV ranked from best to
