@@ -10,6 +10,7 @@
 use fdtd_core::FdtdError;
 use wasm_bindgen::prelude::*;
 
+pub mod cpu;
 #[cfg(target_arch = "wasm32")]
 mod gpu_sim;
 pub mod session;
