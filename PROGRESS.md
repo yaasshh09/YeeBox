@@ -7,7 +7,7 @@ entry at the top of the session log.
 
 **Active phase:** Phase 5 (Phases 0 to 4 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** Phase 5 part C (`fdtd-wasm`: errors, GPU sim binding, edits, CPU fallback, self-test); parts A and B are done; the owner pushes when ready so CI runs once on lavapipe
+**Next action:** Phase 5 part D (the web app in `web/`); parts A to C are done; the owner pushes when ready so CI runs once on lavapipe
 
 ## Decisions log
 
@@ -91,6 +91,12 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-21 | The colormaps are built in OKLab from stated rules (blue / dark neutral / orange diverging, dark to warm white sequential), 257 entries so zero is entry 128 | no published table offline; the rules are what the tests check |
 | 2026-11-21 | The render pass reads Ez, ids and the intensity mean straight from the simulation buffers, nearest node per pixel; `render::Viewport` (y up) is the one view transform | no readback per frame; GPU render, CPU fallback and pointer mapping agree |
 | 2026-11-21 | Intensity view: an exponential running mean of Ez^2 (time constant tau steps), drawn as `2 mean gain^2` on the sequential map; display only | a sinusoid at full-color amplitude reads 1 |
+| 2026-11-21 | A CPML node takes its material from the interface node it clamps to (`Scene::material_node`), by construction; the uniformity check and `PmlNotUniform` are gone; edit bounds touching an interface widen to the wall | replaces the 2026-11-13 rule "layer materials must match their clamped interior node": every valid scene already met it (report byte-identical), and now shapes and walls run through the layer without errors |
+| 2026-11-21 | `RampedCw` has an optional `start` (default 0, omitted from JSON when 0): the ramp runs from `start`, the phase stays absolute | a source dropped into a running simulation turns on smoothly; values at start = 0 are bit-identical |
+| 2026-11-21 | One wasm `Sim` over a `Session` (scene plus palette), with a GPU backend (`createSim`, canvas) or the CPU fallback (`createCpuSim`, pixels for a worker canvas) | one TypeScript code path for both; edits route through the same session |
+| 2026-11-21 | The oscilloscope uses one live probe: a tap slot reserved at the end of every gather row, moved in place | probes can move without changing the layout of batches in flight; every step is sampled |
+| 2026-11-21 | The CPU fallback draws with `render::CpuPainter`, the render shader's steps in f64 | Tier 4 holds it within one colormap step of the GPU pixels |
+| 2026-11-21 | The browser self-test compares the browser GPU kernel with committed native f64 fields (`validation/golden/selftest`, three scenes, steps 1000 and 2000, f32) through `Comparator` and `GPU_GATE`; a core test keeps the files fresh | the acceptance names the native kernel; the gate and measure are the Tier 4 ones |
 
 ## Measured numbers
 
@@ -120,6 +126,9 @@ Fill in as they become available. These go in the README.
 | Live paint at step 0 vs a scene painted from the start | bit-identical, with and without a CPML | CPU, 300 steps | 2026-11-21 |
 | GPU intensity mean vs f64 mean of CPU Ez | 1.8e-7 of peak | `painted_walls` with CW 0.05, tau 40, 400 steps; gate 1e-4 | 2026-11-21 |
 | Render at 1 px per cell | the exact table entry at a known node; CPML tint and conductor color within 1/255 | native offscreen Rgba8Unorm | 2026-11-21 |
+| Live probe vs CPU Ez at its node | 6.9e-7 of peak | 300 steps in batches of 7; gate 1e-4 | 2026-11-21 |
+| CPU painter vs GPU pixels | within one colormap step (8 levels) | both views, zoom 1 and 3, letterboxed | 2026-11-21 |
+| wasm module size | 796 KB, 213 KB gzipped | release, `wasm-bindgen --target web`, before the web app | 2026-11-21 |
 | GPU f32 TF/SF leakage | about 5e-8 of the incident amplitude (-146 dB) | one-node box, no other source; CPU leaves 1e-16 | 2026-11-14 |
 | Throughput, integrated GPU | not measured, no integrated GPU on this machine | | |
 | Throughput, discrete GPU | 3.0 Gcells/s, 2864 steps/s, 47.7 steps per 60 fps frame (16-cell CPML: 3.0 Gcells/s, 48.1) | GTX 1660 Ti, Vulkan, 1024 x 1024, 8 steps per submit, `fdtd bench` | 2026-11-14 |
