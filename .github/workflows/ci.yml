@@ -30,8 +30,8 @@ jobs:
         run: cargo test --workspace
       - name: fdtd-core builds for wasm32 unchanged
         run: cargo build -p fdtd-core --target wasm32-unknown-unknown
-      - name: fdtd-gpu builds for wasm32
-        run: cargo build -p fdtd-gpu --target wasm32-unknown-unknown
+      - name: fdtd-gpu and fdtd-wasm build for wasm32
+        run: cargo build -p fdtd-gpu -p fdtd-wasm --target wasm32-unknown-unknown
       - name: no em dashes in tracked files
         run: |
           if git grep -nI "$(printf '\342\200\224')"; then
