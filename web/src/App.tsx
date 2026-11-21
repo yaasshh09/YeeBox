@@ -46,17 +46,29 @@ export default function App() {
   const [verify, setVerify] = useState(false);
   useShortcuts();
   useEffect(() => {
-    decodeScene(window.location.hash)
-      .then((json) => {
-        if (json) {
-          const s = useStore.getState();
-          s.set({ scene: { full: json, compact: null, key: s.scene.key + 1 } });
-        } else loadPreset("double_slit");
-      })
-      .catch((e: Error) => {
-        useStore.getState().toast(`That link could not be opened: ${e.message}`);
-        loadPreset("double_slit");
-      });
+    // On load, and when a link is pasted into this tab (only the hash
+    // changes, so the page does not reload).
+    let shared = "";
+    const open = (first: boolean) => {
+      const hash = window.location.hash;
+      if (!first && (hash === shared || !hash.startsWith("#s="))) return;
+      decodeScene(hash)
+        .then((json) => {
+          if (json) {
+            shared = hash;
+            const s = useStore.getState();
+            s.set({ scene: { full: json, compact: null, key: s.scene.key + 1 } });
+          } else if (first) loadPreset("double_slit");
+        })
+        .catch((e: Error) => {
+          useStore.getState().toast(`That link could not be opened: ${e.message}`);
+          if (first) loadPreset("double_slit");
+        });
+    };
+    open(true);
+    const onHash = () => open(false);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
   }, []);
   const toast = useStore((s) => s.toast);
   const onShare = async () => {

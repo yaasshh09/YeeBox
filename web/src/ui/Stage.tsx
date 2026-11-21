@@ -53,6 +53,8 @@ export function Stage() {
           return;
         }
         engineRef.current = engine;
+        // Cold-load timing: navigation start to a running engine.
+        if (!performance.getEntriesByName("yeebox-ready").length) performance.mark("yeebox-ready");
         // A handle for end-to-end tests and the curious: window.yeebox.call("scene").
         (window as unknown as { yeebox: Engine }).yeebox = engine;
         const { view, wavelength } = readScene(full);
