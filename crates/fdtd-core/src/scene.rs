@@ -47,6 +47,30 @@ pub struct Scene {
     /// Freehand paint over the geometry. Absent means none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub paint: Option<Paint>,
+    /// How the field is drawn. Display only: no kernel reads it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub view: Option<View>,
+}
+
+/// Display settings carried with a scene so a shared link looks the same.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct View {
+    pub field: ViewField,
+    /// Field value drawn at full color is `1 / gain`. Positive.
+    pub gain: f64,
+    /// Rescale the gain from the field's running peak.
+    pub auto_gain: bool,
+}
+
+/// The quantity on the canvas.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ViewField {
+    /// Instantaneous Ez, diverging colormap.
+    Ez,
+    /// Running mean of Ez^2, sequential colormap.
+    Intensity,
 }
 
 /// Freehand paint: an override material index per Ez node, laid out
@@ -722,6 +746,14 @@ impl Scene {
         if let Some(pw) = &self.plane_wave {
             self.check_plane_wave(pw)?;
         }
+        if let Some(v) = &self.view
+            && !(v.gain.is_finite() && v.gain > 0.0)
+        {
+            return Err(FdtdError::InvalidParameter {
+                name: "gain",
+                value: v.gain,
+            });
+        }
         Ok(())
     }
 
@@ -1074,6 +1106,7 @@ pub(crate) mod tests {
             periodic_y: false,
             plane_wave: None,
             paint: None,
+            view: None,
         }
     }
 
@@ -1716,6 +1749,25 @@ pub(crate) mod tests {
         let mut twice = s.clone();
         twice.with_palette();
         assert_eq!(twice, s);
+    }
+
+    #[test]
+    fn view_round_trips_and_is_checked() {
+        let mut s = sample();
+        s.view = Some(View {
+            field: ViewField::Intensity,
+            gain: 2.5,
+            auto_gain: false,
+        });
+        let text = s.to_json().unwrap();
+        assert!(text.contains(r#""field": "intensity""#));
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+        assert!(!sample().to_json().unwrap().contains("view"));
+        for gain in [0.0, -1.0, f64::NAN] {
+            let mut bad = s.clone();
+            bad.view.as_mut().unwrap().gain = gain;
+            assert!(bad.validate().is_err(), "gain {gain}");
+        }
     }
 
     fn cw_sample() -> Scene {

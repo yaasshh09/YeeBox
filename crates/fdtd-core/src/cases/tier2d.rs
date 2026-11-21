@@ -30,6 +30,7 @@ fn vacuum(nx: usize, ny: usize, s: f64) -> Scene {
         periodic_y: false,
         plane_wave: None,
         paint: None,
+        view: None,
     }
 }
 

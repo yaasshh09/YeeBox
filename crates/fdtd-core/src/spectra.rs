@@ -157,6 +157,7 @@ mod tests {
                 amplitude: 1.0,
             }),
             paint: None,
+            view: None,
         }
     }
 

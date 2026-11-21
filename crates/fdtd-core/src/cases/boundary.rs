@@ -102,6 +102,7 @@ pub fn a8() -> Result<Vec<CaseResult>> {
         periodic_y: false,
         plane_wave: None,
         paint: None,
+        view: None,
     };
     let mut sim = SimTm::from_scene(&scene)?;
     let (steps, period) = (3000, 40);

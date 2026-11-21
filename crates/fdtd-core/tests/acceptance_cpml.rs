@@ -67,6 +67,7 @@ fn late_time_decay_no_growth() {
         periodic_y: false,
         plane_wave: None,
         paint: None,
+        view: None,
     };
     let mut sim = SimTm::from_scene(&scene).unwrap();
     let energy = |sim: &SimTm| -> f64 {
@@ -151,6 +152,7 @@ fn periodic_y_layer_on_x_faces_only() {
         periodic_y: true,
         plane_wave: None,
         paint: None,
+        view: None,
     };
     let steps = 700;
     let run = |nx: usize| {
@@ -215,6 +217,7 @@ fn periodic_y_with_layer_is_translation_invariant() {
         periodic_y: true,
         plane_wave: None,
         paint: None,
+        view: None,
     };
     let run = |j: usize| {
         let mut sim = SimTm::from_scene(&at(j)).unwrap();

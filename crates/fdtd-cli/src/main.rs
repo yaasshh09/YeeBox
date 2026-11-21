@@ -86,6 +86,7 @@ fn bench_scene(n: usize, pml: bool) -> Scene {
         periodic_y: false,
         plane_wave: None,
         paint: None,
+        view: None,
     }
 }
 
