@@ -10,6 +10,7 @@ name = "fdtd"
 path = "src/main.rs"
 
 [dependencies]
+serde_json.workspace = true
 fdtd-core.workspace = true
 fdtd-gpu.workspace = true
 clap.workspace = true

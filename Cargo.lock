@@ -375,6 +375,7 @@ dependencies = [
  "clap",
  "fdtd-core",
  "fdtd-gpu",
+ "serde_json",
  "zip",
 ]
 

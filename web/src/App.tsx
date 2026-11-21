@@ -15,6 +15,7 @@ import {
   ViewControls,
 } from "./ui/Panels";
 import { Stage } from "./ui/Stage";
+import { Verify } from "./ui/Verify";
 
 /** One width threshold for the two shells, as in AtomSIM. */
 const NARROW = 900;
@@ -41,6 +42,7 @@ function Notice() {
 export default function App() {
   const narrow = useNarrow();
   const [sheet, setSheet] = useState(false);
+  const [verify, setVerify] = useState(false);
   useShortcuts();
   useEffect(() => {
     decodeScene(window.location.hash)
@@ -74,7 +76,7 @@ export default function App() {
       toast("The link is in the address bar.");
     }
   };
-  const onVerify = () => toast("The validation summary arrives in the next build.");
+  const onVerify = () => setVerify(true);
 
   if (narrow) {
     return (
@@ -100,6 +102,7 @@ export default function App() {
           </div>
         )}
         <Notice />
+        {verify && <Verify onClose={() => setVerify(false)} />}
       </div>
     );
   }
@@ -125,6 +128,7 @@ export default function App() {
         </aside>
       </div>
       <Notice />
+      {verify && <Verify onClose={() => setVerify(false)} />}
     </div>
   );
 }

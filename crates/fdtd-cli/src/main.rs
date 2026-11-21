@@ -420,6 +420,27 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     let rows = cases::all();
+    // What the site's Verify panel shows, formatted here so the page only
+    // displays it.
+    let summary = serde_json::json!({
+        "cases": rows.iter().map(|r| serde_json::json!({
+            "id": r.id,
+            "name": r.name,
+            "measured": format!("{} {}", fmt_num(r.measured), r.unit).trim_end().to_string(),
+            "gate": r.gate.to_string(),
+            "pass": r.pass,
+        })).collect::<Vec<_>>(),
+        "cpml": layers.iter().zip(&results).map(|(p, db)| serde_json::json!({
+            "cells": p.thickness,
+            "worst_db": format!("{:.1} dB", setup.worst_db(db, 70.0)),
+        })).collect::<Vec<_>>(),
+    });
+    std::fs::write(
+        a.dir.join("summary.json"),
+        serde_json::to_string_pretty(&summary)?
+            + "
+",
+    )?;
     let (golden, rt) = cases::plane_wave::slab_spectrum(20)?;
     let slab: Vec<(f64, f64, f64, f64, f64)> = golden
         .iter()

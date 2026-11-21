@@ -75,6 +75,9 @@ Adapter: NVIDIA GeForce GTX 1660 Ti (Vulkan). Each entry is max |gpu - cpu| over
 | materials_clutter | 5.61e-7 | 1.37e-6 | 1.57e-6 | 6.21e-7 | 1.86e-7 | pass |
 | painted_walls | 2.04e-6 | 9.13e-6 | 6.90e-6 | 4.07e-7 | 0.00e0 | pass |
 | phased_array_cpml | 6.60e-7 | 1.03e-6 | 1.23e-6 | 1.29e-6 | 4.38e-8 | pass |
+| preset_double_slit_compact | 7.96e-7 | 1.42e-6 | 2.68e-6 | 0.00e0 | 0.00e0 | pass |
+| preset_lens_compact | 7.28e-7 | 1.71e-6 | 1.40e-6 | 0.00e0 | 0.00e0 | pass |
+| preset_waveguide_compact | 1.54e-6 | 2.47e-6 | 1.83e-6 | 0.00e0 | 0.00e0 | pass |
 | slab_tfsf | 3.75e-7 | 0.00e0 | 4.97e-7 | 0.00e0 | 6.05e-5 | pass |
 | tfsf_cylinder_plus_y | 3.85e-7 | 4.07e-7 | 8.21e-7 | 4.05e-7 | 5.28e-8 | pass |
 | tfsf_lossy_minus_y | 8.34e-7 | 1.53e-6 | 2.73e-6 | 8.14e-7 | 1.89e-7 | pass |

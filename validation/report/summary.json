@@ -1,0 +1,126 @@
+{
+  "cases": [
+    {
+      "gate": "<= 1.00e-12",
+      "id": "A1",
+      "measured": "0 rel",
+      "name": "1D magic time step, shape after 1000 cells",
+      "pass": true
+    },
+    {
+      "gate": "<= 1.00e-4",
+      "id": "A2",
+      "measured": "0 rel",
+      "name": "1D phase velocity vs discrete relation",
+      "pass": true
+    },
+    {
+      "gate": "<= 1.00e-10",
+      "id": "A3",
+      "measured": "2.11e-15 rel",
+      "name": "1D PEC reflection inverted, equal magnitude",
+      "pass": true
+    },
+    {
+      "gate": "<= 10",
+      "id": "A4",
+      "measured": "3.9674 x start",
+      "name": "2D stability, bounded at S = 0.70",
+      "pass": true
+    },
+    {
+      "gate": "<= 1.00e-4",
+      "id": "A5",
+      "measured": "2.22e-16 rel",
+      "name": "2D dispersion, axis and diagonal vs discrete",
+      "pass": true
+    },
+    {
+      "gate": "<= 1.00e-4",
+      "id": "A6",
+      "measured": "3.18e-8 rel",
+      "name": "PEC cavity, first 6 resonances vs discrete",
+      "pass": true
+    },
+    {
+      "gate": "1.8 to 2.2",
+      "id": "A7",
+      "measured": "2.0014 order",
+      "name": "PEC cavity convergence to continuum",
+      "pass": true
+    },
+    {
+      "gate": "<= 0.02",
+      "id": "A8",
+      "measured": "3.85e-4 rel",
+      "name": "line source vs Hankel, 2 to 5 wavelengths",
+      "pass": true
+    },
+    {
+      "gate": "<= -60",
+      "id": "A9",
+      "measured": "-86.466 dB",
+      "name": "CPML reflection, 10 cells",
+      "pass": true
+    },
+    {
+      "gate": "<= -80",
+      "id": "A10",
+      "measured": "-127.2532 dB",
+      "name": "CPML reflection, tuned 16 cells",
+      "pass": true
+    },
+    {
+      "gate": "<= 5.00e-3",
+      "id": "A11",
+      "measured": "2.96e-4 rel",
+      "name": "waveguide cutoff and guided wavelength",
+      "pass": true
+    },
+    {
+      "gate": "<= 0.01",
+      "id": "A12",
+      "measured": "6.04e-4 rel",
+      "name": "waveguide evanescent decay below cutoff",
+      "pass": true
+    },
+    {
+      "gate": "<= 0.01",
+      "id": "A13",
+      "measured": "4.88e-3 abs",
+      "name": "dielectric slab R and T vs Airy",
+      "pass": true
+    },
+    {
+      "gate": "<= 5.00e-3",
+      "id": "R+T",
+      "measured": "6.87e-8 abs",
+      "name": "R + T = 1, lossless slab",
+      "pass": true
+    },
+    {
+      "gate": "<= 0.01",
+      "id": "A14",
+      "measured": "4.00e-3 rel",
+      "name": "lossy medium attenuation vs analytic",
+      "pass": true
+    },
+    {
+      "gate": "<= -120",
+      "id": "A15",
+      "measured": "-303.9111 dB",
+      "name": "TF/SF leakage, empty domain",
+      "pass": true
+    }
+  ],
+  "cpml": [
+    {
+      "cells": 10,
+      "worst_db": "-86.5 dB"
+    },
+    {
+      "cells": 16,
+      "worst_db": "-127.3 dB"
+    }
+  ]
+}
