@@ -34,6 +34,13 @@ fn presets_validate_and_have_compact_twins() {
         };
         assert!((wl(&a) - wl(&b)).abs() / wl(&a) < 1e-12, "{name}");
         assert!(full.grid.nx * full.grid.ny <= 1024 * 1024, "{name}");
+        // A share link carries the Rust JSON of the edited scene; it must
+        // come back exactly, paint included.
+        let mut edited = full.clone();
+        edited.paint_stroke((300.0, 100.0), (300.0, 200.0), 2.0, 2).unwrap();
+        let text = edited.to_json().unwrap();
+        assert_eq!(Scene::from_json(&text).unwrap(), edited, "{name}");
+        assert_eq!(Scene::from_json(&text).unwrap().to_json().unwrap(), text, "{name}");
     }
     assert_eq!(n, 3);
 }

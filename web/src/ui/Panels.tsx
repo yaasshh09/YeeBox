@@ -315,6 +315,20 @@ export function TopBar({ onVerify, onShare }: { onVerify: () => void; onShare: (
         )}
       </p>
       <div className="topbar-right">
+        <label className="file-button">
+          Open
+          <input
+            type="file"
+            accept="application/json,.json"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const s = useStore.getState();
+              s.set({ scene: { full: await file.text(), compact: null, key: s.scene.key + 1 } });
+              e.target.value = "";
+            }}
+          />
+        </label>
         <button type="button" onClick={onShare}>
           Share
         </button>
