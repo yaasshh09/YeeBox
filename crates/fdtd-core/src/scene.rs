@@ -544,7 +544,33 @@ impl Shape {
         }
     }
 
-    fn material(&self) -> usize {
+    /// `[x0, y0, x1, y1]` around the shape, cells, edges included: every
+    /// node the shape can contain lies inside. Assumes a validated shape.
+    pub fn bounds(&self) -> [f64; 4] {
+        match self {
+            Shape::Rect { x0, y0, x1, y1, .. } => [*x0, *y0, *x1, *y1],
+            Shape::Circle { cx, cy, r, .. } => [cx - r, cy - r, cx + r, cy + r],
+            Shape::Polygon { points, .. } => points.iter().fold(
+                [
+                    f64::INFINITY,
+                    f64::INFINITY,
+                    f64::NEG_INFINITY,
+                    f64::NEG_INFINITY,
+                ],
+                |b, p| {
+                    [
+                        b[0].min(p[0]),
+                        b[1].min(p[1]),
+                        b[2].max(p[0]),
+                        b[3].max(p[1]),
+                    ]
+                },
+            ),
+        }
+    }
+
+    /// The material index the shape paints.
+    pub fn material(&self) -> usize {
         match self {
             Shape::Rect { material, .. }
             | Shape::Circle { material, .. }
@@ -1961,6 +1987,29 @@ pub(crate) mod tests {
         s.patch_source(0, &amp, 0.0).unwrap();
         assert_eq!(s.sources[0].amplitude, 2.5);
         s.validate().unwrap();
+    }
+
+    #[test]
+    fn shape_bounds_hold_every_node() {
+        for shape in sample().geometry {
+            let [x0, y0, x1, y1] = shape.bounds();
+            for j in 0..30 {
+                for i in 0..40 {
+                    let (x, y) = (i as f64, j as f64);
+                    if shape.contains(x, y) {
+                        assert!(
+                            x0 <= x && x <= x1 && y0 <= y && y <= y1,
+                            "{shape:?} ({i}, {j})"
+                        );
+                    }
+                }
+            }
+        }
+        let tri = Shape::Polygon {
+            points: vec![[30.0, 2.0], [38.0, 2.0], [34.0, 8.0]],
+            material: 1,
+        };
+        assert_eq!(tri.bounds(), [30.0, 2.0, 38.0, 8.0]);
     }
 
     #[test]
