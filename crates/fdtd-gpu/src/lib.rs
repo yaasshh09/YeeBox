@@ -6,6 +6,7 @@
 //! (Tier 4 in `docs/04-validation.md`), never agreement with physics alone.
 
 pub mod buffers;
+pub mod colormap;
 pub mod device;
 pub mod pipeline;
 pub mod sim;
