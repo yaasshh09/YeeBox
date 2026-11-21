@@ -16,6 +16,7 @@ import {
 } from "./ui/Panels";
 import { Stage } from "./ui/Stage";
 import { Verify } from "./ui/Verify";
+import { Hints } from "./ui/Hints";
 
 /** One width threshold for the two shells, as in AtomSIM. */
 const NARROW = 900;
@@ -83,7 +84,10 @@ export default function App() {
       <div className="shell mobile">
         <TopBar onShare={onShare} onVerify={onVerify} />
         <main className="center">
-          <Stage />
+          <div className="stage-wrap">
+            <Stage />
+            <Hints />
+          </div>
           <StatusStrip />
         </main>
         <div className="mobile-tools">
@@ -117,7 +121,10 @@ export default function App() {
           <RectForm />
         </aside>
         <main className="center">
-          <Stage />
+          <div className="stage-wrap">
+            <Stage />
+            <Hints />
+          </div>
           <StatusStrip />
         </main>
         <aside className="panel">

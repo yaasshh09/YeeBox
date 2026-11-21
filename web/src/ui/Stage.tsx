@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { createEngine, type Engine } from "../sim/engine";
 import { toSimError } from "../sim/protocol";
 import { engineRef, SCOPE_LEN, useStore } from "../state/store";
+import { hintDone } from "./Hints";
 
 type Pt = { x: number; y: number };
 
@@ -64,11 +65,6 @@ export function Stage() {
           scope: [],
           probeSet: false,
         });
-        if (engine.kernel === "cpu") {
-          useStore
-            .getState()
-            .toast("This browser has no WebGPU, so a smaller version runs on the CPU.");
-        }
       } catch (e) {
         useStore.getState().toast(toSimError(e).message);
       }
@@ -128,6 +124,7 @@ export function Stage() {
       return { d: Math.hypot(a.x - b.x, a.y - b.y), c: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
     };
     const paint = (from: Pt, to: Pt) => {
+      hintDone("draw");
       const s = useStore.getState();
       const mat = s.tool === "erase" ? 0 : s.material;
       void run(async (e) => {
@@ -161,7 +158,10 @@ export function Stage() {
           const c = await cell(e, p);
           const hit = await e.call<number | undefined>("sourceNear", c[0], c[1], 4);
           if (hit != null) dragSource = hit;
-          else await e.call("addSource", c[0], c[1], s.wavelength ?? 20);
+          else {
+            await e.call("addSource", c[0], c[1], s.wavelength ?? 20);
+            hintDone("source");
+          }
         });
       } else if (s.tool === "probe") {
         void run(async (e) => {

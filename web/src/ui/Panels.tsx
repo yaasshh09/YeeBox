@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { PRESETS, presetById } from "../presets";
 import { engineRef, PALETTE, useStore, type Drive, type Tool } from "../state/store";
 import { count, si } from "./format";
+import { hintDone } from "./Hints";
 import { run } from "./Stage";
 
 const TOOLS: { id: Tool; label: string; key: string }[] = [
@@ -299,7 +300,14 @@ export function TopBar({ onVerify, onShare }: { onVerify: () => void; onShare: (
   return (
     <header className="topbar">
       <div className="brand">YeeBox</div>
-      <select aria-label="Experiment" value={presetId} onChange={(e) => loadPreset(e.target.value)}>
+      <select
+        aria-label="Experiment"
+        value={presetId}
+        onChange={(e) => {
+          hintDone("presets");
+          loadPreset(e.target.value);
+        }}
+      >
         {PRESETS.map((x) => (
           <option key={x.id} value={x.id}>
             {x.title}

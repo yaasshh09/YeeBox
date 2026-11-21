@@ -374,3 +374,35 @@ input:focus-visible {
 .links a {
   color: var(--text);
 }
+.hint-bubble,
+.cpu-notice {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--panel-glass);
+  border: 1px solid var(--edge-strong);
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.hint-bubble {
+  top: 12px;
+}
+.cpu-notice {
+  bottom: 12px;
+  pointer-events: auto;
+  border-color: var(--warn);
+}
+.cpu-notice a {
+  color: inherit;
+}
+.stage-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
