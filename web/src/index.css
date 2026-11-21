@@ -1,0 +1,51 @@
+@import "./assets/fonts/poppins.css";
+
+/* Tokens follow AtomSIM (../atom_sim/web): monochrome, light and dark. */
+:root {
+  --bg: light-dark(#ffffff, #0a0a0a);
+  --stage: #000000;
+  --panel: light-dark(#f6f6f6, #111111);
+  --panel-glass: light-dark(rgb(246 246 246 / 0.88), rgb(17 17 17 / 0.8));
+  --edge: light-dark(#d9d9d9, #2b2b2b);
+  --edge-strong: light-dark(#a6a6a6, #4d4d4d);
+  --text: light-dark(#111111, #f2f2f2);
+  --muted: light-dark(#555555, #a3a3a3);
+  --label: light-dark(#6b6b6b, #8c8c8c);
+  --accent: light-dark(#111111, #f2f2f2);
+  --accent-deep: light-dark(#ffffff, #0a0a0a);
+  --warn: light-dark(#a15c00, #fbbf24);
+  --danger: light-dark(#c62828, #f87171);
+  --ok: light-dark(#1b7f3b, #4ade80);
+  --sans: "Poppins", system-ui, sans-serif;
+  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The only place uppercase is allowed (see uppercaseSafety.test.ts). */
+.section-title {
+  margin: 0 0 8px;
+  color: var(--label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
