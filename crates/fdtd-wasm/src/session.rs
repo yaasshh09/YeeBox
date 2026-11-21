@@ -160,6 +160,58 @@ impl Session {
         self.scene.patch_source(index, patch, t_now)
     }
 
+    /// The shape a drag from `a` to `b` (cells) draws with palette entry
+    /// `palette_index`: `"rect"` spans the two corners, `"circle"` is
+    /// centered on `a` through `b`. Added like `add_shape`.
+    pub fn drag_shape(
+        &mut self,
+        kind: &str,
+        a: (f64, f64),
+        b: (f64, f64),
+        palette_index: usize,
+    ) -> Result<[usize; 4]> {
+        let material = palette_index;
+        let shape = match kind {
+            "rect" => Shape::Rect {
+                x0: a.0.min(b.0),
+                y0: a.1.min(b.1),
+                x1: a.0.max(b.0),
+                y1: a.1.max(b.1),
+                material,
+            },
+            "circle" => Shape::Circle {
+                cx: a.0,
+                cy: a.1,
+                r: (b.0 - a.0).hypot(b.1 - a.1),
+                material,
+            },
+            _ => {
+                return Err(FdtdError::Json(format!("unknown shape kind {kind}")));
+            }
+        };
+        self.add_shape(shape)
+    }
+
+    /// Sets the vacuum wavelength of every source that has a frequency,
+    /// keeping CW drives continuous at `t_now`. All or nothing: on an error
+    /// no source changes. Returns how many were retuned.
+    pub fn retune_sources(&mut self, wavelength_cells: f64, t_now: f64) -> Result<usize> {
+        let patch = SourcePatch {
+            wavelength_cells: Some(wavelength_cells),
+            ..Default::default()
+        };
+        let mut next = self.scene.clone();
+        let mut n = 0;
+        for k in 0..next.sources.len() {
+            if next.sources[k].waveform.frequency().is_some() {
+                next.patch_source(k, &patch, t_now)?;
+                n += 1;
+            }
+        }
+        self.scene = next;
+        Ok(n)
+    }
+
     /// The source nearest (x, y) within `within` cells, for picking one up.
     pub fn source_near(&self, x: f64, y: f64, within: f64) -> Option<usize> {
         self.scene
@@ -245,6 +297,34 @@ mod tests {
         assert_eq!(s.clear(), [0, 0, 59, 49]);
         assert!(s.scene.geometry.is_empty() && s.scene.paint.is_none());
         assert_eq!(s.scene.sources.len(), 1);
+    }
+
+    #[test]
+    fn drags_make_shapes() {
+        let mut s = Session::load(SCENE).unwrap();
+        assert_eq!(
+            s.drag_shape("rect", (34.0, 20.0), (30.0, 10.0), 1).unwrap(),
+            [30, 10, 34, 20]
+        );
+        assert_eq!(s.scene.material_at(32, 15), s.palette[1]);
+        s.drag_shape("circle", (45.0, 25.0), (48.0, 29.0), 2)
+            .unwrap();
+        assert_eq!(s.scene.material_at(45, 30), s.palette[2]);
+        assert_eq!(s.scene.material_at(45, 31), 0);
+        assert!(s.drag_shape("star", (1.0, 1.0), (2.0, 2.0), 1).is_err());
+    }
+
+    #[test]
+    fn retune_moves_every_source_or_none() {
+        let mut s = Session::load(SCENE).unwrap();
+        s.add_source(40.0, 30.0, 15.0, 0.0).unwrap();
+        assert_eq!(s.retune_sources(30.0, 100.0).unwrap(), 2);
+        for src in &s.scene.sources {
+            assert_eq!(src.waveform.frequency(), Some(1.0 / 30.0));
+        }
+        let before = s.scene.clone();
+        assert!(s.retune_sources(500.0, 100.0).is_err());
+        assert_eq!(s.scene, before);
     }
 
     #[test]

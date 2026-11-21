@@ -24,7 +24,13 @@ fn presets_validate_and_have_compact_twins() {
         // The twin shows the same physical wavelength in the status strip.
         let (a, b) = (full.status(0).unwrap(), compact.status(0).unwrap());
         let wl = |s: &fdtd_core::scene::Status| {
-            s.sources.iter().flatten().chain(&s.plane_wave).next().unwrap().vacuum_wavelength_m
+            s.sources
+                .iter()
+                .flatten()
+                .chain(&s.plane_wave)
+                .next()
+                .unwrap()
+                .vacuum_wavelength_m
         };
         assert!((wl(&a) - wl(&b)).abs() / wl(&a) < 1e-12, "{name}");
         assert!(full.grid.nx * full.grid.ny <= 1024 * 1024, "{name}");

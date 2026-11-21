@@ -385,6 +385,38 @@ impl Sim {
         self.materials_changed(b)
     }
 
+    /// A shape drawn by dragging from (x0, y0) to (x1, y1), cells: `kind`
+    /// is `"rect"` (two corners) or `"circle"` (center, then a rim point).
+    #[wasm_bindgen(js_name = addDragShape)]
+    pub fn add_drag_shape(
+        &mut self,
+        kind: &str,
+        x0: f64,
+        y0: f64,
+        x1: f64,
+        y1: f64,
+        palette: usize,
+    ) -> JsResult<()> {
+        let b = self
+            .session
+            .drag_shape(kind, (x0, y0), (x1, y1), palette)
+            .map_err(js_err)?;
+        self.materials_changed(b)
+    }
+
+    /// Sets every source's vacuum wavelength in cells, smoothly. Returns
+    /// how many were retuned (a plane wave is not; it is part of the build).
+    #[wasm_bindgen(js_name = retuneSources)]
+    pub fn retune_sources(&mut self, wavelength_cells: f64) -> JsResult<u32> {
+        let t = self.t_now();
+        let n = self
+            .session
+            .retune_sources(wavelength_cells, t)
+            .map_err(js_err)?;
+        self.sources_changed()?;
+        Ok(n as u32)
+    }
+
     /// Removes every shape and all paint; sources stay.
     #[wasm_bindgen(js_name = clearScene)]
     pub fn clear_scene(&mut self) -> JsResult<()> {
