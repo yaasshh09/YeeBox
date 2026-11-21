@@ -269,6 +269,92 @@ pub fn phased_array(
     Ok(out)
 }
 
+/// Shortest vacuum wavelength a source edit accepts, in cells. On the axis
+/// the grid stops propagating below about 2.8 to 3 cells for S up to
+/// 1/sqrt(2); 4 keeps a margin. Under 10 cells is allowed with a warning.
+pub const MIN_WAVELENGTH_CELLS: f64 = 4.0;
+
+/// Longest vacuum wavelength a source edit accepts, in cells (f = 0.005).
+/// The recommended CPML holds about -101 dB there and falls to -41 dB at
+/// f = 0.0025 (`PROGRESS.md`, CPML reflection vs frequency).
+pub const MAX_WAVELENGTH_CELLS: f64 = 200.0;
+
+/// A live edit of one source; absent fields stay as they are. Wavelengths
+/// are in vacuum, in cells, so `f = 1 / wavelength_cells` normalized.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourcePatch {
+    pub i: Option<usize>,
+    pub j: Option<usize>,
+    /// For CW, Ricker and modulated Gaussian sources.
+    pub wavelength_cells: Option<f64>,
+    pub amplitude: Option<f64>,
+    /// Radians, CW sources only.
+    pub phase: Option<f64>,
+}
+
+impl SourcePatch {
+    /// The patched source at normalized time `t_now`. A new CW frequency
+    /// shifts the phase so `2 pi f0 t + phase` is unchanged at `t_now`: the
+    /// drive keeps going without a step. Positions are not checked here.
+    pub fn apply(&self, src: &Source, t_now: f64) -> Result<Source> {
+        let mut out = *src;
+        out.i = self.i.unwrap_or(src.i);
+        out.j = self.j.unwrap_or(src.j);
+        if let Some(a) = self.amplitude {
+            finite("amplitude", a)?;
+            out.amplitude = a;
+        }
+        if let Some(cells) = self.wavelength_cells {
+            if !(MIN_WAVELENGTH_CELLS..=MAX_WAVELENGTH_CELLS).contains(&cells) {
+                return Err(FdtdError::InvalidParameter {
+                    name: "wavelength_cells",
+                    value: cells,
+                });
+            }
+            finite("t_now", t_now)?;
+            let f = 1.0 / cells;
+            out.waveform = match out.waveform {
+                Waveform::RampedCw {
+                    f0,
+                    ramp_periods,
+                    phase,
+                } => Waveform::RampedCw {
+                    f0: f,
+                    ramp_periods,
+                    phase: phase + 2.0 * std::f64::consts::PI * (f0 - f) * t_now,
+                },
+                Waveform::Ricker { t0, .. } => Waveform::Ricker { t0, f_peak: f },
+                Waveform::ModulatedGaussian { t0, tau, .. } => {
+                    Waveform::ModulatedGaussian { t0, tau, f0: f }
+                }
+                Waveform::Gaussian { .. } => {
+                    return Err(FdtdError::InvalidParameter {
+                        name: "wavelength_cells",
+                        value: cells,
+                    });
+                }
+            };
+        }
+        if let Some(p) = self.phase {
+            match &mut out.waveform {
+                Waveform::RampedCw { phase, .. } => {
+                    finite("phase", p)?;
+                    *phase = p;
+                }
+                _ => {
+                    return Err(FdtdError::InvalidParameter {
+                        name: "phase",
+                        value: p,
+                    });
+                }
+            }
+        }
+        out.waveform.validate()?;
+        Ok(out)
+    }
+}
+
 /// A wall with two slits, in cells: columns `x..x + thickness`, rows
 /// `y0..=y1`, opened wherever `|j - (center -+ separation / 2)| < width / 2`.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -628,22 +714,7 @@ impl Scene {
             self.check_pml_uniform()?;
         }
         for src in &self.sources {
-            src.waveform.validate()?;
-            finite("amplitude", src.amplitude)?;
-            // Wall nodes are PEC and never updated, so a source there is wrong.
-            if !(1..nx - 1).contains(&src.i) || !self.live_rows().contains(&src.j) {
-                return Err(FdtdError::OutOfDomain {
-                    what: "source",
-                    i: src.i,
-                    j: src.j,
-                });
-            }
-            if self.in_pml(src.i, src.j) {
-                return Err(FdtdError::SourceInPml { i: src.i, j: src.j });
-            }
-            if self.materials[self.material_at(src.i, src.j)] == Material::Pec {
-                return Err(FdtdError::SourceOnPec { i: src.i, j: src.j });
-            }
+            self.check_source(src)?;
         }
         for m in &self.monitors {
             self.check_monitor(m)?;
@@ -651,6 +722,42 @@ impl Scene {
         if let Some(pw) = &self.plane_wave {
             self.check_plane_wave(pw)?;
         }
+        Ok(())
+    }
+
+    /// One source on its own: waveform, amplitude, and a live interior node
+    /// outside the layer and off PEC.
+    fn check_source(&self, src: &Source) -> Result<()> {
+        src.waveform.validate()?;
+        finite("amplitude", src.amplitude)?;
+        // Wall nodes are PEC and never updated, so a source there is wrong.
+        if !(1..self.grid.nx - 1).contains(&src.i) || !self.live_rows().contains(&src.j) {
+            return Err(FdtdError::OutOfDomain {
+                what: "source",
+                i: src.i,
+                j: src.j,
+            });
+        }
+        if self.in_pml(src.i, src.j) {
+            return Err(FdtdError::SourceInPml { i: src.i, j: src.j });
+        }
+        if self.materials[self.material_at(src.i, src.j)] == Material::Pec {
+            return Err(FdtdError::SourceOnPec { i: src.i, j: src.j });
+        }
+        Ok(())
+    }
+
+    /// Applies `patch` to source `index` of a validated scene at normalized
+    /// time `t_now`, checking only that source, so it is cheap enough for a
+    /// slider or a drag. On error the scene is unchanged.
+    pub fn patch_source(&mut self, index: usize, patch: &SourcePatch, t_now: f64) -> Result<()> {
+        let old = self.sources.get(index).ok_or(FdtdError::InvalidParameter {
+            name: "source index",
+            value: index as f64,
+        })?;
+        let new = patch.apply(old, t_now)?;
+        self.check_source(&new)?;
+        self.sources[index] = new;
         Ok(())
     }
 
@@ -1609,6 +1716,92 @@ pub(crate) mod tests {
         let mut twice = s.clone();
         twice.with_palette();
         assert_eq!(twice, s);
+    }
+
+    fn cw_sample() -> Scene {
+        let mut s = sample();
+        s.sources[0].waveform = Waveform::RampedCw {
+            f0: 0.05,
+            ramp_periods: 3.0,
+            phase: 0.0,
+        };
+        s
+    }
+
+    fn wavelength(cells: f64) -> SourcePatch {
+        SourcePatch {
+            wavelength_cells: Some(cells),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn source_patch_sets_wavelength() {
+        let mut s = cw_sample();
+        s.patch_source(0, &wavelength(40.0), 0.0).unwrap();
+        assert!(matches!(s.sources[0].waveform, Waveform::RampedCw { f0, .. } if f0 == 1.0 / 40.0));
+        let mut s = sample();
+        s.patch_source(0, &wavelength(25.0), 0.0).unwrap();
+        assert!(matches!(s.sources[0].waveform, Waveform::Ricker { f_peak, .. } if f_peak == 0.04));
+        // The limits: 4 cells (above the grid cutoff) to 200 (the CPML floor).
+        for (cells, ok) in [(3.99, false), (4.0, true), (200.0, true), (200.01, false)] {
+            assert_eq!(
+                cw_sample().patch_source(0, &wavelength(cells), 0.0).is_ok(),
+                ok,
+                "{cells}"
+            );
+        }
+        // A plain Gaussian has no frequency, and only CW has a phase.
+        s.sources[0].waveform = Waveform::Gaussian {
+            t0: 60.0,
+            tau: 10.0,
+        };
+        assert!(s.patch_source(0, &wavelength(30.0), 0.0).is_err());
+        let phase = SourcePatch {
+            phase: Some(1.0),
+            ..Default::default()
+        };
+        assert!(sample().patch_source(0, &phase, 0.0).is_err());
+        assert!(sample().patch_source(1, &phase, 0.0).is_err());
+    }
+
+    #[test]
+    fn source_patch_keeps_cw_continuous() {
+        // Past the ramp, a new frequency picks up the old phase at t_now, so
+        // the drive has no step that would ring across the band.
+        for t in [100.0, 1234.5, 20000.0] {
+            let mut s = cw_sample();
+            let before = s.sources[0].value_at(t);
+            s.patch_source(0, &wavelength(33.0), t).unwrap();
+            let after = s.sources[0].value_at(t);
+            assert!((after - before).abs() < 1e-9, "t {t}: {before} vs {after}");
+        }
+    }
+
+    #[test]
+    fn source_patch_moves_and_checks_position() {
+        let mut s = sample();
+        let to = |i, j| SourcePatch {
+            i: Some(i),
+            j: Some(j),
+            ..Default::default()
+        };
+        s.patch_source(0, &to(3, 4), 0.0).unwrap();
+        assert_eq!((s.sources[0].i, s.sources[0].j), (3, 4));
+        // Onto the PEC circle: refused, the source stays where it was.
+        assert_eq!(
+            s.patch_source(0, &to(25, 15), 0.0),
+            Err(FdtdError::SourceOnPec { i: 25, j: 15 })
+        );
+        assert_eq!((s.sources[0].i, s.sources[0].j), (3, 4));
+        assert!(s.patch_source(0, &to(0, 4), 0.0).is_err());
+        let amp = SourcePatch {
+            amplitude: Some(2.5),
+            ..Default::default()
+        };
+        s.patch_source(0, &amp, 0.0).unwrap();
+        assert_eq!(s.sources[0].amplitude, 2.5);
+        s.validate().unwrap();
     }
 
     #[test]
