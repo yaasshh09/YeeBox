@@ -6,7 +6,7 @@ use crate::{ErrorInfo, JsResult, js_err};
 use fdtd_core::grid::Component;
 use fdtd_core::kernel::{Comparator, GPU_GATE, Snapshot};
 use fdtd_core::scene::Scene;
-use fdtd_core::selftest::{CHECKPOINTS, snapshots};
+use fdtd_core::selftest::{CHECKPOINTS, read_golden};
 use fdtd_gpu::{Gpu, GpuSim};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -36,7 +36,7 @@ struct Report {
 #[wasm_bindgen(js_name = runSelfTest)]
 pub async fn run_self_test(name: String, scene_json: String, golden: Vec<u8>) -> JsResult<String> {
     let scene = Scene::from_json(&scene_json).map_err(js_err)?;
-    let reference = snapshots(&golden, scene.grid.nx * scene.grid.ny).map_err(js_err)?;
+    let reference = read_golden(&golden, scene.grid.nx * scene.grid.ny).map_err(js_err)?;
     let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
     desc.backends = wgpu::Backends::BROWSER_WEBGPU;
     let instance = wgpu::Instance::new(desc);
@@ -57,7 +57,13 @@ pub async fn run_self_test(name: String, scene_json: String, golden: Vec<u8>) ->
         {
             snap.fields[f] = sim.read_async(c).await.map_err(js_err)?;
         }
-        let d = cmp.checkpoint(n, &reference[k], &snap).map_err(js_err)?;
+        // The reference peak over the run so far, as Tier 4 measures it.
+        for (_, p) in reference.peaks.iter().filter(|(s, _)| *s <= n) {
+            cmp.raise_field_peaks(*p);
+        }
+        let d = cmp
+            .checkpoint(n, &reference.snapshots[k], &snap)
+            .map_err(js_err)?;
         diffs.push(Row {
             step: n,
             fields: d.fields,

@@ -248,6 +248,15 @@ impl Comparator {
         Comparator::default()
     }
 
+    /// Raises the field peaks (Ez, Hx, Hy) to reference maxima seen at a
+    /// step where no comparison is made, so a caller that compares only at
+    /// a few checkpoints still divides by the peak over the whole run.
+    pub fn raise_field_peaks(&mut self, peaks: [f64; 3]) {
+        for (p, v) in self.peak.iter_mut().zip(peaks) {
+            *p = p.max(v);
+        }
+    }
+
     /// The `Diff` of candidate `b` against reference `a` at `step`.
     pub fn checkpoint(&mut self, step: u64, a: &Snapshot, b: &Snapshot) -> Result<Diff> {
         let mut fields = [0.0; 3];

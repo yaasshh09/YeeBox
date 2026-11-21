@@ -6,6 +6,12 @@ export default defineConfig({
   // subpath and from a local preview.
   base: "./",
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      // The self-test is its own page so the app never loads its data.
+      input: { main: "index.html", selftest: "selftest.html" },
+    },
+  },
   worker: { format: "es" },
   server: {
     // The presets and golden files live in the repo's validation folder.

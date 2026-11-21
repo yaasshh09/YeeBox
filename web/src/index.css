@@ -406,3 +406,18 @@ input:focus-visible {
   min-height: 0;
   display: flex;
 }
+.selftest {
+  max-width: 760px;
+  margin: 32px auto;
+  padding: 0 16px;
+}
+.selftest h1 {
+  font-size: 22px;
+  font-weight: 600;
+}
+#verdict.pass {
+  color: var(--ok);
+}
+#verdict.fail {
+  color: var(--danger);
+}
