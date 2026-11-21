@@ -288,10 +288,7 @@ fn render_pixels(
     Ok((0..h as usize)
         .flat_map(|y| {
             let at = y * row as usize;
-            bytes[at..at + w as usize * 4]
-                .chunks_exact(4)
-                .map(|c| [c[0], c[1], c[2], c[3]])
-                .collect::<Vec<_>>()
+            bytes[at..at + w as usize * 4].as_chunks::<4>().0.to_vec()
         })
         .collect())
 }
