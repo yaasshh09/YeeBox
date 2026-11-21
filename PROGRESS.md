@@ -5,9 +5,9 @@ entry at the top of the session log.
 
 ## Current state
 
-**Active phase:** Phase 5 (Phases 0 to 4 done, CI not yet run on GitHub)
+**Active phase:** Phase 5, built; the acceptance items that need people or other hardware are open (Phases 0 to 4 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** Phase 5 part D (the web app in `web/`); parts A to C are done; the owner pushes when ready so CI runs once on lavapipe
+**Next action:** the owner pushes and enables GitHub Pages (source: GitHub Actions), then runs the ten-second test with three people, opens a shared link on a second device, and records an integrated GPU, Safari and Edge
 
 ## Decisions log
 
@@ -97,6 +97,13 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-21 | The oscilloscope uses one live probe: a tap slot reserved at the end of every gather row, moved in place | probes can move without changing the layout of batches in flight; every step is sampled |
 | 2026-11-21 | The CPU fallback draws with `render::CpuPainter`, the render shader's steps in f64 | Tier 4 holds it within one colormap step of the GPU pixels |
 | 2026-11-21 | The browser self-test compares the browser GPU kernel with committed native f64 fields (`validation/golden/selftest`, three scenes, steps 1000 and 2000, f32) through `Comparator` and `GPU_GATE`; a core test keeps the files fresh | the acceptance names the native kernel; the gate and measure are the Tier 4 ones |
+| 2026-11-21 | The self-test goldens also carry the reference's max abs Ez, Hx, Hy every 250 steps; the browser raises the running peaks with them before comparing | the Tier 4 measure is the peak so far checked every 250 steps; comparing at two checkpoints alone divided round-off by a drained residue |
+| 2026-11-21 | The web app talks to the wasm `Sim` through one RPC by method name: direct on the main thread for the GPU, messages to a worker that owns its own loop for the CPU | one UI code path for both kernels, a responsive page on the CPU |
+| 2026-11-21 | Each engine has a pixel scale: device pixels (at most 2x) on the GPU, about 2 px per cell on the CPU, used for canvas size and pointer mapping alike | painting a full-resolution canvas in f64 starved the CPU loop at 1 step per frame |
+| 2026-11-21 | Presets come from `web/scripts/presets.py`; full sizes in `web/src/presets`, compact twins in `validation/scenes`; display gain about 1 / p99 of abs Ez measured on the GPU | geometry written as data; the gain is a display number, measured, not guessed |
+| 2026-11-21 | Share links are `#s=1.` plus base64url of deflate-raw scene JSON (native `CompressionStream`); over 8000 characters Share saves a file; links pasted into an open tab load on `hashchange` | no dependency, versioned, exact |
+| 2026-11-21 | End-to-end tests run the production build on headless Chromium, which has no WebGPU, so they cover the CPU path; the GPU path and self-test are checked headed in Chrome and Firefox | a CI runner has no browser GPU |
+| 2026-11-21 | CI builds the site, checks the first-load weight, runs the e2e tests and deploys `web/dist` to GitHub Pages on main | the phase asks CI to build and publish |
 
 ## Measured numbers
 
@@ -129,11 +136,18 @@ Fill in as they become available. These go in the README.
 | Live probe vs CPU Ez at its node | 6.9e-7 of peak | 300 steps in batches of 7; gate 1e-4 | 2026-11-21 |
 | CPU painter vs GPU pixels | within one colormap step (8 levels) | both views, zoom 1 and 3, letterboxed | 2026-11-21 |
 | wasm module size | 796 KB, 213 KB gzipped | release, `wasm-bindgen --target web`, before the web app | 2026-11-21 |
+| Browser throughput, 1024 x 1024 | about 2.2 Gcells/s, 29 to 31 steps per 60 fps frame | headed Chromium (WebGPU, D3D12), GTX 1660 Ti, CPML 16, speed cap 64, adaptive pacing | 2026-11-21 |
+| Browser throughput, double slit preset (800 x 500) | 1.1 Gcells/s at 48 steps per frame before pacing settles; 480 Mcells/s at the default cap of 16 | same | 2026-11-21 |
+| CPU fallback throughput | 13 Mcells/s, 16 steps per frame (the default cap) | compact double slit 200 x 128, headless Chromium worker | 2026-11-21 |
+| Load to a running solver | 367 ms | local production build (`vite preview`), headed Chromium, no network throttling; the mid-range laptop number is still open | 2026-11-21 |
+| First-load weight | 562 kB gzipped (wasm 248 kB, JS 104 kB, three Poppins weights 208 kB) | `web/scripts/weight.mjs`; budget 2 MB | 2026-11-21 |
+| Browser GPU vs native CPU (self-test page) | 5.1e-6 of peak worst (`painted_walls` Hx); cavity 1.1e-6, rod 6.7e-7 | Chrome 157 and Firefox 159 on the GTX 1660 Ti; gate 1e-4 | 2026-11-21 |
+| Share link | a painted 800 x 500 scene in 2854 characters, reopened byte-identical | headed Chromium | 2026-11-21 |
 | GPU f32 TF/SF leakage | about 5e-8 of the incident amplitude (-146 dB) | one-node box, no other source; CPU leaves 1e-16 | 2026-11-14 |
-| Throughput, integrated GPU | not measured, no integrated GPU on this machine | | |
+| Throughput, integrated GPU | not measured, no integrated GPU on this machine (needs the owner) | | |
 | Throughput, discrete GPU | 3.0 Gcells/s, 2864 steps/s, 47.7 steps per 60 fps frame (16-cell CPML: 3.0 Gcells/s, 48.1) | GTX 1660 Ti, Vulkan, 1024 x 1024, 8 steps per submit, `fdtd bench` | 2026-11-14 |
 | Throughput, CPU reference | 68 Mcells/s | f64, one thread, 1024 x 1024 with CPML, release | 2026-11-14 |
-| Cold load to first frame | | device | |
+| Cold load to first frame | 367 ms local (see the browser rows); a cold load over a network on a mid-range laptop is still open | device | 2026-11-21 |
 | A1 shape error, 1000 cells | 0 (exact) | S = 1, gate 1e-12 | 2026-11-13 |
 | A2 phase velocity error | 0 at 10, 20, 40 cpw (below 1 ulp of k) | S = 0.5, L = 200, gate 1e-4 | 2026-11-13 |
 | A3 PEC reflection error | 2.1e-15 of peak (S = 1), 0 (S = 0.5 image test) | gate 1e-10 | 2026-11-13 |
@@ -176,6 +190,10 @@ Fill in as they become available. These go in the README.
 | Phase 4 "TF/SF corrections on the GPU" | Corrections run on the GPU, the auxiliary 1D grid on the CPU in f64 | no second auxiliary implementation; about 100 nodes per step | yes |
 | `tfsf_thin_plus_x` scene | Has a point source besides the one-node TF/SF box | without it every H edge is scattered field, the CPU leaves 1e-16 and any per-field ratio divides two floors | yes |
 | Phase 3 report text | `report.md` had lines indented by 9 spaces, so the slab section rendered as a code block | a scripted edit turned backslash line continuations into literal spaces; fixed in 7b12f54 | yes, fixed |
+| Phase 5 "CPU fallback at 256 x 256" | The compact presets are at most 200 x 160 | the Tier 4 scene set caps scenes at 200 x 160 to keep its CPU runs quick, and the compact twins live there | yes |
+| Phase 5 presets "around 1024 wide" | The full presets are 800 x 500, 700 x 300 and 700 x 450 | sized to their physics at 20 cells per wavelength; the 1024 x 1024 throughput target is measured on its own grid | yes |
+| Phase 5 self-test "matches the native CPU kernel" | Full fields are compared at steps 1000 and 2000; the peaks come from every 250 steps of the native run | the same measure as Tier 4 with a twentieth of the data | yes |
+| Phase 5 ten-second test, second device, Safari, Edge, integrated GPU | Not done by me | they need people and hardware I do not have | open, for the owner |
 
 ## CI coverage
 
@@ -188,7 +206,9 @@ software adapter being available on the runner).
 | 2 Analytic | yes | | A1 to A15 through `fdtd_core::cases` (and R + T = 1), plus late-time stability with CPML |
 | 3 Invariant | yes | | quiescence, linearity (1D and 2D); energy conservation and decay, reciprocity, mirror symmetry, padding (2D); the same with CPML; periodic y (1D equivalence, energy, translation); TF/SF linearity, quiescence, mirror and transpose; reciprocity with TF/SF and monitors |
 | Report | | yes | `fdtd report` regenerates `validation/report` (now with the Tier 4 table and growth plot); not wired into CI yet |
-| 4 GPU vs CPU | yes, on lavapipe (not yet seen running) | | `crates/fdtd-gpu/tests/tier4.rs`; CI sets `FDTD_REQUIRE_GPU=1`; locally on the GTX 1660 Ti |
+| 4 GPU vs CPU | yes, on lavapipe (not yet seen running) | | `crates/fdtd-gpu/tests/tier4.rs`; CI sets `FDTD_REQUIRE_GPU=1`; locally on the GTX 1660 Ti; now also live edits, the live probe, the render and the CPU painter |
+| Web unit | yes | | Vitest: uppercase rule, pacing, formatting, share links |
+| Web end to end | yes (CPU path) | GPU path | Playwright on the production build; the GPU self-test page runs headed in Chrome and Firefox only |
 | 5 External | | | |
 
 ## Session log
@@ -203,6 +223,41 @@ Format:
 
 Write the Broke field carefully, especially when the cause was embarrassing.
 It becomes the devlog.
+
+### 2026-11-21 (Phase 5)
+**Landed:** Phase 5 is built. In core: a paint layer, capsule brush strokes,
+slit pairs, a paint palette, live source patches that keep a CW drive
+continuous, late-starting CW sources, status in physical units, live material
+and source edits on the `Kernel` trait, and a rule that a CPML node takes its
+material from the interface (which replaced the old uniformity check). In the
+GPU crate: an async device, non-blocking tap and field reads, OKLab colormaps,
+a render pass straight from the simulation buffers, an intensity view, a live
+probe and a CPU painter that matches the GPU pixels. `fdtd-wasm` serves one
+`Sim` with a GPU or CPU backend, every edit, and a browser self-test against
+committed native fields. `web/` is the app in the AtomSIM idiom: three presets,
+eight tools, transport, view, wavelength, oscilloscope, status strip, share
+links, Verify panel, hints, a self-test page, and CI that builds, tests and
+deploys it. 229 Rust tests, 5 Vitest, 3 Playwright, all green. About 60
+commits, nothing pushed.
+**Broke:** Five things worth remembering. First, the browser self-test failed
+`painted_walls` at 4e-2 while native Tier 4 passed at 9e-6. Before touching
+the gate I bisected with scene variants: only the CPML ones failed. The cause
+was my measure, not the browser. I compared at steps 1000 and 2000 only, and by
+then the CPML had drained the pulse, so the "peak so far" was a residue and
+round-off looked huge. The goldens now carry the maxima every 250 steps, and
+the worst is 5.1e-6. Second, the CPU fallback ran at 1 step per frame because
+painting a full-resolution canvas in f64 cost more than the solve; the CPU
+canvas is now about 2 px per cell. Third, a link pasted into an open tab did
+nothing, because only the hash changed; the app listens for `hashchange` now.
+Fourth, I piped clippy into `tail` once and a lint failure slipped into a
+commit (fixed in the next one); gates no longer pipe clippy. Fifth, Node on
+Windows read a Git Bash path as `C:\c\Users\...` and left a stray `C:\c` folder
+holding one video file; the safety check rightly would not let me delete it,
+so the owner should remove it.
+**Open:** the ten-second test with three people, a shared link on a second
+device, Safari, Edge, an integrated GPU, and a networked cold load on a
+mid-range laptop. CI and Pages have never run.
+**Next:** push, enable Pages, then the people and hardware checks above.
 
 ### 2026-11-14 (Phase 4)
 **Landed:** Phase 4 is done. `fdtd-gpu` runs the TMz solver in WGSL through
