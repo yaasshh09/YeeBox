@@ -11,7 +11,7 @@ use std::path::{Path, PathBuf};
 
 /// Every field, probe record and spectrum within this fraction of the
 /// reference peak, at every checkpoint (Phase 4 acceptance).
-pub const GATE: f64 = 1e-4;
+pub const GATE: f64 = fdtd_core::kernel::GPU_GATE;
 
 /// The steps of the standard run.
 pub const STEPS: u64 = 2000;

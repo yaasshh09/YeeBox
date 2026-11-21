@@ -11,6 +11,8 @@ use fdtd_core::FdtdError;
 use wasm_bindgen::prelude::*;
 
 pub mod cpu;
+#[cfg(target_arch = "wasm32")]
+mod selftest;
 pub mod session;
 #[cfg(target_arch = "wasm32")]
 mod sim;

@@ -43,6 +43,11 @@ pub trait Kernel: Sized {
     fn set_sources(&mut self, scene: &Scene) -> Result<()>;
 }
 
+/// The Tier 4 gate: an f32 kernel within this fraction of the reference
+/// peak field (`Comparator`). Shared by the native tests and the browser
+/// self-test so both hold the same line.
+pub const GPU_GATE: f64 = 1e-4;
+
 /// What a kernel is built from that a live edit must not change: the grid,
 /// the y wrap, the material table, the CPML and the plane wave. Paint,
 /// shapes and sources may change; anything else needs a new kernel.
