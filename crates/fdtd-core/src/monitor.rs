@@ -302,6 +302,7 @@ mod tests {
                 },
                 amplitude: 1.0,
             }),
+            paint: None,
         }
     }
 
@@ -522,6 +523,7 @@ mod tests {
                 },
                 amplitude: 1.0,
             }),
+            paint: None,
         };
         let freqs = [0.02, 0.035, 0.05, 0.065, 0.08];
         let node = 60;

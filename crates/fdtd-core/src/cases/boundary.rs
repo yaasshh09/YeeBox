@@ -101,6 +101,7 @@ pub fn a8() -> Result<Vec<CaseResult>> {
         pml: Some(PmlSpec::recommended(16)),
         periodic_y: false,
         plane_wave: None,
+        paint: None,
     };
     let mut sim = SimTm::from_scene(&scene)?;
     let (steps, period) = (3000, 40);

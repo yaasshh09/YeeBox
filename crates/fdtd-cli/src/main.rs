@@ -85,6 +85,7 @@ fn bench_scene(n: usize, pml: bool) -> Scene {
         pml: pml.then(|| PmlSpec::recommended(16)),
         periodic_y: false,
         plane_wave: None,
+        paint: None,
     }
 }
 

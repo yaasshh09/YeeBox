@@ -416,6 +416,7 @@ mod tests {
             pml: Some(spec),
             periodic_y: true,
             plane_wave: None,
+            paint: None,
         };
         let mut two = SimTm::from_scene(&scene).unwrap();
         let mut one = Sim1d::new(nx, s, Boundary1d::Cpml(spec), Boundary1d::Cpml(spec)).unwrap();

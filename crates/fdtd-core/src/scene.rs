@@ -44,6 +44,90 @@ pub struct Scene {
     /// TF/SF plane wave, axis-aligned. Absent means none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plane_wave: Option<PlaneWave>,
+    /// Freehand paint over the geometry. Absent means none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub paint: Option<Paint>,
+}
+
+/// Freehand paint: an override material index per Ez node, laid out
+/// `j * nx + i`, or `None` where the geometry shows through. Painted after
+/// every shape. Stored dense, written to JSON as runs of equal entries,
+/// `{"runs": [[null, 500], [2, 12], ...]}`, so a stroke costs a few runs.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "PaintRuns", into = "PaintRuns")]
+pub struct Paint {
+    ids: Vec<Option<usize>>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PaintRuns {
+    runs: Vec<(Option<usize>, usize)>,
+}
+
+impl TryFrom<PaintRuns> for Paint {
+    type Error = String;
+
+    /// Refuses more than `MAX_NODES` entries before allocating them, since
+    /// paint arrives in shared links.
+    fn try_from(r: PaintRuns) -> std::result::Result<Self, String> {
+        let mut total = 0usize;
+        for &(_, n) in &r.runs {
+            total = total.saturating_add(n);
+        }
+        if total > MAX_NODES {
+            return Err(format!("paint has {total} entries, more than {MAX_NODES}"));
+        }
+        let mut ids = Vec::with_capacity(total);
+        for (id, n) in r.runs {
+            ids.extend(std::iter::repeat_n(id, n));
+        }
+        Ok(Paint { ids })
+    }
+}
+
+impl From<Paint> for PaintRuns {
+    fn from(p: Paint) -> Self {
+        let mut runs: Vec<(Option<usize>, usize)> = Vec::new();
+        for id in p.ids {
+            match runs.last_mut() {
+                Some((last, n)) if *last == id => *n += 1,
+                _ => runs.push((id, 1)),
+            }
+        }
+        PaintRuns { runs }
+    }
+}
+
+impl Paint {
+    /// `len` entries, none painted. A scene needs `nx * ny`.
+    pub fn blank(len: usize) -> Paint {
+        Paint {
+            ids: vec![None; len],
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.ids.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.ids.is_empty()
+    }
+
+    /// The override at node index `k` (`j * nx + i`), `None` if unpainted
+    /// or out of range.
+    pub fn get(&self, k: usize) -> Option<usize> {
+        self.ids.get(k).copied().flatten()
+    }
+
+    /// Sets or clears the override at node index `k`; out of range does
+    /// nothing.
+    pub fn set(&mut self, k: usize, id: Option<usize>) {
+        if let Some(slot) = self.ids.get_mut(k) {
+            *slot = id;
+        }
+    }
 }
 
 fn is_false(b: &bool) -> bool {
@@ -270,9 +354,17 @@ impl Shape {
 }
 
 impl Scene {
-    /// Material index of Ez node (i, j): the last shape containing the node's
-    /// position (i, j), or 0 if none does. Assumes a validated scene.
+    /// Material index of Ez node (i, j): its paint if painted, else the last
+    /// shape containing the node's position (i, j), else 0. Assumes a
+    /// validated scene.
     pub fn material_at(&self, i: usize, j: usize) -> usize {
+        if let Some(id) = self
+            .paint
+            .as_ref()
+            .and_then(|p| p.get(j * self.grid.nx + i))
+        {
+            return id;
+        }
         let (x, y) = (i as f64, j as f64);
         self.geometry
             .iter()
@@ -379,6 +471,23 @@ impl Scene {
         }
         for shape in &self.geometry {
             shape.validate(self.materials.len())?;
+        }
+        // Before anything below reads materials through `material_at`.
+        if let Some(paint) = &self.paint {
+            if paint.len() != nx * ny {
+                return Err(FdtdError::InvalidParameter {
+                    name: "paint length",
+                    value: paint.len() as f64,
+                });
+            }
+            if let Some(id) = paint
+                .ids
+                .iter()
+                .flatten()
+                .find(|&&id| id >= self.materials.len())
+            {
+                return Err(FdtdError::UnknownMaterial { id: *id });
+            }
         }
         if let Some(p) = &self.pml {
             p.validate()?;
@@ -608,6 +717,7 @@ pub(crate) mod tests {
             pml: None,
             periodic_y: false,
             plane_wave: None,
+            paint: None,
         }
     }
 
@@ -1300,5 +1410,74 @@ pub(crate) mod tests {
             rejects(|s| (s.sources[0].i, s.sources[0].j) = (25, 15)),
             FdtdError::SourceOnPec { i: 25, j: 15 }
         );
+    }
+
+    fn painted(cells: &[(usize, usize)]) -> Paint {
+        let mut p = Paint::blank(40 * 30);
+        for &(k, id) in cells {
+            p.set(k, Some(id));
+        }
+        p
+    }
+
+    #[test]
+    fn paint_json_is_runs() {
+        let mut s = sample();
+        s.paint = Some(painted(&[(5, 2), (6, 2), (1199, 0)]));
+        let text = s.to_json().unwrap();
+        let v: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(
+            v["paint"]["runs"],
+            serde_json::json!([[null, 5], [2, 2], [null, 1192], [0, 1]])
+        );
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+        // No paint writes no key, so v1 files stay byte for byte the same.
+        assert!(!sample().to_json().unwrap().contains("paint"));
+    }
+
+    #[test]
+    fn paint_overrides_geometry() {
+        let mut s = sample();
+        let plain = s.rasterize();
+        s.paint = Some(Paint::blank(40 * 30));
+        assert_eq!(s.rasterize(), plain);
+        // (7, 8) sits in the eps 4 rect, (20, 25) in vacuum.
+        assert_eq!(plain[8 * 40 + 7], 1);
+        s.paint = Some(painted(&[(8 * 40 + 7, 0), (25 * 40 + 20, 2)]));
+        assert_eq!(s.material_at(7, 8), 0);
+        assert_eq!(s.material_at(20, 25), 2);
+        let r = s.rasterize();
+        let changed: Vec<usize> = (0..r.len()).filter(|&k| r[k] != plain[k]).collect();
+        assert_eq!(changed, vec![8 * 40 + 7, 25 * 40 + 20]);
+    }
+
+    #[test]
+    fn paint_validation() {
+        assert_eq!(
+            rejects(|s| s.paint = Some(Paint::blank(10))),
+            FdtdError::InvalidParameter {
+                name: "paint length",
+                value: 10.0
+            }
+        );
+        assert_eq!(
+            rejects(|s| s.paint = Some(painted(&[(0, 3)]))),
+            FdtdError::UnknownMaterial { id: 3 }
+        );
+        // Paint counts for every rule that reads materials: PEC under a source.
+        assert_eq!(
+            rejects(|s| s.paint = Some(painted(&[(20 * 40 + 12, 2)]))),
+            FdtdError::SourceOnPec { i: 12, j: 20 }
+        );
+    }
+
+    #[test]
+    fn paint_runs_are_bounded() {
+        // Shared links are untrusted: a huge run count must fail, not allocate.
+        let text = format!(r#"{{"runs": [[null, {}]]}}"#, MAX_NODES + 1);
+        assert!(serde_json::from_str::<Paint>(&text).is_err());
+        let p: Paint = serde_json::from_str(r#"{"runs": [[null, 3], [1, 2]]}"#).unwrap();
+        assert_eq!(p.len(), 5);
+        assert_eq!((p.get(2), p.get(3)), (None, Some(1)));
     }
 }

@@ -69,6 +69,16 @@ fn features(scene: &Scene) -> BTreeSet<&'static str> {
             Material::Dielectric { .. } => f.insert("dielectric shape"),
         };
     }
+    if let Some(paint) = &scene.paint {
+        let ids: BTreeSet<usize> = (0..paint.len()).filter_map(|k| paint.get(k)).collect();
+        for id in ids {
+            f.insert(match scene.materials[id] {
+                Material::Pec => "pec paint",
+                _ if id == 0 => "erase paint",
+                _ => "dielectric paint",
+            });
+        }
+    }
     for s in &scene.sources {
         f.insert(match s.kind {
             SourceKind::Soft => "soft source",
@@ -150,6 +160,9 @@ fn scene_set_covers_every_feature() {
         "pec shape",
         "lossy material",
         "dielectric shape",
+        "pec paint",
+        "dielectric paint",
+        "erase paint",
         "soft source",
         "hard source",
         "two sources on one node",

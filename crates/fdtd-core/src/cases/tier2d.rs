@@ -29,6 +29,7 @@ fn vacuum(nx: usize, ny: usize, s: f64) -> Scene {
         pml: None,
         periodic_y: false,
         plane_wave: None,
+        paint: None,
     }
 }
 

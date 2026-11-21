@@ -125,6 +125,7 @@ impl ReflectionSetup {
             pml,
             periodic_y: false,
             plane_wave: None,
+            paint: None,
         }
     }
 

@@ -408,6 +408,7 @@ pub(crate) mod tests {
             pml: None,
             periodic_y: false,
             plane_wave: None,
+            paint: None,
         }
     }
 
