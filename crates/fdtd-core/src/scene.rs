@@ -269,6 +269,89 @@ pub fn phased_array(
     Ok(out)
 }
 
+/// A wall with two slits, in cells: columns `x..x + thickness`, rows
+/// `y0..=y1`, opened wherever `|j - (center -+ separation / 2)| < width / 2`.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SlitPair {
+    pub x: usize,
+    pub thickness: usize,
+    pub y0: usize,
+    pub y1: usize,
+    /// Row halfway between the slit centers; may be fractional.
+    pub center: f64,
+    /// Center to center distance of the slits, in cells.
+    pub separation: f64,
+    /// Width of each slit, in cells.
+    pub width: f64,
+    pub material: usize,
+}
+
+/// The wall of a slit pair as ordinary rects, one per run of closed rows,
+/// with integer edges so the open rows are exact. Overlapping slits just
+/// merge into one opening. `Scene::validate` checks where the rects land.
+pub fn slit_pair(spec: &SlitPair) -> Result<Vec<Shape>> {
+    let SlitPair {
+        x,
+        thickness,
+        y0,
+        y1,
+        center,
+        separation,
+        width,
+        material,
+    } = *spec;
+    finite("center", center)?;
+    for (name, v) in [("separation", separation), ("width", width)] {
+        if !(v.is_finite() && v >= 0.0) {
+            return Err(FdtdError::InvalidParameter { name, value: v });
+        }
+    }
+    if width == 0.0 {
+        return Err(FdtdError::InvalidParameter {
+            name: "width",
+            value: width,
+        });
+    }
+    if thickness == 0 {
+        return Err(FdtdError::InvalidParameter {
+            name: "thickness",
+            value: 0.0,
+        });
+    }
+    if y1 < y0 {
+        return Err(FdtdError::InvalidParameter {
+            name: "y1",
+            value: y1 as f64,
+        });
+    }
+    let open = |j: usize| {
+        [center - separation / 2.0, center + separation / 2.0]
+            .iter()
+            .any(|c| (j as f64 - c).abs() < width / 2.0)
+    };
+    let mut shapes = Vec::new();
+    let mut run: Option<usize> = None;
+    for j in y0..=y1 + 1 {
+        let closed = j <= y1 && !open(j);
+        match (closed, run) {
+            (true, None) => run = Some(j),
+            (false, Some(start)) => {
+                shapes.push(Shape::Rect {
+                    x0: x as f64,
+                    y0: start as f64,
+                    x1: (x + thickness - 1) as f64,
+                    y1: (j - 1) as f64,
+                    material,
+                });
+                run = None;
+            }
+            _ => {}
+        }
+    }
+    Ok(shapes)
+}
+
 /// A field monitor. Frequencies are normalized (cycles per unit time).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
@@ -1453,6 +1536,75 @@ pub(crate) mod tests {
             s.validate(),
             Err(FdtdError::OutOfDomain { what: "source", .. })
         ));
+    }
+
+    #[test]
+    fn slit_pair_open_cells() {
+        // Slits centered on rows 11 and 19, 3 rows wide: 10..=12 and 18..=20.
+        let spec = SlitPair {
+            x: 20,
+            thickness: 2,
+            y0: 1,
+            y1: 28,
+            center: 15.0,
+            separation: 8.0,
+            width: 3.0,
+            material: 2,
+        };
+        let shapes = slit_pair(&spec).unwrap();
+        assert_eq!(shapes.len(), 3);
+        let s = empty(40, 30, shapes);
+        let walls = cells(&s, 2);
+        for i in [20, 21] {
+            let rows: Vec<usize> = walls.iter().filter(|c| c.0 == i).map(|c| c.1).collect();
+            let want: Vec<usize> = (1..=28)
+                .filter(|j| !(10..=12).contains(j) && !(18..=20).contains(j))
+                .collect();
+            assert_eq!(rows, want, "column {i}");
+        }
+        assert!(walls.iter().all(|c| c.0 == 20 || c.0 == 21));
+        // An even width opens the rows strictly inside, here row 11 only.
+        let narrow = slit_pair(&SlitPair { width: 2.0, ..spec }).unwrap();
+        let s = empty(40, 30, narrow);
+        assert!(!cells(&s, 2).contains(&(20, 11)));
+        assert!(cells(&s, 2).contains(&(20, 10)) && cells(&s, 2).contains(&(20, 12)));
+    }
+
+    #[test]
+    fn slit_pair_rejects_bad_input() {
+        let spec = SlitPair {
+            x: 20,
+            thickness: 2,
+            y0: 1,
+            y1: 28,
+            center: 15.0,
+            separation: 8.0,
+            width: 3.0,
+            material: 2,
+        };
+        assert!(
+            slit_pair(&SlitPair {
+                thickness: 0,
+                ..spec
+            })
+            .is_err()
+        );
+        assert!(slit_pair(&SlitPair { width: 0.0, ..spec }).is_err());
+        assert!(slit_pair(&SlitPair { y1: 0, ..spec }).is_err());
+        assert!(
+            slit_pair(&SlitPair {
+                center: f64::INFINITY,
+                ..spec
+            })
+            .is_err()
+        );
+        assert!(
+            slit_pair(&SlitPair {
+                separation: -1.0,
+                ..spec
+            })
+            .is_err()
+        );
     }
 
     #[test]
