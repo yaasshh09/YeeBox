@@ -46,13 +46,19 @@ self.onmessage = async (ev: MessageEvent<ToWorker>) => {
   try {
     if (m.kind === "init") {
       await init();
-      sim = createCpuSim(m.scene, m.width, m.height);
-      m.canvas.width = m.width;
-      m.canvas.height = m.height;
-      ctx = m.canvas.getContext("2d");
-      const st = JSON.parse(sim.status()) as { nx: number; ny: number };
+      const st = JSON.parse(createCpuSim(m.scene, 1, 1).status()) as { nx: number; ny: number };
       cells = st.nx * st.ny;
-      post({ kind: "ready", adapter: sim.adapter() });
+      // Painting costs per canvas pixel, and a small grid cannot show more
+      // than a few pixels per cell, so the backing store is capped near 2 px
+      // per cell and CSS stretches it.
+      const scale = Math.max(0.25, Math.min(m.dpr, 2, Math.sqrt((4 * cells) / (m.cssWidth * m.cssHeight))));
+      const w = Math.max(1, Math.round(m.cssWidth * scale));
+      const h = Math.max(1, Math.round(m.cssHeight * scale));
+      sim = createCpuSim(m.scene, w, h);
+      m.canvas.width = w;
+      m.canvas.height = h;
+      ctx = m.canvas.getContext("2d");
+      post({ kind: "ready", adapter: sim.adapter(), scale });
       draw();
       tick();
     } else if (m.kind === "loop") {

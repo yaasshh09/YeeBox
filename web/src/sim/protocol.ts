@@ -15,13 +15,13 @@ export type LoopStats = {
 };
 
 export type ToWorker =
-  | { kind: "init"; canvas: OffscreenCanvas; scene: string; width: number; height: number }
+  | { kind: "init"; canvas: OffscreenCanvas; scene: string; cssWidth: number; cssHeight: number; dpr: number }
   | { kind: "call"; id: number; method: string; args: unknown[] }
   | { kind: "loop"; settings: LoopSettings }
   | { kind: "step" };
 
 export type FromWorker =
-  | { kind: "ready"; adapter: string }
+  | { kind: "ready"; adapter: string; scale: number }
   | { kind: "result"; id: number; value: unknown }
   | { kind: "error"; id: number; code: string; message: string }
   | { kind: "stats"; stats: LoopStats }

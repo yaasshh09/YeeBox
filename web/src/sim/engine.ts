@@ -17,6 +17,8 @@ export interface Engine {
   readonly kernel: Kernel;
   readonly adapter: string;
   readonly canvas: HTMLCanvasElement;
+  /** Canvas pixels per CSS pixel, for resizing and pointer positions. */
+  readonly pixelScale: number;
   /** Calls a `Sim` method by its JS name; resolves with its result. */
   call<T = unknown>(method: string, ...args: unknown[]): Promise<T>;
   setLoop(settings: LoopSettings): void;
@@ -25,17 +27,15 @@ export interface Engine {
   dispose(): void;
 }
 
-/** Device pixels for a CSS size, at most 2x, so phones do not pay 3x. */
-export function devicePixels(css: number): number {
-  return Math.max(1, Math.round(css * Math.min(window.devicePixelRatio || 1, 2)));
-}
+/** The GPU canvas scale: device pixels, at most 2x, so phones do not pay 3x. */
+export const gpuScale = () => Math.min(window.devicePixelRatio || 1, 2);
 
-function makeCanvas(host: HTMLElement): HTMLCanvasElement {
+function makeCanvas(host: HTMLElement, scale: number): HTMLCanvasElement {
   const c = document.createElement("canvas");
   c.className = "stage-canvas";
   host.replaceChildren(c);
-  c.width = devicePixels(host.clientWidth);
-  c.height = devicePixels(host.clientHeight);
+  c.width = Math.max(1, Math.round(host.clientWidth * scale));
+  c.height = Math.max(1, Math.round(host.clientHeight * scale));
   return c;
 }
 
@@ -62,7 +62,7 @@ export async function createEngine(
   forceCpu = false,
 ): Promise<Engine> {
   if (!forceCpu && (await hasAdapter())) {
-    const canvas = makeCanvas(host);
+    const canvas = makeCanvas(host, gpuScale());
     try {
       await init();
       const sim = await createSim(canvas, scene);
@@ -72,7 +72,7 @@ export async function createEngine(
       if (err.code !== "no_webgpu") throw err;
     }
   }
-  return cpuEngine(makeCanvas(host), cpuScene ?? scene, settings, onEvent);
+  return cpuEngine(host, makeCanvas(host, 1), cpuScene ?? scene, settings, onEvent);
 }
 
 function gpuEngine(
@@ -134,6 +134,7 @@ function gpuEngine(
     kernel: "gpu",
     adapter: sim.adapter(),
     canvas,
+    pixelScale: gpuScale(),
     call<T>(method: string, ...args: unknown[]): Promise<T> {
       try {
         const fn = (sim as unknown as Record<string, (...a: unknown[]) => unknown>)[method];
@@ -159,6 +160,7 @@ function gpuEngine(
 }
 
 function cpuEngine(
+  host: HTMLElement,
   canvas: HTMLCanvasElement,
   scene: string,
   settings: LoopSettings,
@@ -177,6 +179,7 @@ function cpuEngine(
           kernel: "cpu",
           adapter: m.adapter,
           canvas,
+          pixelScale: m.scale,
           call<T>(method: string, ...args: unknown[]): Promise<T> {
             const id = nextId++;
             send({ kind: "call", id, method, args });
@@ -206,6 +209,14 @@ function cpuEngine(
       }
     };
     const offscreen = canvas.transferControlToOffscreen();
-    send({ kind: "init", canvas: offscreen, scene, width: canvas.width, height: canvas.height }, [offscreen]);
+    const init: ToWorker = {
+      kind: "init",
+      canvas: offscreen,
+      scene,
+      cssWidth: Math.max(1, host.clientWidth),
+      cssHeight: Math.max(1, host.clientHeight),
+      dpr: window.devicePixelRatio || 1,
+    };
+    send(init, [offscreen]);
   });
 }
