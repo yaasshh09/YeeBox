@@ -7,7 +7,7 @@ entry at the top of the session log.
 
 **Active phase:** Phase 5 (Phases 0 to 4 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** Phase 5 part A (core paint, palette, source patch, status, live edits); the owner pushes when ready so CI runs once on lavapipe
+**Next action:** Phase 5 part B (async device, queued taps, async reads, colormap, render pipeline, intensity); part A is done; the owner pushes when ready so CI runs once on lavapipe
 
 ## Decisions log
 
@@ -78,6 +78,14 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-14 | `kernel::compare` normalizes by the reference peak over the run so far, checked every 250 steps | the CLAUDE.md wording "1e-4 of peak field"; f32 error scales with the largest field held (see deviations) |
 | 2026-11-21 | The site deploys to GitHub Pages from an Actions job on main | no second account; the repo is already on GitHub |
 | 2026-11-21 | The UI follows AtomSIM (`../atom_sim/web`): tokens, Poppins, three columns, mobile shell under 900 px, same web stack | the owner's sibling project; one lab-instrument idiom across both |
+| 2026-11-21 | `Scene.paint`: a dense override id per node, JSON as runs `[[null, 500], [2, 12]]`, at most `MAX_NODES` entries checked before allocating | strokes cost a few runs; shared links are untrusted input |
+| 2026-11-21 | Brush strokes skip sources and the TF/SF faces with the nodes across them; CPML nodes take the paint of the interface node they clamp to | a stroke on a valid scene leaves it valid, and walls run on through the layer |
+| 2026-11-21 | A fixed paint palette (`material::PALETTE`), merged into the table before a kernel is built; the table is fixed for a kernel's life (`BuildKey`, else `FdtdError::Rebuild`) | painting writes ids only, the GPU coefficient buffer never resizes |
+| 2026-11-21 | Source edits accept vacuum wavelengths of 4 to 200 cells; a CW retune shifts the phase so the drive is continuous at the edit time | 4 clears the grid cutoff on axis; 200 is where the measured CPML still holds -101 dB (closes the Phase 3 low-frequency question) |
+| 2026-11-21 | `Kernel::set_materials(scene, bounds)` and `set_sources(scene)`; both kernels rewrite the same `material_edit` rectangle; a node turned PEC is zeroed by the next step, not at once | identical semantics on both kernels with no extra code |
+| 2026-11-21 | The GPU sources stage always exists, empty when there are no sources | a live edit can add the first source by rebuilding one bind group |
+| 2026-11-21 | `kernel::Comparator` and `Snapshot` hold the running-peak measure; `compare` is built on them | the async browser self-test reports the same numbers |
+| 2026-11-21 | Full-size presets live under `web/`; their compact 256 versions go in `validation/scenes` | the scene set caps scenes at 200 x 160 nodes to keep 2000 CPU steps quick |
 
 ## Measured numbers
 
@@ -103,6 +111,8 @@ Fill in as they become available. These go in the README.
 | GPU vs CPU max difference | 5.9e-6 of peak worst (`tfsf_thin_plus_x`), 3.3e-7 to 2.7e-6 elsewhere; probes 1.4e-6, spectra 6.1e-5 worst (slab flux) | 11 scenes, every field, checkpoints every 250 steps to 2000, GTX 1660 Ti; gate 1e-4 | 2026-11-14 |
 | GPU vs CPU long run | 7.2e-6 after 50000 steps, fitted growth n^0.44 | `cavity_tm`, checkpoints every 5000; bound n^1.2 set before the run | 2026-11-14 |
 | GPU workgroup independence | bit-identical for 4, 8, 16 | five field-only scenes, 300 steps | 2026-11-14 |
+| GPU vs CPU with live edits | 6.4e-7 of peak (walls painted through the CPML, erased, source moved and retuned, a second source added); 2.0e-6 (first source added to a sourceless cavity) | checkpoints every 250 steps and at each edit, to 2000; gate 1e-4 | 2026-11-21 |
+| Live paint at step 0 vs a scene painted from the start | bit-identical, with and without a CPML | CPU, 300 steps | 2026-11-21 |
 | GPU f32 TF/SF leakage | about 5e-8 of the incident amplitude (-146 dB) | one-node box, no other source; CPU leaves 1e-16 | 2026-11-14 |
 | Throughput, integrated GPU | not measured, no integrated GPU on this machine | | |
 | Throughput, discrete GPU | 3.0 Gcells/s, 2864 steps/s, 47.7 steps per 60 fps frame (16-cell CPML: 3.0 Gcells/s, 48.1) | GTX 1660 Ti, Vulkan, 1024 x 1024, 8 steps per submit, `fdtd bench` | 2026-11-14 |
