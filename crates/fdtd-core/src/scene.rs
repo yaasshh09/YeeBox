@@ -790,7 +790,7 @@ impl Scene {
 
     /// One source on its own: waveform, amplitude, and a live interior node
     /// outside the layer and off PEC.
-    fn check_source(&self, src: &Source) -> Result<()> {
+    pub fn check_source(&self, src: &Source) -> Result<()> {
         src.waveform.validate()?;
         finite("amplitude", src.amplitude)?;
         // Wall nodes are PEC and never updated, so a source there is wrong.

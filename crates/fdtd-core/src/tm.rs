@@ -31,7 +31,7 @@
 use crate::cpml::Cpml;
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
-use crate::kernel::{Kernel, Spectrum};
+use crate::kernel::{BuildKey, Kernel, Spectrum, material_edit};
 use crate::monitor::{Dft, FluxLine, PointProbe};
 use crate::scene::{Monitor, Scene, Source};
 use crate::source::SourceKind;
@@ -62,6 +62,8 @@ pub struct SimTm {
     tfsf: Option<Tfsf>,
     /// DFT and flux monitors in scene order.
     spectral: Vec<Spectral>,
+    /// What live edits must leave alone.
+    key: BuildKey,
 }
 
 /// A spectral monitor as the solver runs it.
@@ -136,6 +138,7 @@ impl SimTm {
             ny,
             s,
             periodic_y: scene.periodic_y,
+            key: BuildKey::of(scene),
             n: 0,
             ez,
             hx: vec![0.0; nx * ny],
@@ -368,6 +371,32 @@ impl Kernel for SimTm {
         Ok(self.probes.iter().map(|p| p.history().to_vec()).collect())
     }
 
+    fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
+        self.key.check(scene)?;
+        let Some(edit) = material_edit(scene, bounds)? else {
+            return Ok(());
+        };
+        let w = edit.i1 - edit.i0 + 1;
+        for (r, j) in edit.rows.clone().enumerate() {
+            for (c, &id) in edit.ids[r * w..(r + 1) * w].iter().enumerate() {
+                let k = j * self.nx + edit.i0 + c;
+                let m = scene.materials[id];
+                (self.ca[k], self.cb[k]) = m.coefficients(self.s);
+                self.eps[k] = m.eps();
+            }
+        }
+        Ok(())
+    }
+
+    fn set_sources(&mut self, scene: &Scene) -> Result<()> {
+        self.key.check(scene)?;
+        for src in &scene.sources {
+            scene.check_source(src)?;
+        }
+        self.sources = scene.sources.clone();
+        Ok(())
+    }
+
     fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
         Ok(self
             .spectral
@@ -414,6 +443,123 @@ pub(crate) mod tests {
     }
 
     pub(crate) use crate::cases::signal::random_fields;
+
+    fn fields_of(sim: &SimTm) -> [Vec<f64>; 3] {
+        [sim.ez.clone(), sim.hx.clone(), sim.hy.clone()]
+    }
+
+    /// The sample scene, and the same with a 5-cell CPML and no shapes, so
+    /// strokes can run into the layer.
+    fn edit_scenes() -> [Scene; 2] {
+        let a = crate::scene::tests::sample();
+        let mut b = a.clone();
+        b.geometry.clear();
+        b.pml = Some(crate::cpml::tests::spec(5));
+        [a, b]
+    }
+
+    #[test]
+    fn live_paint_equals_painted_scene() {
+        for base in edit_scenes() {
+            let mut painted = base.clone();
+            let out = painted
+                .paint_stroke((0.0, 9.0), (20.0, 9.0), 1.5, 2)
+                .unwrap();
+            painted
+                .paint_stroke((30.0, 22.0), (30.0, 29.0), 1.0, 1)
+                .unwrap();
+            let mut live = SimTm::from_scene(&base).unwrap();
+            live.set_materials(&painted, out.bounds.unwrap()).unwrap();
+            live.set_materials(&painted, [28, 20, 39, 29]).unwrap();
+            let mut fresh = SimTm::from_scene(&painted).unwrap();
+            live.step_n(300);
+            fresh.step_n(300);
+            assert_eq!(fields_of(&live), fields_of(&fresh));
+            assert_eq!(live.eps(), fresh.eps());
+        }
+    }
+
+    #[test]
+    fn repaint_with_same_ids_changes_nothing() {
+        for base in edit_scenes() {
+            let mut a = SimTm::from_scene(&base).unwrap();
+            let mut b = SimTm::from_scene(&base).unwrap();
+            a.step_n(150);
+            b.step_n(150);
+            b.set_materials(&base, [0, 0, usize::MAX, usize::MAX])
+                .unwrap();
+            a.step_n(150);
+            b.step_n(150);
+            assert_eq!(fields_of(&a), fields_of(&b));
+        }
+    }
+
+    #[test]
+    fn live_paint_takes_effect_mid_run() {
+        // PEC painted under a live field holds its old Ez one step, then
+        // the node is exactly zero.
+        let base = crate::scene::tests::sample();
+        let mut sim = SimTm::from_scene(&base).unwrap();
+        sim.step_n(120);
+        let k = 20 * 40 + 16;
+        assert!(sim.ez[k] != 0.0);
+        let mut painted = base.clone();
+        let out = painted
+            .paint_stroke((16.0, 20.0), (16.0, 20.0), 0.0, 2)
+            .unwrap();
+        sim.set_materials(&painted, out.bounds.unwrap()).unwrap();
+        assert!(sim.ez[k] != 0.0);
+        sim.step_n(1);
+        assert_eq!(sim.ez[k], 0.0);
+        assert!(sim.is_pec(16, 20));
+    }
+
+    #[test]
+    fn live_sources_equal_scene_sources() {
+        let base = crate::scene::tests::sample();
+        let mut moved = base.clone();
+        let patch = crate::scene::SourcePatch {
+            i: Some(30),
+            j: Some(10),
+            wavelength_cells: Some(14.0),
+            ..Default::default()
+        };
+        moved.patch_source(0, &patch, 0.0).unwrap();
+        moved.sources.push(moved.sources[0]);
+        moved.sources[1].i = 8;
+        let mut live = SimTm::from_scene(&base).unwrap();
+        live.set_sources(&moved).unwrap();
+        let mut fresh = SimTm::from_scene(&moved).unwrap();
+        live.step_n(200);
+        fresh.step_n(200);
+        assert_eq!(fields_of(&live), fields_of(&fresh));
+    }
+
+    #[test]
+    fn live_edits_refuse_other_builds() {
+        let base = crate::scene::tests::sample();
+        let mut sim = SimTm::from_scene(&base).unwrap();
+        let mut table = base.clone();
+        table.with_palette();
+        assert_eq!(
+            sim.set_materials(&table, [0, 0, 5, 5]),
+            Err(FdtdError::Rebuild)
+        );
+        assert_eq!(sim.set_sources(&table), Err(FdtdError::Rebuild));
+        let mut grid = base.clone();
+        grid.grid.courant = 0.4;
+        assert_eq!(sim.set_sources(&grid), Err(FdtdError::Rebuild));
+        // A source on PEC is refused and the old list stays.
+        let mut bad = base.clone();
+        (bad.sources[0].i, bad.sources[0].j) = (25, 15);
+        assert!(sim.set_sources(&bad).is_err());
+        sim.step_n(50);
+        let mut fresh = SimTm::from_scene(&base).unwrap();
+        fresh.step_n(50);
+        assert_eq!(fields_of(&sim), fields_of(&fresh));
+        // Bounds off the grid are clipped, not an error.
+        sim.set_materials(&base, [500, 500, 900, 900]).unwrap();
+    }
 
     /// Fields and coefficients for the oracle step, padded like `SimTm`.
     struct Fields {

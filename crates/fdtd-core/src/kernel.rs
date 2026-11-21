@@ -1,9 +1,12 @@
 //! The interface every kernel implements, so one harness can drive the f64
 //! CPU reference and the f32 GPU kernel from the same `Scene` and diff them.
 
+use crate::cpml::PmlSpec;
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
-use crate::scene::Scene;
+use crate::material::Material;
+use crate::scene::{GridSpec, Scene};
+use crate::tfsf::PlaneWave;
 
 pub trait Kernel: Sized {
     /// Validates the scene and builds the kernel at time step 0, fields zero.
@@ -26,6 +29,88 @@ pub trait Kernel: Sized {
     /// The accumulated spectrum of every DFT and flux monitor, in scene
     /// order (point monitors are skipped), one entry per scene frequency.
     fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>>;
+
+    /// Takes the materials of `scene` on the Ez nodes in `bounds`
+    /// (`[i0, j0, i1, j1]`, inclusive, cells), keeping every field and the
+    /// time step. `scene` is the kernel's scene after a paint or shape edit,
+    /// validated; a different `BuildKey` is `FdtdError::Rebuild`. A node
+    /// that turns PEC keeps its Ez until the next step zeroes it, on every
+    /// kernel alike.
+    fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()>;
+
+    /// Takes the sources of `scene` (positions, waveforms, amplitudes),
+    /// keeping every field and the time step. Same `BuildKey` rule.
+    fn set_sources(&mut self, scene: &Scene) -> Result<()>;
+}
+
+/// What a kernel is built from that a live edit must not change: the grid,
+/// the y wrap, the material table, the CPML and the plane wave. Paint,
+/// shapes and sources may change; anything else needs a new kernel.
+#[derive(Debug, Clone, PartialEq)]
+pub struct BuildKey {
+    grid: GridSpec,
+    periodic_y: bool,
+    materials: Vec<Material>,
+    pml: Option<PmlSpec>,
+    plane_wave: Option<PlaneWave>,
+}
+
+impl BuildKey {
+    pub fn of(scene: &Scene) -> BuildKey {
+        BuildKey {
+            grid: scene.grid,
+            periodic_y: scene.periodic_y,
+            materials: scene.materials.clone(),
+            pml: scene.pml,
+            plane_wave: scene.plane_wave,
+        }
+    }
+
+    /// `FdtdError::Rebuild` unless `scene` has this key.
+    pub fn check(&self, scene: &Scene) -> Result<()> {
+        if *self == BuildKey::of(scene) {
+            Ok(())
+        } else {
+            Err(FdtdError::Rebuild)
+        }
+    }
+}
+
+/// The nodes a material edit rewrites, the same for every kernel: columns
+/// `i0..=i1` of each row in `rows`, the requested bounds clipped to the
+/// live nodes (the wall ring never changes), with the new material id of
+/// each, row by row.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MaterialEdit {
+    pub i0: usize,
+    pub i1: usize,
+    pub rows: std::ops::Range<usize>,
+    pub ids: Vec<usize>,
+}
+
+/// The `MaterialEdit` for `bounds` on `scene`, `None` if the bounds miss
+/// every live node. Ids outside the material table are refused, so an
+/// unvalidated scene cannot index past it.
+pub fn material_edit(scene: &Scene, bounds: [usize; 4]) -> Result<Option<MaterialEdit>> {
+    let [i0, j0, i1, j1] = bounds;
+    let nx = scene.grid.nx;
+    let live = scene.live_rows();
+    let (i0, i1) = (i0.max(1), i1.min(nx - 2));
+    let rows = j0.max(live.start)..(j1.saturating_add(1)).min(live.end);
+    if i0 > i1 || rows.is_empty() {
+        return Ok(None);
+    }
+    let mut ids = Vec::with_capacity((i1 - i0 + 1) * rows.len());
+    for j in rows.clone() {
+        for i in i0..=i1 {
+            let id = scene.material_at(i, j);
+            if id >= scene.materials.len() {
+                return Err(FdtdError::UnknownMaterial { id });
+            }
+            ids.push(id);
+        }
+    }
+    Ok(Some(MaterialEdit { i0, i1, rows, ids }))
 }
 
 /// What a spectral monitor has accumulated so far, per frequency of its list.
@@ -203,6 +288,12 @@ mod tests {
                 })
                 .collect())
         }
+        fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
+            self.0.set_materials(scene, bounds)
+        }
+        fn set_sources(&mut self, scene: &Scene) -> Result<()> {
+            self.0.set_sources(scene)
+        }
     }
 
     #[test]
@@ -248,6 +339,12 @@ mod tests {
         }
         fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
             self.0.monitor_spectra()
+        }
+        fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
+            self.0.set_materials(scene, bounds)
+        }
+        fn set_sources(&mut self, scene: &Scene) -> Result<()> {
+            self.0.set_sources(scene)
         }
     }
 

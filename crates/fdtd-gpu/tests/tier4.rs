@@ -9,7 +9,7 @@
 //! reference peak at every 250-step checkpoint, padding exactly zero.
 
 use fdtd_core::grid::Component;
-use fdtd_core::kernel::{Diff, compare};
+use fdtd_core::kernel::{Diff, Kernel, compare};
 use fdtd_core::scene::Scene;
 use fdtd_core::tm::SimTm;
 use fdtd_gpu::tier4::{self, GATE, STEPS};
@@ -117,6 +117,110 @@ fn scene_matches_cpu(gpu: &'static Gpu, name: &str, s: &Scene) -> Result<(), Fai
     let diffs = compare(&mut cpu, &mut gpu_sim, &tier4::checkpoints(STEPS, 250))?;
     within_gate(name, &diffs)?;
     padding_is_zero(name, s, &mut gpu_sim)
+}
+
+/// An edit applied at a step: it changes the scene at normalized time `t`
+/// and returns the bounds of a material edit, or `None` for a source edit.
+type Edit = (u64, fn(&mut Scene, f64) -> Option<[usize; 4]>);
+
+/// Runs both kernels to each edit's step, applies the edit to the scene and
+/// to both kernels, and carries on to `STEPS`. Checkpoints every 250 steps
+/// and at every edit, all within the gate.
+fn edited_run(gpu: &'static Gpu, name: &str, mut s: Scene, edits: &[Edit]) -> Result<(), Failed> {
+    let mut cpu = SimTm::from_scene(&s)?;
+    let mut gpu_sim = GpuSim::new(gpu, &s)?;
+    let mut diffs = Vec::new();
+    let mut prev = 0;
+    let marks = edits.iter().map(|e| e.0).chain([STEPS]);
+    for (n, mark) in marks.enumerate() {
+        let mut cps: Vec<u64> = (prev + 1..=mark).filter(|c| c % 250 == 0).collect();
+        if cps.last() != Some(&mark) {
+            cps.push(mark);
+        }
+        diffs.extend(compare(&mut cpu, &mut gpu_sim, &cps)?);
+        if let Some((_, edit)) = edits.get(n) {
+            let t = mark as f64 * s.grid.courant;
+            match edit(&mut s, t) {
+                Some(b) => {
+                    cpu.set_materials(&s, b)?;
+                    gpu_sim.set_materials(&s, b)?;
+                }
+                None => {
+                    cpu.set_sources(&s)?;
+                    gpu_sim.set_sources(&s)?;
+                }
+            }
+        }
+        prev = mark;
+    }
+    within_gate(name, &diffs)?;
+    padding_is_zero(name, &s, &mut gpu_sim)
+}
+
+fn cw(f0: f64) -> fdtd_core::source::Waveform {
+    fdtd_core::source::Waveform::RampedCw {
+        f0,
+        ramp_periods: 3.0,
+        phase: 0.0,
+    }
+}
+
+/// Painting a wall through the layer, erasing part of it, dragging and
+/// retuning the source and adding a second one, mid-run.
+fn live_edits_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    let mut s = scene("painted_walls.json");
+    s.sources[0].waveform = cw(0.05);
+    let edits: [Edit; 5] = [
+        (500, |s, _| {
+            s.paint_stroke((65.0, 0.0), (65.0, 40.0), 1.0, 2)
+                .unwrap()
+                .bounds
+        }),
+        (900, |s, _| {
+            s.paint_stroke((65.0, 15.0), (65.0, 25.0), 1.5, 0)
+                .unwrap()
+                .bounds
+        }),
+        (1200, |s, t| {
+            let patch = fdtd_core::scene::SourcePatch {
+                i: Some(25),
+                j: Some(35),
+                wavelength_cells: Some(15.0),
+                ..Default::default()
+            };
+            s.patch_source(0, &patch, t).unwrap();
+            None
+        }),
+        (1500, |s, _| {
+            let mut extra = s.sources[0];
+            extra.j = 15;
+            s.sources.push(extra);
+            None
+        }),
+        (1750, |s, _| {
+            s.paint_stroke((20.0, 50.0), (40.0, 50.0), 2.0, 1)
+                .unwrap()
+                .bounds
+        }),
+    ];
+    edited_run(gpu, "live edits", s, &edits)
+}
+
+/// A scene built without sources gets its first one mid-run.
+fn first_source_added_live(gpu: &'static Gpu) -> Result<(), Failed> {
+    let s = fields_only("cavity_tm.json");
+    let edits: [Edit; 1] = [(300, |s, _| {
+        s.sources.push(fdtd_core::scene::Source {
+            // In vacuum, clear of the PEC bar at x 20 to 22.
+            i: 12,
+            j: 20,
+            waveform: cw(0.04),
+            amplitude: 1.0,
+            kind: Default::default(),
+        });
+        None
+    })];
+    edited_run(gpu, "first source live", s, &edits)
 }
 
 /// A buffer written on the CPU reads back bit for bit.
@@ -237,6 +341,8 @@ fn main() {
         ("initial_value_matches_cpu", initial_value_matches_cpu),
         ("workgroup_size_independent", workgroup_size_independent),
         ("long_run_growth", long_run_growth),
+        ("live_edits_match_cpu", live_edits_match_cpu),
+        ("first_source_added_live", first_source_added_live),
     ];
     let mut trials: Vec<Trial> = checks
         .into_iter()
