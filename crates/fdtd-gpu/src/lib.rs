@@ -9,6 +9,7 @@ pub mod buffers;
 pub mod colormap;
 pub mod device;
 pub mod pipeline;
+pub mod render;
 pub mod sim;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod tier4;

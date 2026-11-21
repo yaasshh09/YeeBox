@@ -11,7 +11,9 @@
 use fdtd_core::grid::Component;
 use fdtd_core::kernel::{Diff, Kernel, compare};
 use fdtd_core::scene::Scene;
+use fdtd_core::scene::ViewField;
 use fdtd_core::tm::SimTm;
+use fdtd_gpu::render::{Frame, Renderer, Viewport};
 use fdtd_gpu::tier4::{self, GATE, STEPS};
 use fdtd_gpu::{Gpu, GpuSim};
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -223,6 +225,119 @@ fn first_source_added_live(gpu: &'static Gpu) -> Result<(), Failed> {
     edited_run(gpu, "first source live", s, &edits)
 }
 
+/// Renders `sim` onto a `w` x `h` canvas with the grid fitted, and reads
+/// the pixels back, row-major from the top left.
+fn render_pixels(
+    gpu: &'static Gpu,
+    s: &Scene,
+    sim: &GpuSim,
+    w: u32,
+    h: u32,
+) -> Result<Vec<[u8; 4]>, Failed> {
+    let format = wgpu::TextureFormat::Rgba8Unorm;
+    let size = wgpu::Extent3d {
+        width: w,
+        height: h,
+        depth_or_array_layers: 1,
+    };
+    let tex = gpu.device.create_texture(&wgpu::TextureDescriptor {
+        label: Some("frame"),
+        size,
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+        view_formats: &[],
+    });
+    let view = tex.create_view(&Default::default());
+    let renderer = Renderer::new(gpu, sim, s, format);
+    let frame = Frame {
+        viewport: Viewport::fit(s.grid.nx, s.grid.ny, w as f64, h as f64),
+        gain: 1.0,
+        field: ViewField::Ez,
+    };
+    let row = (w * 4).div_ceil(256) * 256;
+    let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
+        label: Some("frame copy"),
+        size: (row * h) as u64,
+        usage: wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::COPY_SRC,
+        mapped_at_creation: false,
+    });
+    let mut enc = gpu.device.create_command_encoder(&Default::default());
+    renderer.draw(gpu, &mut enc, &view, &frame);
+    enc.copy_texture_to_buffer(
+        wgpu::TexelCopyTextureInfo {
+            texture: &tex,
+            mip_level: 0,
+            origin: wgpu::Origin3d::ZERO,
+            aspect: wgpu::TextureAspect::All,
+        },
+        wgpu::TexelCopyBufferInfo {
+            buffer: &buf,
+            layout: wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(row),
+                rows_per_image: None,
+            },
+        },
+        size,
+    );
+    gpu.queue.submit([enc.finish()]);
+    let bytes = gpu.read(&buf, 0, (row * h) as u64)?;
+    Ok((0..h as usize)
+        .flat_map(|y| {
+            let at = y * row as usize;
+            bytes[at..at + w as usize * 4]
+                .chunks_exact(4)
+                .map(|c| [c[0], c[1], c[2], c[3]])
+                .collect::<Vec<_>>()
+        })
+        .collect())
+}
+
+/// At 1 px per cell, a node shows its exact table color, the CPML is
+/// tinted, a conductor is opaque, and outside the grid is the stage.
+fn render_pixels_match_tables(gpu: &'static Gpu) -> Result<(), Failed> {
+    let s = scene("painted_walls.json");
+    let (nx, ny) = (s.grid.nx, s.grid.ny);
+    let mut sim = GpuSim::new(gpu, &s)?;
+    let mut ez = vec![0.0; nx * ny];
+    ez[40 * nx + 30] = 0.5;
+    sim.set_ez(&ez)?;
+    let px = render_pixels(gpu, &s, &sim, nx as u32, ny as u32)?;
+    let at = |i: usize, j: usize| px[(ny - 1 - j) * nx + i];
+    let lut = fdtd_gpu::colormap::diverging();
+    let close = |a: [u8; 4], b: [f32; 3]| (0..3).all(|c| (a[c] as f32 - b[c] * 255.0).abs() <= 1.0);
+    if at(30, 40) != lut[192] {
+        return Err(format!(
+            "node (30, 40) at 0.5: {:?}, want {:?}",
+            at(30, 40),
+            lut[192]
+        )
+        .into());
+    }
+    if at(35, 30) != lut[128] {
+        return Err(format!("empty node: {:?}, want {:?}", at(35, 30), lut[128]).into());
+    }
+    let zero = lut[128].map(|v| v as f32 / 255.0);
+    let tinted: [f32; 3] = std::array::from_fn(|c| zero[c] * 0.65 + [0.20, 0.22, 0.30][c] * 0.35);
+    if !close(at(3, 30), tinted) {
+        return Err(format!("cpml node: {:?}, want about {tinted:?}", at(3, 30)).into());
+    }
+    let pec = fdtd_gpu::render::overlay(&fdtd_core::material::Material::Pec);
+    if !close(at(45, 5), [pec[0], pec[1], pec[2]]) {
+        return Err(format!("painted conductor: {:?}", at(45, 5)).into());
+    }
+    // A canvas half again as wide: 20 px of stage on each side.
+    let wide = render_pixels(gpu, &s, &sim, nx as u32 + 40, ny as u32)?;
+    let (left, inside) = (wide[30 * (nx + 40) + 5], wide[30 * (nx + 40) + 20 + 35]);
+    if left != [0, 0, 0, 255] || inside != at(35, 29) {
+        return Err(format!("letterbox: {left:?}, inside {inside:?}").into());
+    }
+    Ok(())
+}
+
 /// A buffer written on the CPU reads back bit for bit.
 fn readback_round_trip(gpu: &'static Gpu) -> Result<(), Failed> {
     let values: Vec<f32> = (0..1000).map(|k| (k as f32 * 0.37).sin()).collect();
@@ -343,6 +458,7 @@ fn main() {
         ("long_run_growth", long_run_growth),
         ("live_edits_match_cpu", live_edits_match_cpu),
         ("first_source_added_live", first_source_added_live),
+        ("render_pixels_match_tables", render_pixels_match_tables),
     ];
     let mut trials: Vec<Trial> = checks
         .into_iter()

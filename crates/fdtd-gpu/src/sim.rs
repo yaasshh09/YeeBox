@@ -471,6 +471,16 @@ impl GpuSim {
         Ok(())
     }
 
+    /// The Ez buffer, for the render pass.
+    pub(crate) fn ez_buffer(&self) -> &wgpu::Buffer {
+        &self.fields[EZ]
+    }
+
+    /// The material id buffer, for the render pass.
+    pub(crate) fn ids_buffer(&self) -> &wgpu::Buffer {
+        &self.ids
+    }
+
     /// Encodes and submits `steps` (at most `BATCH`) steps.
     fn run_batch(&mut self, steps: u64) {
         let mut slots = vec![0u8; (steps * PARAMS_STRIDE) as usize];
