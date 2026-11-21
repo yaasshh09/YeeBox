@@ -10,6 +10,9 @@
 use fdtd_core::FdtdError;
 use wasm_bindgen::prelude::*;
 
+#[cfg(target_arch = "wasm32")]
+mod gpu_sim;
+
 /// The stable code of an error, for the UI to branch on. Exhaustive, so a
 /// new error variant does not compile until it has a code here.
 pub fn error_code(e: &FdtdError) -> &'static str {

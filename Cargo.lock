@@ -404,12 +404,14 @@ name = "fdtd-wasm"
 version = "0.1.0"
 dependencies = [
  "fdtd-core",
+ "fdtd-gpu",
  "js-sys",
  "serde",
  "serde_json",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+ "wgpu",
 ]
 
 [[package]]

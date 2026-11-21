@@ -100,6 +100,23 @@ pub fn overlay(m: &Material) -> [f32; 4] {
     }
 }
 
+/// Time constant of the intensity mean, in steps: four periods of the
+/// slowest drive (point sources and the plane wave), or 200 steps when no
+/// drive has a frequency. Long enough to average a period out, short
+/// enough to follow an edit within a second or two.
+pub fn intensity_tau(scene: &Scene) -> f64 {
+    let s = scene.grid.courant;
+    scene
+        .sources
+        .iter()
+        .map(|src| src.waveform)
+        .chain(scene.plane_wave.map(|pw| pw.waveform))
+        .filter_map(|w| w.frequency())
+        .map(|f| 4.0 / (f * s))
+        .fold(None, |m: Option<f64>, t| Some(m.map_or(t, |m| m.max(t))))
+        .unwrap_or(200.0)
+}
+
 /// The color outside the grid: the black stage.
 pub const BACKGROUND: [f32; 3] = [0.0, 0.0, 0.0];
 
@@ -356,6 +373,27 @@ mod tests {
         v.pan(10.0, -20.0);
         let moved = v.cell_at(210.0, 180.0);
         assert!((cell.0 - moved.0).abs() < 1e-12 && (cell.1 - moved.1).abs() < 1e-12);
+    }
+
+    #[test]
+    fn intensity_tau_is_four_slowest_periods() {
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../validation/scenes/painted_walls.json"
+        );
+        let mut s = Scene::from_json(&std::fs::read_to_string(path).unwrap()).unwrap();
+        // Ricker at 0.05, S = 0.5: a period is 40 steps.
+        assert_eq!(intensity_tau(&s), 160.0);
+        let mut slow = s.sources[0];
+        slow.waveform = fdtd_core::source::Waveform::RampedCw {
+            f0: 0.025,
+            ramp_periods: 3.0,
+            phase: 0.0,
+        };
+        s.sources.push(slow);
+        assert_eq!(intensity_tau(&s), 320.0);
+        s.sources.clear();
+        assert_eq!(intensity_tau(&s), 200.0);
     }
 
     #[test]

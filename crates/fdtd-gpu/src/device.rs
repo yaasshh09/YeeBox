@@ -15,6 +15,8 @@ pub struct Gpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub adapter: wgpu::AdapterInfo,
+    /// The adapter itself, for surface capabilities in the browser.
+    pub handle: wgpu::Adapter,
     error: Arc<Mutex<Option<String>>>,
 }
 
@@ -63,6 +65,7 @@ impl Gpu {
             device,
             queue,
             adapter: adapter.get_info(),
+            handle: adapter,
             error,
         })
     }
