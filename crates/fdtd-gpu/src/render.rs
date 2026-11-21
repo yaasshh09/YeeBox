@@ -117,6 +117,101 @@ pub fn intensity_tau(scene: &Scene) -> f64 {
         .unwrap_or(200.0)
 }
 
+/// The render pass done on the CPU, for the fallback kernel: per pixel the
+/// same steps as `shaders/render.wgsl`, in f64, so it matches the GPU pass
+/// up to rounding (one colormap step at most, checked in Tier 4).
+pub struct CpuPainter {
+    diverging: Vec<[u8; 4]>,
+    sequential: Vec<[u8; 4]>,
+    /// Overlay per material id, the wall entry last.
+    mats: Vec<[f32; 4]>,
+    nx: usize,
+    ny: usize,
+    pml: usize,
+    periodic_y: bool,
+}
+
+const PML_TINT: [f64; 3] = [0.20, 0.22, 0.30];
+
+impl CpuPainter {
+    pub fn new(scene: &Scene) -> CpuPainter {
+        CpuPainter {
+            diverging: colormap::diverging(),
+            sequential: colormap::sequential(),
+            mats: scene
+                .materials
+                .iter()
+                .map(overlay)
+                .chain([overlay(&Material::Pec)])
+                .collect(),
+            nx: scene.grid.nx,
+            ny: scene.grid.ny,
+            pml: scene.pml_thickness(),
+            periodic_y: scene.periodic_y,
+        }
+    }
+
+    /// RGBA8 pixels, row-major from the top left, of `frame`. `ids` is the
+    /// material id per node with the wall entry on the ring (`Layout::ids`),
+    /// `ez` the field and `mean` the intensity mean (read only in that view).
+    pub fn draw(&self, ids: &[u32], ez: &[f64], mean: &[f64], frame: &Frame) -> Vec<u8> {
+        let v = &frame.viewport;
+        let (w, h) = (v.width as usize, v.height as usize);
+        let (nx, ny, d) = (self.nx, self.ny, self.pml);
+        let mut out = vec![0u8; w * h * 4];
+        for py in 0..h {
+            for px in 0..w {
+                let at = (py * w + px) * 4;
+                let (x, y) = v.cell_at(px as f64 + 0.5, py as f64 + 0.5);
+                let (fi, fj) = (x.round(), y.round());
+                if fi < 0.0 || fj < 0.0 || fi > (nx - 1) as f64 || fj > (ny - 1) as f64 {
+                    out[at..at + 4].copy_from_slice(&[0, 0, 0, 255]);
+                    continue;
+                }
+                let (i, j) = (fi as usize, fj as usize);
+                let k = j * nx + i;
+                let entry = match frame.field {
+                    ViewField::Intensity => {
+                        let u = (2.0 * mean[k] * frame.gain * frame.gain).clamp(0.0, 1.0);
+                        self.sequential[(u * 256.0).round() as usize]
+                    }
+                    ViewField::Ez => {
+                        let val = (ez[k] * frame.gain).clamp(-1.0, 1.0);
+                        self.diverging[((val + 1.0) * 128.0).round() as usize]
+                    }
+                };
+                let mut c = [0.0f64; 3];
+                for (ch, e) in c.iter_mut().zip(entry) {
+                    *ch = e as f64 / 255.0;
+                }
+                let in_y = !self.periodic_y && (j < d || j > ny - 1 - d);
+                if d > 0 && (i < d || i > nx - 1 - d || in_y) {
+                    for (ch, tint) in c.iter_mut().zip(PML_TINT) {
+                        *ch = *ch * 0.65 + tint * 0.35;
+                    }
+                }
+                let id = ids[k];
+                let edge = (i > 0 && ids[k - 1] != id)
+                    || (i + 1 < nx && ids[k + 1] != id)
+                    || (j > 0 && ids[k - nx] != id)
+                    || (j + 1 < ny && ids[k + nx] != id);
+                let m = self.mats[id as usize];
+                let a = if edge && m[3] > 0.0 {
+                    m[3].max(0.8) as f64
+                } else {
+                    m[3] as f64
+                };
+                for (n, ch) in c.iter_mut().enumerate() {
+                    let mixed = *ch * (1.0 - a) + m[n] as f64 * a;
+                    out[at + n] = (mixed * 255.0).round().clamp(0.0, 255.0) as u8;
+                }
+                out[at + 3] = 255;
+            }
+        }
+        out
+    }
+}
+
 /// The color outside the grid: the black stage.
 pub const BACKGROUND: [f32; 3] = [0.0, 0.0, 0.0];
 

@@ -235,6 +235,22 @@ fn render_pixels(
     w: u32,
     h: u32,
 ) -> Result<Vec<[u8; 4]>, Failed> {
+    let frame = Frame {
+        viewport: Viewport::fit(s.grid.nx, s.grid.ny, w as f64, h as f64),
+        gain: 1.0,
+        field: ViewField::Ez,
+    };
+    render_frame(gpu, s, sim, &frame)
+}
+
+/// Renders `frame` (its viewport sets the canvas size) and reads it back.
+fn render_frame(
+    gpu: &'static Gpu,
+    s: &Scene,
+    sim: &GpuSim,
+    frame: &Frame,
+) -> Result<Vec<[u8; 4]>, Failed> {
+    let (w, h) = (frame.viewport.width as u32, frame.viewport.height as u32);
     let format = wgpu::TextureFormat::Rgba8Unorm;
     let size = wgpu::Extent3d {
         width: w,
@@ -253,11 +269,6 @@ fn render_pixels(
     });
     let view = tex.create_view(&Default::default());
     let renderer = Renderer::new(gpu, sim, s, format);
-    let frame = Frame {
-        viewport: Viewport::fit(s.grid.nx, s.grid.ny, w as f64, h as f64),
-        gain: 1.0,
-        field: ViewField::Ez,
-    };
     let row = (w * 4).div_ceil(256) * 256;
     let buf = gpu.device.create_buffer(&wgpu::BufferDescriptor {
         label: Some("frame copy"),
@@ -266,7 +277,7 @@ fn render_pixels(
         mapped_at_creation: false,
     });
     let mut enc = gpu.device.create_command_encoder(&Default::default());
-    renderer.draw(gpu, &mut enc, &view, &frame);
+    renderer.draw(gpu, &mut enc, &view, frame);
     enc.copy_texture_to_buffer(
         wgpu::TexelCopyTextureInfo {
             texture: &tex,
@@ -418,6 +429,58 @@ fn live_probe_matches_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
+/// The CPU painter draws the same pixels as the GPU pass, within one
+/// colormap step, on a running scene with paint, layer and overlays, zoomed
+/// in and letterboxed, in both views.
+fn cpu_painter_matches_gpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    let mut s = scene("painted_walls.json");
+    s.sources[0].waveform = cw(0.05);
+    let mut gpu_sim = GpuSim::new(gpu, &s)?;
+    gpu_sim.set_intensity(Some(40.0))?;
+    gpu_sim.step_n(300);
+    let ez = gpu_sim.read(Component::Ez)?;
+    let mean = pollster::block_on(gpu_sim.read_intensity_async())?;
+    let ids = fdtd_gpu::buffers::Layout::new(&s).ids;
+    let painter = fdtd_gpu::render::CpuPainter::new(&s);
+    // The largest channel step between neighboring table entries.
+    let step = |t: &[[u8; 4]]| {
+        t.windows(2)
+            .flat_map(|p| (0..3).map(move |c| p[0][c].abs_diff(p[1][c])))
+            .max()
+            .unwrap_or(0)
+    };
+    let tol =
+        step(&fdtd_gpu::colormap::diverging()).max(step(&fdtd_gpu::colormap::sequential())) + 1;
+    let (w, h) = (200u32, 120u32);
+    for field in [ViewField::Ez, ViewField::Intensity] {
+        let mut viewport = Viewport::fit(s.grid.nx, s.grid.ny, w as f64, h as f64);
+        for zoom in [1.0, 3.0] {
+            viewport.zoom_at(70.0, 40.0, zoom);
+            let frame = Frame {
+                viewport,
+                gain: 4.0,
+                field,
+            };
+            let got = render_frame(gpu, &s, &gpu_sim, &frame)?;
+            let cpu = painter.draw(&ids, &ez, &mean, &frame);
+            let worst = got
+                .iter()
+                .flatten()
+                .zip(&cpu)
+                .map(|(a, b)| a.abs_diff(*b))
+                .max()
+                .unwrap_or(0);
+            if worst > tol {
+                return Err(
+                    format!("{field:?} zoom {zoom}: channel off by {worst} (limit {tol})").into(),
+                );
+            }
+        }
+    }
+    eprintln!("  cpu painter within one table step ({tol}) of the gpu");
+    Ok(())
+}
+
 /// A buffer written on the CPU reads back bit for bit.
 fn readback_round_trip(gpu: &'static Gpu) -> Result<(), Failed> {
     let values: Vec<f32> = (0..1000).map(|k| (k as f32 * 0.37).sin()).collect();
@@ -541,6 +604,7 @@ fn main() {
         ("render_pixels_match_tables", render_pixels_match_tables),
         ("intensity_matches_cpu", intensity_matches_cpu),
         ("live_probe_matches_cpu", live_probe_matches_cpu),
+        ("cpu_painter_matches_gpu", cpu_painter_matches_gpu),
     ];
     let mut trials: Vec<Trial> = checks
         .into_iter()
