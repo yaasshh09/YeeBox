@@ -8,7 +8,7 @@
 use crate::cpml::PmlSpec;
 use crate::dispersion::courant_limit;
 use crate::error::{FdtdError, Result};
-use crate::material::Material;
+use crate::material::{Material, PALETTE};
 use crate::monitor::{Dft, FluxLine, Normal};
 use crate::source::{SourceKind, Waveform};
 use crate::tfsf::{Direction, PlaneWave, PlaneWaveFault};
@@ -489,6 +489,23 @@ impl Scene {
         (0..ny)
             .flat_map(|j| (0..nx).map(move |i| (i, j)))
             .map(|(i, j)| self.material_at(i, j))
+            .collect()
+    }
+
+    /// Makes sure every `material::PALETTE` entry is in the table, appending
+    /// the missing ones at the end, and returns the table index of each
+    /// entry in palette order. Existing entries and indices never change, so
+    /// the rasterized grid stays the same. Entries match by exact value.
+    pub fn with_palette(&mut self) -> Vec<usize> {
+        PALETTE
+            .iter()
+            .map(|(_, m)| match self.materials.iter().position(|t| t == m) {
+                Some(k) => k,
+                None => {
+                    self.materials.push(*m);
+                    self.materials.len() - 1
+                }
+            })
             .collect()
     }
 
@@ -1568,6 +1585,30 @@ pub(crate) mod tests {
         let s = empty(40, 30, narrow);
         assert!(!cells(&s, 2).contains(&(20, 11)));
         assert!(cells(&s, 2).contains(&(20, 10)) && cells(&s, 2).contains(&(20, 12)));
+    }
+
+    #[test]
+    fn palette_appends_only_what_is_missing() {
+        // The sample has vacuum, eps 4 and PEC; vacuum and PEC are reused.
+        let mut s = sample();
+        let before = s.rasterize();
+        let ids = s.with_palette();
+        assert_eq!(ids.len(), PALETTE.len());
+        for (k, (name, m)) in PALETTE.iter().enumerate() {
+            assert_eq!(s.materials[ids[k]], *m, "{name}");
+        }
+        assert_eq!(ids[0], 0);
+        assert_eq!(ids[3], 2);
+        assert_eq!(s.materials.len(), 3 + 3);
+        assert_eq!(s.materials[1], sample().materials[1]);
+        assert_eq!(s.rasterize(), before);
+        s.validate().unwrap();
+        // Twice is the same as once.
+        let again = s.clone().with_palette();
+        assert_eq!(again, ids);
+        let mut twice = s.clone();
+        twice.with_palette();
+        assert_eq!(twice, s);
     }
 
     #[test]

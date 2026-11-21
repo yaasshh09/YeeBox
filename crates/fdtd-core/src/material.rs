@@ -21,6 +21,36 @@ pub enum Material {
     Pec,
 }
 
+/// The materials the paint tools offer, by name, in picker order. The
+/// absorber's normalized sigma of 0.1 takes a wave down by e in about 20
+/// cells; it is a display material for soaking up light, not a matched
+/// layer (that is the CPML's job).
+pub const PALETTE: [(&str, Material); 5] = [
+    ("vacuum", Material::VACUUM),
+    (
+        "glass",
+        Material::Dielectric {
+            eps_inf: 2.25,
+            sigma: 0.0,
+        },
+    ),
+    (
+        "high index",
+        Material::Dielectric {
+            eps_inf: 12.0,
+            sigma: 0.0,
+        },
+    ),
+    ("conductor", Material::Pec),
+    (
+        "absorber",
+        Material::Dielectric {
+            eps_inf: 1.0,
+            sigma: 0.1,
+        },
+    ),
+];
+
 impl Material {
     pub const VACUUM: Material = Material::Dielectric {
         eps_inf: 1.0,
