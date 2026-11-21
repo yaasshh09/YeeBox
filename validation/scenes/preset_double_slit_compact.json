@@ -1,0 +1,1252 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 200,
+  "ny": 128,
+  "dx_phys_m": 5e-08,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  }
+ ],
+ "pml": {
+  "thickness": 10,
+  "m": 3,
+  "sigma_scale": 1.25,
+  "kappa_max": 2,
+  "alpha_max": 0.15
+ },
+ "sources": [
+  {
+   "i": 20,
+   "j": 10,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 11,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 12,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 13,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 14,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 15,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 16,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 17,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 18,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 19,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 20,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 21,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 22,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 23,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 24,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 25,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 26,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 27,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 28,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 29,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 30,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 31,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 32,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 33,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 34,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 35,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 36,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 37,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 38,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 39,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 40,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 41,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 42,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 43,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 44,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 45,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 46,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 47,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 48,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 49,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 50,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 51,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 52,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 53,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 54,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 55,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 56,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 57,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 58,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 59,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 60,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 61,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 62,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 63,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 64,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 65,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 66,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 67,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 68,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 69,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 70,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 71,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 72,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 73,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 74,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 75,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 76,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 77,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 78,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 79,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 80,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 81,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 82,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 83,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 84,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 85,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 86,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 87,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 88,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 89,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 90,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 91,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 92,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 93,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 94,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 95,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 96,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 97,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 98,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 99,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 100,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 101,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 102,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 103,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 104,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 105,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 106,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 107,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 108,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 109,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 110,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 111,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 112,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 113,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 114,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 115,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 116,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 20,
+   "j": 117,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  }
+ ],
+ "geometry": [
+  {
+   "shape": "rect",
+   "x0": 70,
+   "y0": 10,
+   "x1": 71,
+   "y1": 49,
+   "material": 2
+  },
+  {
+   "shape": "rect",
+   "x0": 70,
+   "y0": 54,
+   "x1": 71,
+   "y1": 73,
+   "material": 2
+  },
+  {
+   "shape": "rect",
+   "x0": 70,
+   "y0": 78,
+   "x1": 71,
+   "y1": 117,
+   "material": 2
+  }
+ ],
+ "view": {
+  "field": "ez",
+  "gain": 0.45,
+  "auto_gain": false
+ }
+}

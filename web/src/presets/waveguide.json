@@ -1,0 +1,705 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 700,
+  "ny": 300,
+  "dx_phys_m": 0.001,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1.0,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ },
+ "geometry": [
+  {
+   "shape": "rect",
+   "x0": 100,
+   "y0": 120,
+   "x1": 699,
+   "y1": 120,
+   "material": 2
+  },
+  {
+   "shape": "rect",
+   "x0": 100,
+   "y0": 180,
+   "x1": 699,
+   "y1": 180,
+   "material": 2
+  }
+ ],
+ "sources": [
+  {
+   "i": 150,
+   "j": 121,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.052335956243
+  },
+  {
+   "i": 150,
+   "j": 122,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.104528463268
+  },
+  {
+   "i": 150,
+   "j": 123,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.15643446504
+  },
+  {
+   "i": 150,
+   "j": 124,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.207911690818
+  },
+  {
+   "i": 150,
+   "j": 125,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.258819045103
+  },
+  {
+   "i": 150,
+   "j": 126,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.309016994375
+  },
+  {
+   "i": 150,
+   "j": 127,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.358367949545
+  },
+  {
+   "i": 150,
+   "j": 128,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.406736643076
+  },
+  {
+   "i": 150,
+   "j": 129,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.45399049974
+  },
+  {
+   "i": 150,
+   "j": 130,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.5
+  },
+  {
+   "i": 150,
+   "j": 131,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.544639035015
+  },
+  {
+   "i": 150,
+   "j": 132,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.587785252292
+  },
+  {
+   "i": 150,
+   "j": 133,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.62932039105
+  },
+  {
+   "i": 150,
+   "j": 134,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.669130606359
+  },
+  {
+   "i": 150,
+   "j": 135,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.707106781187
+  },
+  {
+   "i": 150,
+   "j": 136,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.743144825477
+  },
+  {
+   "i": 150,
+   "j": 137,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.777145961457
+  },
+  {
+   "i": 150,
+   "j": 138,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.809016994375
+  },
+  {
+   "i": 150,
+   "j": 139,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.838670567945
+  },
+  {
+   "i": 150,
+   "j": 140,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.866025403784
+  },
+  {
+   "i": 150,
+   "j": 141,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.891006524188
+  },
+  {
+   "i": 150,
+   "j": 142,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.913545457643
+  },
+  {
+   "i": 150,
+   "j": 143,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.933580426497
+  },
+  {
+   "i": 150,
+   "j": 144,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.951056516295
+  },
+  {
+   "i": 150,
+   "j": 145,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.965925826289
+  },
+  {
+   "i": 150,
+   "j": 146,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.978147600734
+  },
+  {
+   "i": 150,
+   "j": 147,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.987688340595
+  },
+  {
+   "i": 150,
+   "j": 148,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.994521895368
+  },
+  {
+   "i": 150,
+   "j": 149,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.998629534755
+  },
+  {
+   "i": 150,
+   "j": 150,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1.0
+  },
+  {
+   "i": 150,
+   "j": 151,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.998629534755
+  },
+  {
+   "i": 150,
+   "j": 152,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.994521895368
+  },
+  {
+   "i": 150,
+   "j": 153,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.987688340595
+  },
+  {
+   "i": 150,
+   "j": 154,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.978147600734
+  },
+  {
+   "i": 150,
+   "j": 155,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.965925826289
+  },
+  {
+   "i": 150,
+   "j": 156,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.951056516295
+  },
+  {
+   "i": 150,
+   "j": 157,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.933580426497
+  },
+  {
+   "i": 150,
+   "j": 158,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.913545457643
+  },
+  {
+   "i": 150,
+   "j": 159,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.891006524188
+  },
+  {
+   "i": 150,
+   "j": 160,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.866025403784
+  },
+  {
+   "i": 150,
+   "j": 161,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.838670567945
+  },
+  {
+   "i": 150,
+   "j": 162,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.809016994375
+  },
+  {
+   "i": 150,
+   "j": 163,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.777145961457
+  },
+  {
+   "i": 150,
+   "j": 164,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.743144825477
+  },
+  {
+   "i": 150,
+   "j": 165,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.707106781187
+  },
+  {
+   "i": 150,
+   "j": 166,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.669130606359
+  },
+  {
+   "i": 150,
+   "j": 167,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.62932039105
+  },
+  {
+   "i": 150,
+   "j": 168,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.587785252292
+  },
+  {
+   "i": 150,
+   "j": 169,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.544639035015
+  },
+  {
+   "i": 150,
+   "j": 170,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.5
+  },
+  {
+   "i": 150,
+   "j": 171,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.45399049974
+  },
+  {
+   "i": 150,
+   "j": 172,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.406736643076
+  },
+  {
+   "i": 150,
+   "j": 173,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.358367949545
+  },
+  {
+   "i": 150,
+   "j": 174,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.309016994375
+  },
+  {
+   "i": 150,
+   "j": 175,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.258819045103
+  },
+  {
+   "i": 150,
+   "j": 176,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.207911690818
+  },
+  {
+   "i": 150,
+   "j": 177,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.15643446504
+  },
+  {
+   "i": 150,
+   "j": 178,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.104528463268
+  },
+  {
+   "i": 150,
+   "j": 179,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.016666666666666666,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 0.052335956243
+  }
+ ],
+ "view": {
+  "field": "ez",
+  "gain": 0.9,
+  "auto_gain": false
+ }
+}

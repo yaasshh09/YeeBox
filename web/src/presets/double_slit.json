@@ -1,0 +1,5212 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 800,
+  "ny": 500,
+  "dx_phys_m": 2.5e-08,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1.0,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ },
+ "sources": [
+  {
+   "i": 60,
+   "j": 16,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 17,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 18,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 19,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 20,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 21,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 22,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 23,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 24,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 25,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 26,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 27,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 28,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 29,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 30,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 31,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 32,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 33,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 34,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 35,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 36,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 37,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 38,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 39,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 40,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 41,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 42,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 43,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 44,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 45,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 46,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 47,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 48,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 49,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 50,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 51,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 52,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 53,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 54,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 55,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 56,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 57,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 58,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 59,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 60,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 61,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 62,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 63,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 64,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 65,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 66,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 67,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 68,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 69,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 70,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 71,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 72,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 73,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 74,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 75,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 76,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 77,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 78,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 79,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 80,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 81,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 82,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 83,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 84,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 85,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 86,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 87,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 88,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 89,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 90,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 91,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 92,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 93,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 94,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 95,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 96,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 97,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 98,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 99,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 100,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 101,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 102,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 103,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 104,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 105,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 106,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 107,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 108,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 109,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 110,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 111,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 112,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 113,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 114,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 115,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 116,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 117,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 118,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 119,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 120,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 121,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 122,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 123,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 124,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 125,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 126,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 127,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 128,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 129,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 130,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 131,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 132,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 133,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 134,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 135,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 136,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 137,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 138,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 139,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 140,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 141,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 142,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 143,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 144,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 145,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 146,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 147,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 148,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 149,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 150,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 151,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 152,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 153,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 154,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 155,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 156,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 157,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 158,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 159,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 160,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 161,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 162,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 163,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 164,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 165,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 166,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 167,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 168,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 169,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 170,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 171,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 172,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 173,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 174,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 175,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 176,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 177,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 178,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 179,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 180,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 181,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 182,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 183,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 184,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 185,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 186,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 187,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 188,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 189,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 190,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 191,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 192,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 193,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 194,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 195,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 196,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 197,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 198,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 199,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 200,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 201,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 202,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 203,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 204,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 205,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 206,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 207,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 208,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 209,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 210,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 211,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 212,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 213,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 214,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 215,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 216,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 217,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 218,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 219,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 220,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 221,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 222,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 223,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 224,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 225,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 226,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 227,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 228,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 229,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 230,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 231,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 232,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 233,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 234,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 235,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 236,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 237,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 238,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 239,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 240,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 241,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 242,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 243,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 244,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 245,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 246,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 247,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 248,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 249,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 250,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 251,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 252,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 253,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 254,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 255,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 256,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 257,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 258,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 259,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 260,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 261,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 262,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 263,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 264,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 265,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 266,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 267,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 268,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 269,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 270,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 271,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 272,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 273,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 274,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 275,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 276,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 277,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 278,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 279,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 280,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 281,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 282,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 283,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 284,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 285,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 286,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 287,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 288,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 289,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 290,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 291,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 292,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 293,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 294,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 295,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 296,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 297,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 298,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 299,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 300,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 301,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 302,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 303,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 304,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 305,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 306,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 307,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 308,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 309,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 310,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 311,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 312,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 313,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 314,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 315,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 316,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 317,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 318,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 319,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 320,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 321,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 322,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 323,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 324,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 325,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 326,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 327,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 328,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 329,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 330,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 331,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 332,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 333,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 334,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 335,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 336,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 337,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 338,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 339,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 340,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 341,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 342,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 343,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 344,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 345,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 346,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 347,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 348,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 349,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 350,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 351,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 352,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 353,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 354,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 355,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 356,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 357,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 358,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 359,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 360,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 361,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 362,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 363,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 364,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 365,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 366,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 367,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 368,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 369,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 370,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 371,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 372,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 373,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 374,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 375,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 376,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 377,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 378,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 379,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 380,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 381,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 382,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 383,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 384,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 385,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 386,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 387,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 388,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 389,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 390,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 391,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 392,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 393,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 394,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 395,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 396,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 397,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 398,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 399,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 400,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 401,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 402,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 403,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 404,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 405,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 406,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 407,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 408,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 409,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 410,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 411,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 412,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 413,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 414,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 415,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 416,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 417,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 418,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 419,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 420,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 421,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 422,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 423,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 424,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 425,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 426,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 427,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 428,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 429,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 430,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 431,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 432,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 433,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 434,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 435,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 436,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 437,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 438,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 439,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 440,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 441,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 442,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 443,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 444,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 445,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 446,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 447,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 448,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 449,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 450,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 451,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 452,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 453,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 454,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 455,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 456,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 457,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 458,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 459,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 460,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 461,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 462,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 463,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 464,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 465,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 466,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 467,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 468,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 469,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 470,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 471,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 472,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 473,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 474,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 475,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 476,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 477,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 478,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 479,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 480,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 481,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 482,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 60,
+   "j": 483,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.0
+   },
+   "amplitude": 1
+  }
+ ],
+ "geometry": [
+  {
+   "shape": "rect",
+   "x0": 260,
+   "y0": 16,
+   "x1": 263,
+   "y1": 201,
+   "material": 2
+  },
+  {
+   "shape": "rect",
+   "x0": 260,
+   "y0": 218,
+   "x1": 263,
+   "y1": 281,
+   "material": 2
+  },
+  {
+   "shape": "rect",
+   "x0": 260,
+   "y0": 298,
+   "x1": 263,
+   "y1": 483,
+   "material": 2
+  }
+ ],
+ "view": {
+  "field": "ez",
+  "gain": 0.45,
+  "auto_gain": false
+ }
+}
