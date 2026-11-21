@@ -21,5 +21,7 @@ export default defineConfig({
     // The uppercase test reads index.css as text; without this Vitest stubs
     // CSS to an empty string and the test would pass vacuously.
     css: true,
+    // e2e/ belongs to Playwright.
+    include: ["src/**/*.test.ts"],
   },
 });
