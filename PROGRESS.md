@@ -7,7 +7,7 @@ entry at the top of the session log.
 
 **Active phase:** Phase 5 (Phases 0 to 4 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** Phase 5 part B (async device, queued taps, async reads, colormap, render pipeline, intensity); part A is done; the owner pushes when ready so CI runs once on lavapipe
+**Next action:** Phase 5 part C (`fdtd-wasm`: errors, GPU sim binding, edits, CPU fallback, self-test); parts A and B are done; the owner pushes when ready so CI runs once on lavapipe
 
 ## Decisions log
 
@@ -86,6 +86,11 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-21 | The GPU sources stage always exists, empty when there are no sources | a live edit can add the first source by rebuilding one bind group |
 | 2026-11-21 | `kernel::Comparator` and `Snapshot` hold the running-peak measure; `compare` is built on them | the async browser self-test reports the same numbers |
 | 2026-11-21 | Full-size presets live under `web/`; their compact 256 versions go in `validation/scenes` | the scene set caps scenes at 200 x 160 nodes to keep 2000 CPU steps quick |
+| 2026-11-21 | `Gpu::request(instance, surface)` is the async constructor; `Gpu::new`, `shared`, blocking reads and `impl Kernel for GpuSim` are native only; CI builds `fdtd-gpu` for wasm32 | a browser device is not `Send`, and nothing may block there |
+| 2026-11-21 | Taps are copied to a staging buffer per batch and drained in submission order without blocking; native reads of probes and spectra wait for the queue first | one code path for browser and tests; throughput unchanged at 3.04 Gcells/s |
+| 2026-11-21 | The colormaps are built in OKLab from stated rules (blue / dark neutral / orange diverging, dark to warm white sequential), 257 entries so zero is entry 128 | no published table offline; the rules are what the tests check |
+| 2026-11-21 | The render pass reads Ez, ids and the intensity mean straight from the simulation buffers, nearest node per pixel; `render::Viewport` (y up) is the one view transform | no readback per frame; GPU render, CPU fallback and pointer mapping agree |
+| 2026-11-21 | Intensity view: an exponential running mean of Ez^2 (time constant tau steps), drawn as `2 mean gain^2` on the sequential map; display only | a sinusoid at full-color amplitude reads 1 |
 
 ## Measured numbers
 
@@ -113,6 +118,8 @@ Fill in as they become available. These go in the README.
 | GPU workgroup independence | bit-identical for 4, 8, 16 | five field-only scenes, 300 steps | 2026-11-14 |
 | GPU vs CPU with live edits | 6.4e-7 of peak (walls painted through the CPML, erased, source moved and retuned, a second source added); 2.0e-6 (first source added to a sourceless cavity) | checkpoints every 250 steps and at each edit, to 2000; gate 1e-4 | 2026-11-21 |
 | Live paint at step 0 vs a scene painted from the start | bit-identical, with and without a CPML | CPU, 300 steps | 2026-11-21 |
+| GPU intensity mean vs f64 mean of CPU Ez | 1.8e-7 of peak | `painted_walls` with CW 0.05, tau 40, 400 steps; gate 1e-4 | 2026-11-21 |
+| Render at 1 px per cell | the exact table entry at a known node; CPML tint and conductor color within 1/255 | native offscreen Rgba8Unorm | 2026-11-21 |
 | GPU f32 TF/SF leakage | about 5e-8 of the incident amplitude (-146 dB) | one-node box, no other source; CPU leaves 1e-16 | 2026-11-14 |
 | Throughput, integrated GPU | not measured, no integrated GPU on this machine | | |
 | Throughput, discrete GPU | 3.0 Gcells/s, 2864 steps/s, 47.7 steps per 60 fps frame (16-cell CPML: 3.0 Gcells/s, 48.1) | GTX 1660 Ti, Vulkan, 1024 x 1024, 8 steps per submit, `fdtd bench` | 2026-11-14 |
