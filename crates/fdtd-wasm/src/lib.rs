@@ -12,6 +12,7 @@ use wasm_bindgen::prelude::*;
 
 #[cfg(target_arch = "wasm32")]
 mod gpu_sim;
+pub mod session;
 
 /// The stable code of an error, for the UI to branch on. Exhaustive, so a
 /// new error variant does not compile until it has a code here.
