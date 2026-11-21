@@ -11,9 +11,9 @@ use fdtd_core::FdtdError;
 use wasm_bindgen::prelude::*;
 
 pub mod cpu;
-#[cfg(target_arch = "wasm32")]
-mod gpu_sim;
 pub mod session;
+#[cfg(target_arch = "wasm32")]
+mod sim;
 
 /// The stable code of an error, for the UI to branch on. Exhaustive, so a
 /// new error variant does not compile until it has a code here.

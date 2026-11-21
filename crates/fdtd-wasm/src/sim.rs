@@ -1,6 +1,10 @@
-//! The GPU simulation as JavaScript sees it: one canvas, one scene, the
-//! `fdtd-gpu` kernel and renderer, and the viewport. Browser only.
+//! The simulation as JavaScript sees it: one scene session, one viewport,
+//! and a backend. `createSim` builds the GPU backend on a canvas (main
+//! thread); `createCpuSim` builds the f64 CPU fallback for a Web Worker,
+//! which draws by `pixels()` into its own canvas. Every other method is the
+//! same for both, so the page has one code path. Browser only.
 
+use crate::cpu::CpuBackend;
 use crate::session::Session;
 use crate::{ErrorInfo, JsResult, js_err};
 use fdtd_core::FdtdError;
@@ -10,24 +14,33 @@ use fdtd_gpu::{Gpu, GpuSim};
 use wasm_bindgen::prelude::*;
 use web_sys::HtmlCanvasElement;
 
+// One Sim per page, so the size gap between the variants costs nothing.
+#[allow(clippy::large_enum_variant)]
+enum Backend {
+    Gpu {
+        gpu: &'static Gpu,
+        surface: wgpu::Surface<'static>,
+        config: wgpu::SurfaceConfiguration,
+        sim: GpuSim,
+        renderer: Renderer,
+    },
+    Cpu(CpuBackend),
+}
+
 #[wasm_bindgen]
 pub struct Sim {
-    gpu: &'static Gpu,
-    surface: wgpu::Surface<'static>,
-    config: wgpu::SurfaceConfiguration,
     session: Session,
-    sim: GpuSim,
-    renderer: Renderer,
     viewport: Viewport,
+    backend: Backend,
 }
 
 /// Parses JSON into `T`, as a coded `json` error.
-pub(crate) fn parse<T: serde::de::DeserializeOwned>(json: &str) -> JsResult<T> {
+fn parse<T: serde::de::DeserializeOwned>(json: &str) -> JsResult<T> {
     serde_json::from_str(json).map_err(|e| js_err(FdtdError::Json(e.to_string())))
 }
 
 /// The scene's view, or the default: Ez at gain 1.
-pub(crate) fn view_of(scene: &Scene) -> View {
+fn view_of(scene: &Scene) -> View {
     scene.view.unwrap_or(View {
         field: ViewField::Ez,
         gain: 1.0,
@@ -35,13 +48,12 @@ pub(crate) fn view_of(scene: &Scene) -> View {
     })
 }
 
-/// Builds the simulation on `canvas`. Rejects with code `no_webgpu` when
-/// the browser has no WebGPU or no adapter that can draw to the canvas;
-/// the page then starts the CPU fallback.
+/// Builds the GPU simulation on `canvas`. Rejects with code `no_webgpu`
+/// when the browser has no WebGPU or no adapter that can draw to the
+/// canvas; the page then starts the CPU fallback in a worker.
 #[wasm_bindgen(js_name = createSim)]
 pub async fn create_sim(canvas: HtmlCanvasElement, scene_json: String) -> JsResult<Sim> {
     let session = Session::load(&scene_json).map_err(js_err)?;
-    let scene = &session.scene;
     let (width, height) = (canvas.width().max(1), canvas.height().max(1));
     let mut desc = wgpu::InstanceDescriptor::new_without_display_handle();
     desc.backends = wgpu::Backends::BROWSER_WEBGPU;
@@ -74,108 +86,198 @@ pub async fn create_sim(canvas: HtmlCanvasElement, scene_json: String) -> JsResu
         view_formats: vec![],
     };
     surface.configure(&gpu.device, &config);
+    let scene = &session.scene;
     let sim = GpuSim::new(gpu, scene).map_err(js_err)?;
     let renderer = Renderer::new(gpu, &sim, scene, format);
     let viewport = Viewport::fit(scene.grid.nx, scene.grid.ny, width as f64, height as f64);
     let mut out = Sim {
-        gpu,
-        surface,
-        config,
         session,
-        sim,
-        renderer,
         viewport,
+        backend: Backend::Gpu {
+            gpu,
+            surface,
+            config,
+            sim,
+            renderer,
+        },
+    };
+    out.apply_view()?;
+    Ok(out)
+}
+
+/// Builds the CPU fallback for a `width` x `height` pixel canvas.
+#[wasm_bindgen(js_name = createCpuSim)]
+pub fn create_cpu_sim(scene_json: &str, width: u32, height: u32) -> JsResult<Sim> {
+    let session = Session::load(scene_json).map_err(js_err)?;
+    let scene = &session.scene;
+    let cpu = CpuBackend::new(scene).map_err(js_err)?;
+    let viewport = Viewport::fit(
+        scene.grid.nx,
+        scene.grid.ny,
+        width.max(1) as f64,
+        height.max(1) as f64,
+    );
+    let mut out = Sim {
+        session,
+        viewport,
+        backend: Backend::Cpu(cpu),
     };
     out.apply_view()?;
     Ok(out)
 }
 
 impl Sim {
+    fn time_step(&self) -> u64 {
+        match &self.backend {
+            Backend::Gpu { sim, .. } => sim.time_step(),
+            Backend::Cpu(cpu) => cpu.time_step(),
+        }
+    }
+
     /// Normalized time of the E field now, for edits that start or retune.
     fn t_now(&self) -> f64 {
-        self.sim.time_step() as f64 * self.session.scene.grid.courant
+        self.time_step() as f64 * self.session.scene.grid.courant
     }
 
     fn sources_changed(&mut self) -> JsResult<()> {
-        self.sim.set_sources(&self.session.scene).map_err(js_err)
+        let scene = &self.session.scene;
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.set_sources(scene),
+            Backend::Cpu(cpu) => cpu.set_sources(scene),
+        }
+        .map_err(js_err)
     }
 
     fn materials_changed(&mut self, bounds: [usize; 4]) -> JsResult<()> {
-        self.sim
-            .set_materials(&self.session.scene, bounds)
-            .map_err(js_err)
+        let scene = &self.session.scene;
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.set_materials(scene, bounds),
+            Backend::Cpu(cpu) => cpu.set_materials(scene, bounds),
+        }
+        .map_err(js_err)
     }
 
     /// Turns the intensity mean on or off to match the scene's view.
     fn apply_view(&mut self) -> JsResult<()> {
-        let tau = (view_of(&self.session.scene).field == ViewField::Intensity)
-            .then(|| intensity_tau(&self.session.scene));
-        self.sim.set_intensity(tau).map_err(js_err)
+        let scene = &self.session.scene;
+        let tau = (view_of(scene).field == ViewField::Intensity).then(|| intensity_tau(scene));
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.set_intensity(tau),
+            Backend::Cpu(cpu) => cpu.set_intensity(tau),
+        }
+        .map_err(js_err)
+    }
+
+    fn frame(&self) -> Frame {
+        let view = view_of(&self.session.scene);
+        Frame {
+            viewport: self.viewport,
+            gain: view.gain,
+            field: view.field,
+        }
     }
 }
 
 #[wasm_bindgen]
 impl Sim {
-    /// Advances `n` steps (submitted in batches, not waited on).
+    /// `"gpu"` or `"cpu"`.
+    pub fn kernel(&self) -> String {
+        match self.backend {
+            Backend::Gpu { .. } => "gpu",
+            Backend::Cpu(_) => "cpu",
+        }
+        .into()
+    }
+
+    /// The adapter in one line, for the status strip.
+    pub fn adapter(&self) -> String {
+        match &self.backend {
+            Backend::Gpu { gpu, .. } => gpu.describe(),
+            Backend::Cpu(_) => "f64 reference kernel, one thread".into(),
+        }
+    }
+
+    /// Advances `n` steps (on the GPU submitted, not waited on).
     pub fn step(&mut self, n: u32) {
-        self.sim.step_n(n as u64);
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.step_n(n as u64),
+            Backend::Cpu(cpu) => cpu.step(n as u64),
+        }
     }
 
-    /// Feeds finished monitor batches to the probes and reports the first
-    /// device error since the last call. Call once per frame.
+    /// Feeds finished GPU batches to the probe and reports the first device
+    /// error since the last call. Call once per frame.
     pub fn check(&mut self) -> JsResult<()> {
-        self.sim.drain_taps().map_err(js_err)?;
-        self.gpu.check().map_err(js_err)
+        if let Backend::Gpu { gpu, sim, .. } = &mut self.backend {
+            sim.drain_taps().map_err(js_err)?;
+            gpu.check().map_err(js_err)?;
+        }
+        Ok(())
     }
 
-    /// Draws the current field to the canvas.
+    /// Draws the current field to the canvas (GPU backend; the CPU backend
+    /// draws through `pixels`).
     pub fn render(&mut self) -> JsResult<()> {
-        let frame = match self.surface.get_current_texture() {
+        let frame_desc = self.frame();
+        let Backend::Gpu {
+            gpu,
+            surface,
+            config,
+            renderer,
+            ..
+        } = &mut self.backend
+        else {
+            return Ok(());
+        };
+        let frame = match surface.get_current_texture() {
             wgpu::CurrentSurfaceTexture::Success(t)
             | wgpu::CurrentSurfaceTexture::Suboptimal(t) => t,
             wgpu::CurrentSurfaceTexture::Outdated | wgpu::CurrentSurfaceTexture::Lost => {
-                self.surface.configure(&self.gpu.device, &self.config);
+                surface.configure(&gpu.device, config);
                 return Ok(());
             }
             _ => return Ok(()),
         };
         let target = frame.texture.create_view(&Default::default());
-        let view = view_of(&self.session.scene);
-        let mut enc = self.gpu.device.create_command_encoder(&Default::default());
-        self.renderer.draw(
-            self.gpu,
-            &mut enc,
-            &target,
-            &Frame {
-                viewport: self.viewport,
-                gain: view.gain,
-                field: view.field,
-            },
-        );
-        self.gpu.queue.submit([enc.finish()]);
-        self.gpu.queue.present(frame);
+        let mut enc = gpu.device.create_command_encoder(&Default::default());
+        renderer.draw(gpu, &mut enc, &target, &frame_desc);
+        gpu.queue.submit([enc.finish()]);
+        gpu.queue.present(frame);
         Ok(())
+    }
+
+    /// RGBA8 pixels of the current frame for the CPU backend, row-major
+    /// from the top left; empty for the GPU backend.
+    pub fn pixels(&self) -> Vec<u8> {
+        match &self.backend {
+            Backend::Cpu(cpu) => cpu.pixels(&self.frame()),
+            Backend::Gpu { .. } => Vec::new(),
+        }
     }
 
     /// The canvas changed size in device pixels: reconfigure and refit.
     pub fn resize(&mut self, width: u32, height: u32) {
-        self.config.width = width.max(1);
-        self.config.height = height.max(1);
-        self.surface.configure(&self.gpu.device, &self.config);
-        self.viewport = Viewport::fit(
-            self.session.scene.grid.nx,
-            self.session.scene.grid.ny,
-            self.config.width as f64,
-            self.config.height as f64,
-        );
+        let (w, h) = (width.max(1), height.max(1));
+        if let Backend::Gpu {
+            gpu,
+            surface,
+            config,
+            ..
+        } = &mut self.backend
+        {
+            config.width = w;
+            config.height = h;
+            surface.configure(&gpu.device, config);
+        }
+        let g = self.session.scene.grid;
+        self.viewport = Viewport::fit(g.nx, g.ny, w as f64, h as f64);
     }
 
     /// Sets the view (`{"field": "ez" | "intensity", "gain": g,
     /// "auto_gain": b}`); it travels with the scene in shared links.
     #[wasm_bindgen(js_name = setView)]
     pub fn set_view(&mut self, json: &str) -> JsResult<()> {
-        let view: View = serde_json::from_str(json)
-            .map_err(|e| js_err(fdtd_core::FdtdError::Json(e.to_string())))?;
+        let view: View = parse(json)?;
         let mut next = self.session.scene.clone();
         next.view = Some(view);
         next.validate().map_err(js_err)?;
@@ -192,9 +294,9 @@ impl Sim {
         let st = self
             .session
             .scene
-            .status(self.sim.time_step())
+            .status(self.time_step())
             .map_err(js_err)?;
-        serde_json::to_string(&st).map_err(|e| js_err(fdtd_core::FdtdError::Json(e.to_string())))
+        serde_json::to_string(&st).map_err(|e| js_err(FdtdError::Json(e.to_string())))
     }
 
     /// The current scene, edits included, as JSON.
@@ -205,8 +307,20 @@ impl Sim {
     /// Zeroes the fields and time, keeping the scene.
     #[wasm_bindgen(js_name = resetFields)]
     pub fn reset_fields(&mut self) -> JsResult<()> {
-        self.sim = GpuSim::new(self.gpu, &self.session.scene).map_err(js_err)?;
-        self.renderer = Renderer::new(self.gpu, &self.sim, &self.session.scene, self.config.format);
+        let scene = &self.session.scene;
+        match &mut self.backend {
+            Backend::Gpu {
+                gpu,
+                config,
+                sim,
+                renderer,
+                ..
+            } => {
+                *sim = GpuSim::new(gpu, scene).map_err(js_err)?;
+                *renderer = Renderer::new(gpu, sim, scene, config.format);
+            }
+            Backend::Cpu(cpu) => *cpu = CpuBackend::new(scene).map_err(js_err)?,
+        }
         self.apply_view()
     }
 
@@ -321,23 +435,29 @@ impl Sim {
                 j: 0,
             }));
         }
-        let node = (x.round() as usize, y.round() as usize);
-        self.sim.set_probe(Some(node)).map_err(js_err)
+        let node = Some((x.round() as usize, y.round() as usize));
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.set_probe(node),
+            Backend::Cpu(cpu) => cpu.set_probe(node),
+        }
+        .map_err(js_err)
     }
 
     #[wasm_bindgen(js_name = clearProbe)]
     pub fn clear_probe(&mut self) -> JsResult<()> {
-        self.sim.set_probe(None).map_err(js_err)
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.set_probe(None),
+            Backend::Cpu(cpu) => cpu.set_probe(None),
+        }
+        .map_err(js_err)
     }
 
     /// The probe's Ez samples, one per step, since the last call.
     #[wasm_bindgen(js_name = takeProbe)]
     pub fn take_probe(&mut self) -> Vec<f32> {
-        self.sim.take_probe_samples()
-    }
-
-    /// The adapter in one line, for the status strip.
-    pub fn adapter(&self) -> String {
-        self.gpu.describe()
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.take_probe_samples(),
+            Backend::Cpu(cpu) => cpu.take_probe(),
+        }
     }
 }
