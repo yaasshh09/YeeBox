@@ -44,6 +44,9 @@ enum Cmd {
     /// kernel and print measured value, gate and pass or fail. Exits with
     /// an error if any case fails. Run it in release.
     Validate,
+    /// Write the browser self-test's golden fields: the f64 CPU kernel on
+    /// the self-test scenes, as f32, under validation/golden/selftest/.
+    SelftestGolden,
     /// Measure solver throughput headless, in million cell updates per
     /// second: the GPU kernel on an n x n grid, with and without a 16-cell
     /// CPML, submitting a fixed number of steps at a time like a frame
@@ -161,6 +164,19 @@ fn case_table(rows: &[CaseResult]) -> String {
         );
     }
     t
+}
+
+fn selftest_golden() -> Result<(), Box<dyn std::error::Error>> {
+    let dir = Path::new("validation/golden/selftest");
+    std::fs::create_dir_all(dir)?;
+    for name in fdtd_core::selftest::SCENES {
+        let text = std::fs::read_to_string(Path::new("validation/scenes").join(name))?;
+        let bytes = fdtd_core::selftest::golden(&Scene::from_json(&text)?)?;
+        let out = dir.join(name.replace(".json", ".bin"));
+        std::fs::write(&out, &bytes)?;
+        println!("wrote {} ({} bytes)", out.display(), bytes.len());
+    }
+    Ok(())
 }
 
 fn validate() -> Result<(), Box<dyn std::error::Error>> {
@@ -876,6 +892,7 @@ fn main() -> std::process::ExitCode {
         Cmd::PmlSweep(a) => pml_sweep(a),
         Cmd::Report(a) => report(a),
         Cmd::Validate => validate(),
+        Cmd::SelftestGolden => selftest_golden(),
         Cmd::Bench(a) => bench(a),
     };
     match result {

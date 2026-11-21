@@ -14,6 +14,7 @@ pub mod material;
 pub mod monitor;
 pub mod reflection;
 pub mod scene;
+pub mod selftest;
 pub mod source;
 pub mod spectra;
 pub mod tfsf;
