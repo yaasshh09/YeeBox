@@ -81,6 +81,16 @@ impl Waveform {
         }
     }
 
+    /// Center frequency, normalized (cycles per dx / c0); `None` for the
+    /// plain Gaussian, whose spectrum is centered on DC.
+    pub fn frequency(&self) -> Option<f64> {
+        match *self {
+            Waveform::Gaussian { .. } => None,
+            Waveform::ModulatedGaussian { f0, .. } | Waveform::RampedCw { f0, .. } => Some(f0),
+            Waveform::Ricker { f_peak, .. } => Some(f_peak),
+        }
+    }
+
     /// Waveform value at normalized time `t`.
     pub fn value(&self, t: f64) -> f64 {
         match *self {

@@ -12,6 +12,7 @@ use crate::material::{Material, PALETTE};
 use crate::monitor::{Dft, FluxLine, Normal};
 use crate::source::{SourceKind, Waveform};
 use crate::tfsf::{Direction, PlaneWave, PlaneWaveFault};
+use crate::units::{C0, Units};
 use serde::{Deserialize, Serialize};
 
 /// The format version this build writes and reads.
@@ -292,6 +293,36 @@ pub fn phased_array(
     }
     Ok(out)
 }
+
+/// What the status strip shows, in physical units. See `Scene::status`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct Status {
+    pub nx: usize,
+    pub ny: usize,
+    pub dx_m: f64,
+    pub steps: u64,
+    /// Simulated time of the E field, `steps * dt`, seconds.
+    pub time_s: f64,
+    /// One entry per scene source, in order; `None` for a waveform with no
+    /// center frequency (plain Gaussian).
+    pub sources: Vec<Option<Drive>>,
+    pub plane_wave: Option<Drive>,
+}
+
+/// The frequency of one source or plane wave and how well the grid
+/// resolves it in the medium where it is launched.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+pub struct Drive {
+    pub f_hz: f64,
+    pub vacuum_wavelength_m: f64,
+    /// In the medium at the source node (material 0 for the plane wave).
+    pub cells_per_wavelength: f64,
+    /// Below 10 cells per wavelength, where dispersion error grows fast.
+    pub under_resolved: bool,
+}
+
+/// Cells per wavelength below which the status strip warns.
+pub const WARN_CELLS_PER_WAVELENGTH: f64 = 10.0;
 
 /// Shortest vacuum wavelength a source edit accepts, in cells. On the axis
 /// the grid stops propagating below about 2.8 to 3 cells for S up to
@@ -777,6 +808,45 @@ impl Scene {
             return Err(FdtdError::SourceOnPec { i: src.i, j: src.j });
         }
         Ok(())
+    }
+
+    /// The status strip numbers after `steps` steps, all through `Units`.
+    /// Assumes a validated scene.
+    pub fn status(&self, steps: u64) -> Result<Status> {
+        let units = Units::new(self.grid.dx_phys_m, self.grid.courant)?;
+        let drive = |w: &Waveform, eps: f64| {
+            w.frequency().map(|f| {
+                let f_hz = units.hz_from_omega_n(2.0 * std::f64::consts::PI * f);
+                let cells_per_wavelength = units.cells_per_wavelength(f_hz, eps);
+                Drive {
+                    f_hz,
+                    vacuum_wavelength_m: C0 / f_hz,
+                    cells_per_wavelength,
+                    under_resolved: cells_per_wavelength < WARN_CELLS_PER_WAVELENGTH,
+                }
+            })
+        };
+        Ok(Status {
+            nx: self.grid.nx,
+            ny: self.grid.ny,
+            dx_m: units.dx_m(),
+            steps,
+            time_s: units.s_from_steps(steps as f64),
+            sources: self
+                .sources
+                .iter()
+                .map(|s| {
+                    drive(
+                        &s.waveform,
+                        self.materials[self.material_at(s.i, s.j)].eps(),
+                    )
+                })
+                .collect(),
+            plane_wave: self
+                .plane_wave
+                .as_ref()
+                .and_then(|pw| drive(&pw.waveform, self.materials[0].eps())),
+        })
     }
 
     /// Applies `patch` to source `index` of a validated scene at normalized
@@ -1768,6 +1838,43 @@ pub(crate) mod tests {
             bad.view.as_mut().unwrap().gain = gain;
             assert!(bad.validate().is_err(), "gain {gain}");
         }
+    }
+
+    #[test]
+    fn status_in_physical_units() {
+        // dx = 1 mm, S = 0.5. The Ricker at 0.05 is 14.99 GHz, 20 mm, 20
+        // cells in vacuum. A CW at 0.08 on the eps 4 node (7, 8) is 12.5 cells
+        // in vacuum, 6.25 in the medium: under-resolved. A Gaussian has none.
+        let mut s = sample();
+        let mut cw = s.sources[0];
+        (cw.i, cw.j) = (7, 8);
+        cw.waveform = Waveform::RampedCw {
+            f0: 0.08,
+            ramp_periods: 3.0,
+            phase: 0.0,
+        };
+        let mut g = s.sources[0];
+        g.waveform = Waveform::Gaussian {
+            t0: 60.0,
+            tau: 10.0,
+        };
+        s.sources.extend([cw, g]);
+        let st = s.status(1000).unwrap();
+        let rel = |a: f64, b: f64| ((a - b) / b).abs();
+        assert_eq!((st.nx, st.ny, st.steps), (40, 30, 1000));
+        assert!(rel(st.time_s, 1000.0 * 0.5 * 1e-3 / 299_792_458.0) < 1e-15);
+        let r = st.sources[0].unwrap();
+        assert!(rel(r.f_hz, 0.05 * 299_792_458.0 / 1e-3) < 1e-15);
+        assert!(rel(r.vacuum_wavelength_m, 0.02) < 1e-15);
+        assert!(rel(r.cells_per_wavelength, 20.0) < 1e-15);
+        assert!(!r.under_resolved);
+        let c = st.sources[1].unwrap();
+        assert!(rel(c.cells_per_wavelength, 6.25) < 1e-15);
+        assert!(c.under_resolved);
+        assert_eq!(st.sources[2], None);
+        assert_eq!(st.plane_wave, None);
+        let st = tfsf_sample().status(0).unwrap();
+        assert!(rel(st.plane_wave.unwrap().cells_per_wavelength, 20.0) < 1e-15);
     }
 
     fn cw_sample() -> Scene {
