@@ -91,7 +91,13 @@ impl Gpu {
 
     /// The adapter in one line, for logs: name and backend.
     pub fn describe(&self) -> String {
-        format!("{} ({:?})", self.adapter.name, self.adapter.backend)
+        // Browsers hide the adapter name for privacy; say so plainly.
+        let name = if self.adapter.name.is_empty() {
+            "unnamed adapter"
+        } else {
+            &self.adapter.name
+        };
+        format!("{name} ({:?})", self.adapter.backend)
     }
 
     /// Returns, and clears, the first error the device reported.
