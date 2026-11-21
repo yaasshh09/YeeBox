@@ -99,6 +99,32 @@ impl From<Paint> for PaintRuns {
     }
 }
 
+/// What one `Scene::paint_stroke` changed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StrokeOutcome {
+    /// Live interior nodes under the brush that took its material.
+    pub painted: usize,
+    /// Nodes under the brush left as they were: sources, TF/SF faces and
+    /// the nodes across them.
+    pub skipped: usize,
+    /// `[i0, j0, i1, j1]`, inclusive, around every node whose paint was
+    /// written, layer nodes included; `None` when nothing was.
+    pub bounds: Option<[usize; 4]>,
+}
+
+/// Squared distance from point `p` to the segment `a` to `b`, cell units.
+fn segment_dist2(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
+    let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 == 0.0 {
+        0.0
+    } else {
+        (((p.0 - a.0) * dx + (p.1 - a.1) * dy) / len2).clamp(0.0, 1.0)
+    };
+    let (qx, qy) = (a.0 + t * dx, a.1 + t * dy);
+    (p.0 - qx).powi(2) + (p.1 - qy).powi(2)
+}
+
 impl Paint {
     /// `len` entries, none painted. A scene needs `nx * ny`.
     pub fn blank(len: usize) -> Paint {
@@ -606,8 +632,23 @@ impl Scene {
                 return fault(PlaneWaveFault::NotFullHeight);
             }
         }
-        // Every node on a face and the node across it, as signed indices so
-        // a face on row or column 0 shows up as out of range, not as a wrap.
+        for (i, j) in self.tfsf_guard_nodes(pw) {
+            let live_x = (1..nx as i64 - 1).contains(&i);
+            let live_y = self.periodic_y || (1..ny as i64 - 1).contains(&j);
+            if !(live_x && live_y) || self.in_pml(i as usize, j as usize) {
+                return fault(PlaneWaveFault::FaceTooClose);
+            }
+            if self.material_at(i as usize, j as usize) != 0 {
+                return fault(PlaneWaveFault::NotBackground);
+            }
+        }
+        Ok(())
+    }
+
+    /// Every Ez node on a TF/SF face and the scattered-field node across it,
+    /// as signed indices so a face on row or column 0 shows up as out of
+    /// range, not as a wrap. These must stay in material 0.
+    fn tfsf_guard_nodes(&self, pw: &PlaneWave) -> Vec<(i64, i64)> {
         let (x0, x1, y0, y1) = (pw.x0 as i64, pw.x1 as i64, pw.y0 as i64, pw.y1 as i64);
         let mut nodes = Vec::new();
         for j in y0..=y1 {
@@ -622,17 +663,125 @@ impl Scene {
                 }
             }
         }
-        for (i, j) in nodes {
-            let live_x = (1..nx as i64 - 1).contains(&i);
-            let live_y = self.periodic_y || (1..ny as i64 - 1).contains(&j);
-            if !(live_x && live_y) || self.in_pml(i as usize, j as usize) {
-                return fault(PlaneWaveFault::FaceTooClose);
-            }
-            if self.material_at(i as usize, j as usize) != 0 {
-                return fault(PlaneWaveFault::NotBackground);
+        nodes
+    }
+
+    /// Paints `material` on every live Ez node within `radius` cells of the
+    /// segment `from` to `to` (cell units, node (i, j) at (i, j)): a capsule
+    /// brush. `material` 0 erases to the background. Nodes the scene needs
+    /// as they are, sources and the TF/SF faces with the nodes across them,
+    /// are skipped and counted. The brush itself never paints inside the
+    /// CPML; instead every layer node takes the paint of the interface node
+    /// it is clamped to, so a wall drawn up to the layer runs on through it
+    /// and the layer stays uniform along its normal. Off-grid parts of a
+    /// stroke are ignored. A stroke on a valid scene leaves it valid.
+    pub fn paint_stroke(
+        &mut self,
+        from: (f64, f64),
+        to: (f64, f64),
+        radius: f64,
+        material: usize,
+    ) -> Result<StrokeOutcome> {
+        for (name, v) in [
+            ("stroke x", from.0),
+            ("stroke y", from.1),
+            ("stroke x", to.0),
+            ("stroke y", to.1),
+        ] {
+            finite(name, v)?;
+        }
+        if !(radius.is_finite() && radius >= 0.0) {
+            return Err(FdtdError::InvalidParameter {
+                name: "brush radius",
+                value: radius,
+            });
+        }
+        if material >= self.materials.len() {
+            return Err(FdtdError::UnknownMaterial { id: material });
+        }
+        let GridSpec { nx, ny, .. } = self.grid;
+        let d = self.pml_thickness();
+        let rows = self.live_rows();
+        let mut protected: std::collections::HashSet<(usize, usize)> =
+            self.sources.iter().map(|s| (s.i, s.j)).collect();
+        if let Some(pw) = &self.plane_wave {
+            protected.extend(
+                self.tfsf_guard_nodes(pw)
+                    .into_iter()
+                    .filter(|&(i, j)| i >= 0 && j >= 0)
+                    .map(|(i, j)| (i as usize, j as usize)),
+            );
+        }
+        let mut out = StrokeOutcome {
+            painted: 0,
+            skipped: 0,
+            bounds: None,
+        };
+        // The brush's bounding box, clipped to the live nodes.
+        let lo_x = (from.0.min(to.0) - radius).ceil().max(1.0);
+        let hi_x = (from.0.max(to.0) + radius).floor().min((nx - 2) as f64);
+        let lo_y = (from.1.min(to.1) - radius).ceil().max(rows.start as f64);
+        let hi_y = (from.1.max(to.1) + radius)
+            .floor()
+            .min((rows.end - 1) as f64);
+        if lo_x > hi_x || lo_y > hi_y {
+            return Ok(out);
+        }
+        let mut hit = Vec::new();
+        for j in lo_y as usize..=hi_y as usize {
+            for i in lo_x as usize..=hi_x as usize {
+                if self.in_pml(i, j)
+                    || segment_dist2((i as f64, j as f64), from, to) > radius * radius
+                {
+                    continue;
+                }
+                if protected.contains(&(i, j)) {
+                    out.skipped += 1;
+                } else {
+                    hit.push((i, j));
+                }
             }
         }
-        Ok(())
+        out.painted = hit.len();
+        // Layer nodes clamped to a painted interface node: along the normal
+        // on an edge, over the whole corner block at a corner.
+        let mut layer = Vec::new();
+        if d > 0 {
+            let span = |c: usize, n: usize| {
+                if c == d {
+                    1..=d
+                } else if c == n - 1 - d {
+                    c..=n - 2
+                } else {
+                    c..=c
+                }
+            };
+            for &(ci, cj) in &hit {
+                let js = if self.periodic_y {
+                    cj..=cj
+                } else {
+                    span(cj, ny)
+                };
+                for j in js {
+                    for i in span(ci, nx) {
+                        if (i, j) != (ci, cj) {
+                            layer.push((i, j));
+                        }
+                    }
+                }
+            }
+        }
+        if hit.is_empty() {
+            return Ok(out);
+        }
+        let paint = self.paint.get_or_insert_with(|| Paint::blank(nx * ny));
+        let mut b = [usize::MAX, usize::MAX, 0, 0];
+        for (i, j) in hit.into_iter().chain(layer) {
+            paint.set(j * nx + i, Some(material));
+            b = [b[0].min(i), b[1].min(j), b[2].max(i), b[3].max(j)];
+        }
+        out.bounds = Some(b);
+        Ok(out)
     }
 
     /// Every non-wall node in the layer must have the material of the
@@ -1469,6 +1618,107 @@ pub(crate) mod tests {
             rejects(|s| s.paint = Some(painted(&[(20 * 40 + 12, 2)]))),
             FdtdError::SourceOnPec { i: 12, j: 20 }
         );
+    }
+
+    #[test]
+    fn stroke_paints_exact_cells() {
+        // Every node within 1 of the segment (10, 10) to (14, 10).
+        let mut s = empty(40, 30, vec![]);
+        let out = s.paint_stroke((10.0, 10.0), (14.0, 10.0), 1.0, 2).unwrap();
+        let mut want: Vec<(usize, usize)> = (9..=15).map(|i| (i, 10)).collect();
+        want.extend((10..=14).flat_map(|i| [(i, 9), (i, 11)]));
+        want.sort_by_key(|&(i, j)| (j, i));
+        assert_eq!(cells(&s, 2), want);
+        assert_eq!(
+            out,
+            StrokeOutcome {
+                painted: 17,
+                skipped: 0,
+                bounds: Some([9, 9, 15, 11])
+            }
+        );
+        // A diagonal with radius 1/2 takes the diagonal nodes only: the
+        // neighbors sit 1/sqrt(2) away.
+        let mut s = empty(40, 30, vec![]);
+        s.paint_stroke((5.0, 5.0), (8.0, 8.0), 0.5, 1).unwrap();
+        assert_eq!(cells(&s, 1), vec![(5, 5), (6, 6), (7, 7), (8, 8)]);
+        // Erasing writes material 0 over a shape.
+        let mut s = sample();
+        s.paint_stroke((7.0, 8.0), (7.0, 8.0), 0.0, 0).unwrap();
+        assert_eq!(s.material_at(7, 8), 0);
+        assert_eq!(s.material_at(8, 8), 1);
+    }
+
+    #[test]
+    fn stroke_skips_protected_nodes() {
+        // PEC over the source at (12, 20) would make the scene invalid.
+        let mut s = sample();
+        let out = s.paint_stroke((10.0, 20.0), (14.0, 20.0), 0.0, 2).unwrap();
+        assert_eq!((out.painted, out.skipped), (4, 1));
+        assert_eq!(s.material_at(12, 20), 0);
+        s.validate().unwrap();
+        // A wall dragged across the plane wave box keeps its faces and the
+        // nodes across them in the background.
+        let mut s = tfsf_sample();
+        let out = s.paint_stroke((30.0, 2.0), (30.0, 47.0), 0.0, 2).unwrap();
+        assert_eq!(out.skipped, 4);
+        for j in [9, 10, 40, 41] {
+            assert_eq!(s.material_at(30, j), 0, "row {j}");
+        }
+        assert_eq!(s.material_at(30, 20), 2);
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn stroke_extends_into_the_layer() {
+        // 40 x 30 with a 5-cell layer: interior nodes are i in 5..=34 and
+        // j in 5..=24. Strokes at every edge and corner keep the scene valid.
+        let base = || {
+            let mut s = empty(40, 30, vec![]);
+            s.pml = Some(crate::cpml::tests::spec(5));
+            s
+        };
+        for (from, to) in [
+            ((0.0, 15.0), (6.0, 15.0)),
+            ((39.0, 15.0), (33.0, 15.0)),
+            ((20.0, 0.0), (20.0, 6.0)),
+            ((20.0, 29.0), (20.0, 23.0)),
+            ((0.0, 0.0), (6.0, 6.0)),
+            ((39.0, 29.0), (33.0, 23.0)),
+            ((0.0, 29.0), (6.0, 23.0)),
+            ((39.0, 0.0), (33.0, 6.0)),
+        ] {
+            let mut s = base();
+            s.paint_stroke(from, to, 1.5, 2).unwrap();
+            s.validate()
+                .unwrap_or_else(|e| panic!("{from:?} to {to:?}: {e}"));
+        }
+        // A horizontal wall through the left face runs out to the wall ring.
+        let mut s = base();
+        s.paint_stroke((0.0, 15.0), (8.0, 15.0), 0.0, 2).unwrap();
+        assert_eq!(cells(&s, 2), (1..=8).map(|i| (i, 15)).collect::<Vec<_>>());
+        // Paint only inside the layer has no interior node to follow.
+        let mut s = base();
+        let out = s.paint_stroke((2.0, 15.0), (3.0, 15.0), 0.0, 2).unwrap();
+        assert_eq!(out.painted, 0);
+        assert!(cells(&s, 2).is_empty());
+    }
+
+    #[test]
+    fn stroke_rejects_bad_input() {
+        let mut s = sample();
+        assert_eq!(
+            s.paint_stroke((1.0, 1.0), (2.0, 2.0), 1.0, 3),
+            Err(FdtdError::UnknownMaterial { id: 3 })
+        );
+        assert!(s.paint_stroke((f64::NAN, 1.0), (2.0, 2.0), 1.0, 1).is_err());
+        assert!(s.paint_stroke((1.0, 1.0), (2.0, 2.0), -1.0, 1).is_err());
+        assert!(s.paint.is_none());
+        // Far outside the grid paints nothing, without error.
+        let out = s
+            .paint_stroke((-50.0, -50.0), (-40.0, -40.0), 2.0, 1)
+            .unwrap();
+        assert_eq!(out.bounds, None);
     }
 
     #[test]
