@@ -185,6 +185,60 @@ fn flatten(spectra: &[Spectrum]) -> Vec<f64> {
     out
 }
 
+/// Everything `compare` diffs at one checkpoint: Ez, Hx, Hy, all point
+/// probe histories together, and all spectra flattened (real and imaginary
+/// parts of DFTs, then flux values, in scene order).
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Snapshot {
+    pub fields: [Vec<f64>; 3],
+    pub probes: Vec<f64>,
+    pub spectra: Vec<f64>,
+}
+
+impl Snapshot {
+    /// Reads a kernel where it stands.
+    pub fn of<K: Kernel>(k: &mut K) -> Result<Snapshot> {
+        Ok(Snapshot {
+            fields: [
+                k.read_field(Component::Ez)?,
+                k.read_field(Component::Hx)?,
+                k.read_field(Component::Hy)?,
+            ],
+            probes: k.probe_history()?.concat(),
+            spectra: flatten(&k.monitor_spectra()?),
+        })
+    }
+}
+
+/// The measure `compare` reports, fed one checkpoint at a time, so a caller
+/// that reads its kernels asynchronously (the browser self-test) gets the
+/// same numbers. It keeps the reference's running peaks: Ez, Hx, Hy,
+/// probes, spectra.
+#[derive(Debug, Clone, Default)]
+pub struct Comparator {
+    peak: [f64; 5],
+}
+
+impl Comparator {
+    pub fn new() -> Comparator {
+        Comparator::default()
+    }
+
+    /// The `Diff` of candidate `b` against reference `a` at `step`.
+    pub fn checkpoint(&mut self, step: u64, a: &Snapshot, b: &Snapshot) -> Result<Diff> {
+        let mut fields = [0.0; 3];
+        for (f, out) in fields.iter_mut().enumerate() {
+            *out = diff_against(&a.fields[f], &b.fields[f], &mut self.peak[f])?;
+        }
+        Ok(Diff {
+            step,
+            fields,
+            probes: diff_against(&a.probes, &b.probes, &mut self.peak[3])?,
+            spectra: diff_against(&a.spectra, &b.spectra, &mut self.peak[4])?,
+        })
+    }
+}
+
 /// Steps both kernels, built from the same scene, to each step count in
 /// `checkpoints` (non-decreasing, none below where they already are) and
 /// diffs every field, the probe histories and the spectra there. `a` is
@@ -195,8 +249,7 @@ pub fn compare<A: Kernel, B: Kernel>(
     checkpoints: &[u64],
 ) -> Result<Vec<Diff>> {
     let mut out = Vec::with_capacity(checkpoints.len());
-    // Running peaks of the reference: Ez, Hx, Hy, probes, spectra.
-    let mut peak = [0.0f64; 5];
+    let mut cmp = Comparator::new();
     for &step in checkpoints {
         for k in [a.time_step(), b.time_step()] {
             if step < k {
@@ -207,23 +260,7 @@ pub fn compare<A: Kernel, B: Kernel>(
         }
         a.step(step - a.time_step());
         b.step(step - b.time_step());
-        let mut fields = [0.0; 3];
-        for (f, c) in [Component::Ez, Component::Hx, Component::Hy]
-            .into_iter()
-            .enumerate()
-        {
-            fields[f] = diff_against(&a.read_field(c)?, &b.read_field(c)?, &mut peak[f])?;
-        }
-        let pa: Vec<f64> = a.probe_history()?.concat();
-        let pb: Vec<f64> = b.probe_history()?.concat();
-        let sa = flatten(&a.monitor_spectra()?);
-        let sb = flatten(&b.monitor_spectra()?);
-        out.push(Diff {
-            step,
-            fields,
-            probes: diff_against(&pa, &pb, &mut peak[3])?,
-            spectra: diff_against(&sa, &sb, &mut peak[4])?,
-        });
+        out.push(cmp.checkpoint(step, &Snapshot::of(a)?, &Snapshot::of(b)?)?);
     }
     Ok(out)
 }
@@ -372,6 +409,21 @@ mod tests {
         let peak = p200.max(p3000);
         assert!((d[1].fields[0] - 1e-6 / peak).abs() < 1e-9 / peak, "{d:?}");
         assert!(d[1].fields[0] <= d[0].fields[0] * (1.0 + 1e-9), "{d:?}");
+    }
+
+    #[test]
+    fn comparator_keeps_the_running_peak() {
+        let snap = |v: f64| Snapshot {
+            fields: [vec![v], vec![0.0], vec![0.0]],
+            ..Default::default()
+        };
+        let mut c = Comparator::new();
+        let d = c.checkpoint(10, &snap(2.0), &snap(2.5)).unwrap();
+        assert_eq!(d.fields, [0.25, 0.0, 0.0]);
+        // The field fell to 1; the same 0.5 error is still 0.25 of the peak.
+        let d = c.checkpoint(20, &snap(1.0), &snap(1.5)).unwrap();
+        assert_eq!((d.step, d.fields[0], d.worst()), (20, 0.25, 0.25));
+        assert!(c.checkpoint(30, &snap(1.0), &Snapshot::default()).is_err());
     }
 
     #[test]
