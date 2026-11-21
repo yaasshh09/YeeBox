@@ -17,7 +17,11 @@ have never seen it.
 
 ## Layout
 
-Lab instrument idiom, consistent with AtomSIM.
+Lab instrument idiom, consistent with AtomSIM (the sibling project in
+`../atom_sim/web`): monochrome `light-dark()` tokens, Poppins, a top bar over
+three columns (300 px rail, the stage, 300 px panel), and below 900 px a
+separate mobile shell where the stage fills the screen and the controls live
+in a bottom sheet that drags up.
 
 - **Canvas** fills most of the window. The field is the hero.
 - **Tool rail** (left or bottom on mobile): paint, erase, shapes, source,

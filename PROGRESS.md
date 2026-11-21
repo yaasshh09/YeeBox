@@ -7,7 +7,7 @@ entry at the top of the session log.
 
 **Active phase:** Phase 5 (Phases 0 to 4 done, CI not yet run on GitHub)
 **Blocked on:** nothing
-**Next action:** push so CI runs once (first run with lavapipe for the GPU tests), then plan Phase 5 (browser demo) in detail
+**Next action:** Phase 5 part A (core paint, palette, source patch, status, live edits); the owner pushes when ready so CI runs once on lavapipe
 
 ## Decisions log
 
@@ -76,6 +76,8 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-14 | `FdtdError::Gpu`; device errors are stored and returned by the next read | `Kernel::step` has no `Result`; nothing panics |
 | 2026-11-14 | GPU tests use a libtest-mimic harness: no adapter means ignored with a banner; `FDTD_REQUIRE_GPU=1` (CI) makes it a failure | the built-in harness cannot skip at runtime |
 | 2026-11-14 | `kernel::compare` normalizes by the reference peak over the run so far, checked every 250 steps | the CLAUDE.md wording "1e-4 of peak field"; f32 error scales with the largest field held (see deviations) |
+| 2026-11-21 | The site deploys to GitHub Pages from an Actions job on main | no second account; the repo is already on GitHub |
+| 2026-11-21 | The UI follows AtomSIM (`../atom_sim/web`): tokens, Poppins, three columns, mobile shell under 900 px, same web stack | the owner's sibling project; one lab-instrument idiom across both |
 
 ## Measured numbers
 
@@ -142,7 +144,7 @@ Fill in as they become available. These go in the README.
 | Recommended CPML presets at long wavelengths | The preset's CFS alpha leaves the layer weak below w of about alpha_max (-41 dB at 400 cells per wavelength) | alpha is there for evanescent and grazing waves; normal-incidence scenes use alpha 0 | open: the UI phase needs a low-frequency preset or guidance for CW sources |
 | A13 slab thickness | eps on Ez nodes i0..i1 makes a slab i1 - i0 + 1 cells thick, faces at half cells | the exact discrete transfer agrees with this to 1.4e-7 | yes |
 | `fdtd run --scene` probes | It sized its probe array by every monitor; now it counts point monitors only | flux and DFT monitors have no time record | yes, fixed in 1042571 |
-| 04-validation Tier 4 "max abs(gpu - cpu) / max abs(cpu)" | The denominator is the reference peak over the run so far, not at the final step | measured on `materials_clutter`: the absolute difference falls from 5e-8 to 9e-9 while the CPML drains the field 1000 times, so the final-step ratio reaches 2.8e-4 from round-off alone; without the layer it stays at 2e-6. I changed the measure after seeing that failure, so I am flagging it; it matches CLAUDE.md "1e-4 of peak field" | yes, flagged for review |
+| 04-validation Tier 4 "max abs(gpu - cpu) / max abs(cpu)" | The denominator is the reference peak over the run so far, not at the final step | measured on `materials_clutter`: the absolute difference falls from 5e-8 to 9e-9 while the CPML drains the field 1000 times, so the final-step ratio reaches 2.8e-4 from round-off alone; without the layer it stays at 2e-6. I changed the measure after seeing that failure, so I am flagging it; it matches CLAUDE.md "1e-4 of peak field" | yes, signed off by the owner on 2026-11-21 |
 | 02-numerics "six 1D buffers per axis" | One packed `vec4` buffer for all profiles and the material table | the 8 storage buffers per stage default limit | yes |
 | 02-numerics "DFT accumulation on the GPU" | The GPU gathers monitor samples, the CPU accumulates in f64 | f32 accumulation loses digits; reuses the core monitor code | yes, revisit if readback ever costs frame time |
 | Phase 4 "TF/SF corrections on the GPU" | Corrections run on the GPU, the auxiliary 1D grid on the CPU in f64 | no second auxiliary implementation; about 100 nodes per step | yes |
