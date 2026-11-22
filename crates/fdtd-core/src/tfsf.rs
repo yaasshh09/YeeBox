@@ -301,6 +301,9 @@ pub enum PlaneWaveFault {
     /// With periodic y the box must span every row (y0 = 0, y1 = ny - 1),
     /// because there are no y faces.
     NotFullHeight,
+    /// A TEz plane wave runs the TMz auxiliary grid through duality, which
+    /// is exact in vacuum only. ponytail: a dual grid with mu would lift it.
+    TeNeedsVacuum,
 }
 
 impl std::fmt::Display for PlaneWaveFault {
@@ -312,6 +315,7 @@ impl std::fmt::Display for PlaneWaveFault {
             Self::LossyBackground => "material 0 must be a lossless dielectric",
             Self::WrapsAlongY => "a y-travelling wave cannot be used with periodic y",
             Self::NotFullHeight => "with periodic y the box must span every row",
+            Self::TeNeedsVacuum => "a TE plane wave needs vacuum as material 0",
         })
     }
 }

@@ -66,12 +66,24 @@ pub struct SimTm {
     key: BuildKey,
 }
 
-/// A spectral monitor as the solver runs it.
+/// A spectral monitor as the solver runs it (TEz uses it too).
 #[derive(Debug, Clone)]
-enum Spectral {
-    /// Ez transform at node index k.
+pub(crate) enum Spectral {
+    /// Transform of the node field (Ez, or Hz in TEz) at node index k.
     Field(usize, Dft),
     Flux(FluxLine),
+}
+
+impl Spectral {
+    /// The accumulated spectrum, as `Kernel::monitor_spectra` returns it.
+    pub(crate) fn spectrum(&self) -> Spectrum {
+        match self {
+            Spectral::Field(_, dft) => {
+                Spectrum::Field((0..dft.freqs().len()).map(|f| dft.get(0, f)).collect())
+            }
+            Spectral::Flux(line) => Spectrum::Flux(line.flux()),
+        }
+    }
 }
 
 impl SimTm {
@@ -404,16 +416,7 @@ impl Kernel for SimTm {
     }
 
     fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
-        Ok(self
-            .spectral
-            .iter()
-            .map(|m| match m {
-                Spectral::Field(_, dft) => {
-                    Spectrum::Field((0..dft.freqs().len()).map(|f| dft.get(0, f)).collect())
-                }
-                Spectral::Flux(line) => Spectrum::Flux(line.flux()),
-            })
-            .collect())
+        Ok(self.spectral.iter().map(Spectral::spectrum).collect())
     }
 }
 

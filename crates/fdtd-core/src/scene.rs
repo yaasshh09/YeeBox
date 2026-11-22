@@ -1003,6 +1003,9 @@ impl Scene {
         if !matches!(self.materials[0], Material::Dielectric { sigma, .. } if sigma == 0.0) {
             return fault(PlaneWaveFault::LossyBackground);
         }
+        if self.mode == Mode::Te && self.materials[0] != Material::VACUUM {
+            return fault(PlaneWaveFault::TeNeedsVacuum);
+        }
         if self.periodic_y {
             if matches!(pw.direction, Direction::PlusY | Direction::MinusY) {
                 return fault(PlaneWaveFault::WrapsAlongY);
@@ -1713,6 +1716,24 @@ pub(crate) mod tests {
                 f_peak: -1.0
             })
             .is_err()
+        );
+    }
+
+    /// A TEz plane wave needs a vacuum background (it reuses the TMz
+    /// auxiliary grid through duality, which holds in vacuum only).
+    #[test]
+    fn te_plane_wave_needs_vacuum() {
+        let te = |s: &mut Scene| s.mode = Mode::Te;
+        assert!(tfsf_fault(te).is_ok());
+        assert_eq!(
+            tfsf_fault(|s| {
+                te(s);
+                s.materials[0] = Material::Dielectric {
+                    eps_inf: 2.0,
+                    sigma: 0.0,
+                };
+            }),
+            Err(FdtdError::PlaneWave(PlaneWaveFault::TeNeedsVacuum))
         );
     }
 

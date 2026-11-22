@@ -322,7 +322,7 @@ impl GpuSim {
         for m in &scene.monitors {
             let at = taps.len();
             taps.extend(
-                m.taps(nx, ny)?
+                m.taps(scene.mode, nx, ny)?
                     .iter()
                     .map(|&(c, k)| [field_id(c), k as u32]),
             );

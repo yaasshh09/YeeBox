@@ -58,6 +58,7 @@ pub struct BuildKey {
     materials: Vec<Material>,
     pml: Option<PmlSpec>,
     plane_wave: Option<PlaneWave>,
+    mode: crate::scene::Mode,
 }
 
 impl BuildKey {
@@ -68,6 +69,7 @@ impl BuildKey {
             materials: scene.materials.clone(),
             pml: scene.pml,
             plane_wave: scene.plane_wave,
+            mode: scene.mode,
         }
     }
 

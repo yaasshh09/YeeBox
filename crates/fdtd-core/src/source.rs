@@ -102,6 +102,32 @@ impl Waveform {
         }
     }
 
+    /// The same waveform `d` time units later: `delayed(d).value(t + d)`
+    /// equals `value(t)` up to round-off. A CW keeps its frequency; its start
+    /// moves by `d` and its phase by `-2 pi f0 d`.
+    pub fn delayed(&self, d: f64) -> Waveform {
+        match *self {
+            Waveform::Gaussian { t0, tau } => Waveform::Gaussian { t0: t0 + d, tau },
+            Waveform::ModulatedGaussian { t0, tau, f0 } => Waveform::ModulatedGaussian {
+                t0: t0 + d,
+                tau,
+                f0,
+            },
+            Waveform::Ricker { t0, f_peak } => Waveform::Ricker { t0: t0 + d, f_peak },
+            Waveform::RampedCw {
+                f0,
+                ramp_periods,
+                phase,
+                start,
+            } => Waveform::RampedCw {
+                f0,
+                ramp_periods,
+                phase: phase - 2.0 * PI * f0 * d,
+                start: start + d,
+            },
+        }
+    }
+
     /// Waveform value at normalized time `t`.
     pub fn value(&self, t: f64) -> f64 {
         match *self {
@@ -149,6 +175,37 @@ mod tests {
     fn integral(w: &Waveform, a: f64, b: f64, dt: f64) -> f64 {
         let n = ((b - a) / dt).round() as usize;
         (0..=n).map(|k| w.value(a + k as f64 * dt)).sum::<f64>() * dt
+    }
+
+    /// `delayed(d)` is the same waveform `d` later, for every kind.
+    #[test]
+    fn delayed_is_a_time_shift() {
+        let d = 0.25;
+        for w in [
+            Waveform::Gaussian { t0: 40.0, tau: 8.0 },
+            Waveform::ModulatedGaussian {
+                t0: 50.0,
+                tau: 12.0,
+                f0: 0.05,
+            },
+            Waveform::Ricker {
+                t0: 30.0,
+                f_peak: 0.05,
+            },
+            Waveform::RampedCw {
+                f0: 0.07,
+                ramp_periods: 3.0,
+                phase: 0.4,
+                start: 5.0,
+            },
+        ] {
+            let later = w.delayed(d);
+            for k in 0..400 {
+                let t = 0.37 * k as f64;
+                let (a, b) = (later.value(t + d), w.value(t));
+                assert!((a - b).abs() < 1e-12, "{w:?} at {t}: {a} vs {b}");
+            }
+        }
     }
 
     #[test]

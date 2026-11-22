@@ -30,14 +30,27 @@
 //!
 //! Point sources drive Hz (a magnetic line current) right after the Hz
 //! update, with the waveform at t = (n + 1/2) S, so the E update of the same
-//! step sees them. Probes record Hz.
+//! step sees them. Probes, DFT monitors and flux lines read Hz on the nodes,
+//! entered at its true time (n - 1/2) S.
+//!
+//! TF/SF runs the TMz plane wave (`tfsf.rs`) through duality, in a vacuum
+//! background only (the scene validator enforces it). The auxiliary grid
+//! gets the waveform delayed by S/2, because its Ez^m stands for the
+//! incident Hz^(m - 1/2), and it is advanced at the start of each step. The
+//! TMz E corrections, with Cb = S, then correct the Hz face nodes from
+//! `incident_h`, and the TMz H corrections, with the sign flipped (E is
+//! minus H under duality), correct the Ex and Ey edges from `incident_e`.
 
 use crate::cpml::Cpml;
 use crate::error::{FdtdError, Result};
+use crate::grid::Component;
+use crate::kernel::{BuildKey, Kernel, Spectrum};
 use crate::material::Material;
-use crate::monitor::PointProbe;
+use crate::monitor::{Dft, FluxLine, PointProbe};
 use crate::scene::{Mode, Monitor, Scene, Source};
 use crate::source::SourceKind;
+use crate::tfsf::Tfsf;
+use crate::tm::Spectral;
 
 /// TEz grid state built from a validated scene.
 #[derive(Debug, Clone)]
@@ -64,6 +77,11 @@ pub struct SimTe {
     psi_hzy: Vec<f64>,
     sources: Vec<Source>,
     probes: Vec<PointProbe>,
+    tfsf: Option<Tfsf>,
+    /// S on every node: the Hz coefficient, for the TF/SF Hz corrections.
+    node_s: Vec<f64>,
+    spectral: Vec<Spectral>,
+    key: BuildKey,
 }
 
 impl SimTe {
@@ -74,27 +92,35 @@ impl SimTe {
         if scene.mode != Mode::Te {
             return Err(FdtdError::WrongMode { mode: scene.mode });
         }
-        // ponytail: plane waves and spectral monitors arrive in the next
-        // Phase 6 commits; refused until then rather than ignored.
-        if scene.plane_wave.is_some() {
-            return Err(FdtdError::InvalidParameter {
-                name: "plane wave in TEz (not yet)",
-                value: f64::NAN,
-            });
-        }
         let (nx, ny, s) = (scene.grid.nx, scene.grid.ny, scene.grid.courant);
         let mut probes = Vec::new();
+        let mut spectral = Vec::new();
         for m in &scene.monitors {
             match m {
                 &Monitor::Point { i, j } => probes.push(PointProbe::new(i, j)),
-                _ => {
-                    return Err(FdtdError::InvalidParameter {
-                        name: "spectral monitor in TEz (not yet)",
-                        value: f64::NAN,
-                    });
+                Monitor::Dft { i, j, freqs } => {
+                    spectral.push(Spectral::Field(j * nx + i, Dft::new(freqs, 1)?))
                 }
+                Monitor::Flux {
+                    normal,
+                    at,
+                    from,
+                    to,
+                    freqs,
+                } => spectral.push(Spectral::Flux(
+                    FluxLine::new(*normal, *at, *from, *to, freqs)?.in_mode(Mode::Te),
+                )),
             }
         }
+        // Validated: material 0 is vacuum when there is a plane wave.
+        let tfsf = match &scene.plane_wave {
+            Some(pw) => {
+                let mut aux = *pw;
+                aux.waveform = pw.waveform.delayed(0.5 * s);
+                Some(Tfsf::new(&aux, 1.0, s)?)
+            }
+            None => None,
+        };
         let hz = vec![0.0; nx * ny];
         for p in &mut probes {
             p.record(&hz, nx);
@@ -121,6 +147,10 @@ impl SimTe {
             psi_hzy: vec![0.0; nx * ny],
             sources: scene.sources.clone(),
             probes,
+            tfsf,
+            node_s: vec![s; nx * ny],
+            spectral,
+            key: BuildKey::of(scene),
         };
         sim.set_edges(scene, &scene.rasterize());
         Ok(sim)
@@ -152,10 +182,15 @@ impl SimTe {
         }
     }
 
-    /// Advances one full step: Hz to n + 1/2, the point sources on Hz with
-    /// the waveform at (n + 1/2) S, then E to n + 1, then the probes.
+    /// Advances one full step: the TF/SF auxiliary grid, Hz to n + 1/2 and
+    /// its TF/SF corrections, the point sources on Hz with the waveform at
+    /// (n + 1/2) S, then E to n + 1 and its TF/SF corrections, then the
+    /// monitors.
     pub fn step(&mut self) {
         let (nx, ny, s) = (self.nx, self.ny, self.s);
+        if let Some(t) = &mut self.tfsf {
+            t.advance();
+        }
         let (hz, ex, ey) = (&mut self.hz, &mut self.ex, &mut self.ey);
         let p = &self.pml;
         let (ex_rows, hz_rows) = if self.periodic_y {
@@ -181,6 +216,9 @@ impl SimTe {
                         + self.psi_hzy[k];
                 hz[k] += s * curl;
             }
+        }
+        if let Some(t) = &self.tfsf {
+            t.correct_e(hz, &self.node_s, nx);
         }
 
         let t = (self.n as f64 + 0.5) * s;
@@ -214,10 +252,47 @@ impl SimTe {
                 ey[k] = self.ca_y[k] * ey[k] + self.cb_y[k] * (-hz[k + 1] * ik + hz[k] * ik - *psi);
             }
         }
+        if let Some(t) = &self.tfsf {
+            let inc = t.incident_e();
+            for c in t.h_corrections(nx, s, self.periodic_y).iter().flatten() {
+                let field = if c.field == Component::Hx {
+                    &mut *ex
+                } else {
+                    &mut *ey
+                };
+                field[c.k] -= c.factor * inc[c.src];
+            }
+        }
 
         self.n += 1;
         for p in &mut self.probes {
             p.record(hz, nx);
+        }
+        let mut spectral = std::mem::take(&mut self.spectral);
+        let n = self.n;
+        for m in &mut spectral {
+            match m {
+                Spectral::Field(k, dft) => dft.add(&[self.hz[*k]], (n as f64 - 0.5) * s, s),
+                Spectral::Flux(line) => {
+                    let values: Vec<f64> = line
+                        .taps(nx, ny)
+                        .iter()
+                        .map(|&(c, k)| self.field(c).map_or(0.0, |f| f[k]))
+                        .collect();
+                    line.record_taps(&values, n, s);
+                }
+            }
+        }
+        self.spectral = spectral;
+    }
+
+    /// A TEz field by name, `None` for a TMz one.
+    fn field(&self, c: Component) -> Option<&[f64]> {
+        match c {
+            Component::Hz => Some(&self.hz),
+            Component::Ex => Some(&self.ex),
+            Component::Ey => Some(&self.ey),
+            Component::Ez | Component::Hx | Component::Hy => None,
         }
     }
 
@@ -302,11 +377,64 @@ impl SimTe {
     }
 }
 
+impl Kernel for SimTe {
+    fn from_scene(scene: &Scene) -> Result<Self> {
+        SimTe::from_scene(scene)
+    }
+
+    fn step(&mut self, n: u64) {
+        self.step_n(n);
+    }
+
+    fn time_step(&self) -> u64 {
+        self.n
+    }
+
+    fn read_field(&mut self, which: Component) -> Result<Vec<f64>> {
+        self.field(which)
+            .map(<[f64]>::to_vec)
+            .ok_or(FdtdError::FieldNotInMode { component: which })
+    }
+
+    fn probe_history(&mut self) -> Result<Vec<Vec<f64>>> {
+        Ok(self.probes.iter().map(|p| p.history().to_vec()).collect())
+    }
+
+    /// Every edge is rebuilt from the edited scene: an edge reads the cells
+    /// on both sides, so one just outside `bounds` can change too.
+    /// ponytail: O(nx ny) per edit, fine at CPU fallback sizes; walk the
+    /// bounds plus one cell if a large CPU grid ever paints live.
+    fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
+        self.key.check(scene)?;
+        if crate::kernel::material_edit(scene, bounds)?.is_none() {
+            return Ok(());
+        }
+        self.set_edges(scene, &scene.rasterize());
+        Ok(())
+    }
+
+    fn set_sources(&mut self, scene: &Scene) -> Result<()> {
+        self.key.check(scene)?;
+        for src in &scene.sources {
+            scene.check_source(src)?;
+        }
+        self.sources = scene.sources.clone();
+        Ok(())
+    }
+
+    fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
+        Ok(self.spectral.iter().map(Spectral::spectrum).collect())
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
     use crate::grid::Component;
+    use crate::kernel::{Kernel, Spectrum};
     use crate::scene::Shape;
+    use crate::source::Waveform;
+    use crate::tfsf::{Direction, PlaneWave};
     use crate::tm::tests::{CpmlFields, Fields, random_fields, random_profile, vacuum_box};
 
     pub(crate) fn vacuum_box_te(nx: usize, ny: usize, s: f64) -> Scene {
@@ -450,6 +578,131 @@ pub(crate) mod tests {
     fn stencil_oracle_periodic_y() {
         for seed in 1..=4 {
             oracle_case(seed, false, true);
+        }
+    }
+
+    /// A TMz scene with a plane wave, a probe inside and one outside the
+    /// box, a DFT and a flux line, travelling `dir`.
+    fn plane_wave_scene(dir: Direction, periodic: bool) -> Scene {
+        let mut s = vacuum_box(81, 61, 0.5);
+        s.pml = Some(crate::cpml::PmlSpec::recommended(10));
+        s.periodic_y = periodic;
+        let (y0, y1) = if periodic { (0, 60) } else { (16, 44) };
+        s.plane_wave = Some(PlaneWave {
+            x0: 20,
+            y0,
+            x1: 60,
+            y1,
+            direction: dir,
+            waveform: Waveform::Ricker {
+                t0: 40.0,
+                f_peak: 0.05,
+            },
+            amplitude: 1.0,
+        });
+        s.monitors = vec![
+            Monitor::Point { i: 40, j: 30 },
+            Monitor::Point { i: 14, j: 30 },
+            Monitor::Dft {
+                i: 45,
+                j: 33,
+                freqs: vec![0.04, 0.05, 0.06],
+            },
+            Monitor::Flux {
+                normal: crate::monitor::Normal::X,
+                at: 50,
+                from: 20,
+                to: 40,
+                freqs: vec![0.04, 0.05, 0.06],
+            },
+        ];
+        s
+    }
+
+    /// TF/SF in TEz is the TMz plane wave under duality: Hz equals Ez bit for
+    /// bit on every node for all four directions and with periodic y (so the
+    /// scattered region really stays at round-off, as in TMz), with the TEz
+    /// waveform moved S/2 earlier like A18. The flux spectra agree, and the
+    /// DFT magnitudes too (the DFT phases differ by the half step).
+    #[test]
+    fn plane_wave_is_the_dual_of_tm() {
+        let cases = [
+            (Direction::PlusX, false),
+            (Direction::MinusX, false),
+            (Direction::PlusY, false),
+            (Direction::MinusY, false),
+            (Direction::PlusX, true),
+        ];
+        for (dir, periodic) in cases {
+            let tm_scene = plane_wave_scene(dir, periodic);
+            let mut te_scene = tm_scene.clone();
+            te_scene.mode = Mode::Te;
+            let pw = te_scene.plane_wave.as_mut().unwrap();
+            pw.waveform = pw.waveform.delayed(-0.25);
+            let mut tm = crate::tm::SimTm::from_scene(&tm_scene).unwrap();
+            let mut te = SimTe::from_scene(&te_scene).unwrap();
+            for _ in 0..8 {
+                tm.step_n(100);
+                te.step_n(100);
+                assert_eq!(tm.ez(), te.hz(), "{dir:?} periodic {periodic}");
+            }
+            assert_eq!(
+                tm.probes()[1].history(),
+                te.probes()[1].history(),
+                "{dir:?} outside probe"
+            );
+            let (a, b) = (tm.monitor_spectra().unwrap(), te.monitor_spectra().unwrap());
+            let (Spectrum::Field(fa), Spectrum::Field(fb)) = (&a[0], &b[0]) else {
+                panic!("dft order")
+            };
+            for (x, y) in fa.iter().zip(fb) {
+                let (ma, mb) = (x.0.hypot(x.1), y.0.hypot(y.1));
+                assert!((ma - mb).abs() <= 1e-12 * ma, "{dir:?} dft {ma} vs {mb}");
+            }
+            let (Spectrum::Flux(xa), Spectrum::Flux(xb)) = (&a[1], &b[1]) else {
+                panic!("flux order")
+            };
+            for (x, y) in xa.iter().zip(xb) {
+                let scale = xa.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+                // y travel puts no net flux through this x line: round-off only.
+                assert!(
+                    (x - y).abs() <= 1e-6 * scale + 1e-12,
+                    "{dir:?} flux {x} vs {y}"
+                );
+            }
+        }
+    }
+
+    /// Painting live equals building the painted scene, in the closed box
+    /// and with strokes running into a CPML; a mode change needs a rebuild.
+    #[test]
+    fn live_paint_equals_painted_scene() {
+        let mut a = crate::scene::tests::sample();
+        a.mode = Mode::Te;
+        let mut b = a.clone();
+        b.geometry.clear();
+        b.pml = Some(crate::cpml::tests::spec(5));
+        for base in [a, b] {
+            let mut painted = base.clone();
+            let out = painted
+                .paint_stroke((0.0, 9.0), (20.0, 9.0), 1.5, 2)
+                .unwrap();
+            let mut live = SimTe::from_scene(&base).unwrap();
+            live.step_n(40);
+            live.set_materials(&painted, out.bounds.unwrap()).unwrap();
+            let mut fresh = SimTe::from_scene(&painted).unwrap();
+            fresh.step_n(40);
+            // Same fields after the edit: restart both from the live state.
+            (fresh.hz, fresh.ex, fresh.ey) = (live.hz.clone(), live.ex.clone(), live.ey.clone());
+            (fresh.psi_exy, fresh.psi_eyx) = (live.psi_exy.clone(), live.psi_eyx.clone());
+            (fresh.psi_hzx, fresh.psi_hzy) = (live.psi_hzx.clone(), live.psi_hzy.clone());
+            live.step_n(200);
+            fresh.step_n(200);
+            assert_eq!(live.hz, fresh.hz);
+            assert_eq!(live.eps(), fresh.eps());
+            let mut tm = base.clone();
+            tm.mode = Mode::Tm;
+            assert_eq!(live.set_sources(&tm), Err(FdtdError::Rebuild));
         }
     }
 
