@@ -26,13 +26,17 @@ fn differ(a: &[u8], b: &[u8]) -> Option<String> {
     let (pa, fa) = a.split_at(8 * N_PEAKS);
     let (pb, fb) = b.split_at(8 * N_PEAKS);
     let f64s = |v: &[u8]| -> Vec<f64> {
-        v.chunks_exact(8)
-            .map(|c| f64::from_le_bytes(c.try_into().unwrap()))
+        v.as_chunks::<8>()
+            .0
+            .iter()
+            .map(|c| f64::from_le_bytes(*c))
             .collect()
     };
     let f32s = |v: &[u8]| -> Vec<f64> {
-        v.chunks_exact(4)
-            .map(|c| f32::from_le_bytes(c.try_into().unwrap()) as f64)
+        v.as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c) as f64)
             .collect()
     };
     let worst = |x: &[f64], y: &[f64]| {
