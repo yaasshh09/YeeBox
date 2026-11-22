@@ -843,27 +843,53 @@ pub fn stop_band(t: &[(f64, f64)]) -> Option<(f64, f64)> {
     Some((cross(t[lo - 1], t[lo]), cross(t[hi - 1], t[hi])))
 }
 
-/// A24: the Gamma-X stop band of the eps 8.9, r = 0.2 a rod crystal,
-/// recorded, not gated: the reference edges have to come from MPB first
-/// (`docs/04-validation.md`). The often quoted 0.32 to 0.44 c / a is the
-/// complete TM gap over every direction, a narrower thing than this
-/// normal-incidence stop band.
+const MPB: &str = include_str!("../../../../validation/meep/mpb_crystal.csv");
+
+/// The MPB Gamma-X edges (c / a) of the A24 crystal: the top of TM band 1
+/// and the bottom of band 2 along Gamma-X (`validation/meep/mpb_crystal.py`,
+/// resolution 64).
+pub fn mpb_edges() -> Result<(f64, f64)> {
+    let mut lo = f64::NEG_INFINITY;
+    let mut hi = f64::INFINITY;
+    for line in MPB.lines().skip(2) {
+        let c: Vec<&str> = line.split(',').collect();
+        ensure(c.len() == 5, || format!("mpb: bad row {line}"))?;
+        lo = lo.max(num(c[1], "mpb")?);
+        hi = hi.min(num(c[2], "mpb")?);
+    }
+    ensure(lo.is_finite() && hi.is_finite() && lo < hi, || {
+        "mpb: no gap".into()
+    })?;
+    Ok((lo, hi))
+}
+
+/// A24: the Gamma-X stop band of the eps 8.9, r = 0.2 a rod crystal against
+/// MPB. The reference is confirmed: the same MPB run gives the complete TM
+/// gap as 0.3225 to 0.4425 c / a, the textbook's 0.32 to 0.44. The edges of
+/// the measured stop band (T below -10 dB, defined before MPB ran) must sit
+/// within 3 percent of MPB's Gamma-X band edges, the top of band 1 and the
+/// bottom of band 2. Measured: the worse relative edge error.
 pub fn a24() -> Result<Vec<CaseResult>> {
     let [early, t] = crystal_transmission()?;
     let none = || FdtdError::Case("A24: no stop band in the scan".into());
     let (lo, hi) = stop_band(&t).ok_or_else(none)?;
     let (e_lo, e_hi) = stop_band(&early).ok_or_else(none)?;
     let moved = (lo - e_lo).abs().max((hi - e_hi).abs());
+    ensure(moved < 0.005, || {
+        format!("A24: the edges still move {moved:.1e} c / a")
+    })?;
+    let (m_lo, m_hi) = mpb_edges()?;
+    let err = ((lo - m_lo) / m_lo).abs().max(((hi - m_hi) / m_hi).abs());
     Ok(vec![CaseResult::new(
         "A24",
-        "photonic crystal Gamma-X stop band",
-        lo,
-        Gate::Record,
-        "c/a",
+        "photonic crystal Gamma-X gap edges",
+        err,
+        Gate::AtMost(0.03),
+        "rel",
         format!(
-            "T below -10 dB from {lo:.4} to {hi:.4} c / a (the edges moved {moved:.1e} over \
-             the last quarter of {CRYSTAL_STEPS} steps); eps 8.9 rods, r = 0.2 a, a = 40 \
-             cells, 8 rows, normal incidence"
+            "T below -10 dB from {lo:.4} to {hi:.4} c / a, MPB band edges {m_lo:.4} to \
+             {m_hi:.4} (the edges moved {moved:.1e} over the last quarter of {CRYSTAL_STEPS} \
+             steps); eps 8.9 rods, r = 0.2 a, a = 40 cells, 8 rows, normal incidence"
         ),
     )])
 }

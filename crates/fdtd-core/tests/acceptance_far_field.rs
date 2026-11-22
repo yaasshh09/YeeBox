@@ -1,5 +1,5 @@
 //! A22 (double slit against Fraunhofer), A23 (phased array beam direction)
-//! and A24 (photonic crystal stop band, recorded). See `cases::scattering`.
+//! and A24 (photonic crystal gap edges against MPB). See `cases::scattering`.
 
 use fdtd_core::cases::scattering::{a22, a23, a24, stop_band};
 
@@ -17,23 +17,12 @@ fn a23_phased_array() {
     assert!(rows.iter().all(|r| r.pass), "{rows:?}");
 }
 
-/// Recorded, not gated: the crystal must show one stop band inside the
-/// scan, and the run must be long enough that its edges no longer move by
-/// more than one scan step (0.005 c / a).
+/// A24: the stop band edges within 3 percent of the MPB Gamma-X edges.
 #[test]
-fn a24_photonic_crystal_recorded() {
+fn a24_photonic_crystal() {
     let rows = a24().unwrap();
     println!("{rows:?}");
-    let r = &rows[0];
-    assert!(r.pass && r.measured > 0.1 && r.measured < 0.6, "{r:?}");
-    let moved: f64 = r
-        .note
-        .split("moved ")
-        .nth(1)
-        .and_then(|s| s.split(' ').next())
-        .and_then(|s| s.parse().ok())
-        .unwrap();
-    assert!(moved < 0.005, "{r:?}");
+    assert!(rows.iter().all(|r| r.pass), "{rows:?}");
 }
 
 #[test]
