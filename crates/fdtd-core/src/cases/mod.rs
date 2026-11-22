@@ -126,6 +126,8 @@ pub const CASES: &[(&str, CaseFn)] = &[
     ("A18", duality::a18),
     ("A21", dispersive::a21),
     ("NTFF", scattering::isotropy),
+    ("A19", scattering::a19),
+    ("A20", scattering::a20),
 ];
 
 /// Runs every case. A case that errors becomes a failed row carrying the error.
