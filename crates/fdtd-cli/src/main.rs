@@ -464,9 +464,6 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Tier 4 in the report: every scene against the CPU for 2000 steps, and
-/// the 50000-step growth run written as `gpu_cpu_diff.csv` and `.svg`.
-/// Without an adapter the section says so and the files of the last run
 /// The Tier 5 Meep cross-checks (`cases::tier5`), recorded.
 fn tier5_section() -> Result<String, Box<dyn std::error::Error>> {
     let rows = cases::tier5::tier5()?;
@@ -474,7 +471,10 @@ fn tier5_section() -> Result<String, Box<dyn std::error::Error>> {
         "
 ## Meep cross-check (Tier 5)
 
-         Three scenes run in Meep {} (offline, in WSL; `validation/meep/`, versions in          `environment.txt`) and here, like for like: Courant 0.5, one Meep pixel per cell, no          subpixel smoothing. Meep is a second implementation, not the reference, so these          are recorded. MPB, from the same install, gives the A24 band edges.
+         Three scenes run in Meep {} (offline, in WSL; `validation/meep/`, versions in \
+         `environment.txt`) and here, like for like: Courant 0.5, one Meep pixel per cell, \
+         no subpixel smoothing. Meep is a second implementation, not the reference, so \
+         these are recorded. MPB, from the same install, gives the A24 band edges.
 
 {}",
         "1.35.1",
@@ -571,17 +571,25 @@ fn scattering_section(dir: &Path) -> Result<String, Box<dyn std::error::Error>> 
     Ok("
 ## Cylinder scattering (A19, A20)
 
-         ![Scattering width vs angle, simulation over series](cylinder_scattering.svg)
+![Scattering width vs angle, simulation over series](cylinder_scattering.svg)
 
-         A plane wave on a cylinder, the 2D analogue of Mie theory. The far field comes from          a closed contour in the scattered-field region (`ntff.rs`); the series is          `validation/gen/cylinder_series.py`. The comparison skips angles more than 20 dB          below the series peak, where staircasing owns the deep nulls.
+A plane wave on a cylinder, the 2D analogue of Mie theory. The far field comes from \
+         a closed contour in the scattered-field region (`ntff.rs`); the series is \
+         `validation/gen/cylinder_series.py`. The comparison skips angles more than 20 dB \
+         below the series peak, where staircasing owns the deep nulls.
 
-         ![RMS error vs radius](cylinder_convergence.svg)
+![RMS error vs radius](cylinder_convergence.svg)
 
-         The error falls every time the radius in cells doubles. The PEC cylinder in TMz          converges at first order, as a staircased curved wall should; TEz staircasing is          worse, so TEz is recorded and not gated.
+The error falls every time the radius in cells doubles. The PEC cylinder in TMz \
+         converges at first order, as a staircased curved wall should; TEz staircasing \
+         is worse, so TEz is recorded and not gated.
 "
-        .to_string())
+    .to_string())
 }
 
+/// Tier 4 in the report: every scene against the CPU for 2000 steps, and
+/// the 50000-step growth run written as `gpu_cpu_diff.csv` and `.svg`.
+/// Without an adapter the section says so and the files of the last run
 /// with a GPU stay as they are.
 fn gpu_section(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
     use fdtd_gpu::{Gpu, tier4};
