@@ -359,6 +359,9 @@ pub enum Warning {
     /// The wavelength inside the material at a drive frequency,
     /// `lambda0 / sqrt(|eps(w)|)`, is under 10 cells.
     MaterialWavelength { material: usize, cells: f64 },
+    /// A far-field contour runs through material `material` instead of the
+    /// background, so its far field assumes a medium that is not there.
+    ContourMaterial { material: usize },
 }
 
 /// Plasma skin depth below which `Warning::SkinDepth` fires, in cells.
@@ -582,6 +585,27 @@ pub enum Monitor {
         #[serde(default = "default_angles", skip_serializing_if = "is_default_angles")]
         angles: usize,
     },
+}
+
+/// The Ez nodes of the listed sides of the box `[x0, x1] x [y0, y1]`,
+/// corners once per side.
+fn contour_nodes(
+    x0: usize,
+    y0: usize,
+    x1: usize,
+    y1: usize,
+    sides: &[Side],
+) -> Vec<(usize, usize)> {
+    let mut nodes = Vec::new();
+    for side in sides {
+        match side {
+            Side::Left => nodes.extend((y0..=y1).map(|j| (x0, j))),
+            Side::Right => nodes.extend((y0..=y1).map(|j| (x1, j))),
+            Side::Bottom => nodes.extend((x0..=x1).map(|i| (i, y0))),
+            Side::Top => nodes.extend((x0..=x1).map(|i| (i, y1))),
+        }
+    }
+    nodes
 }
 
 fn all_sides() -> Vec<Side> {
@@ -1036,6 +1060,23 @@ impl Scene {
                 });
             }
         }
+        for m in &self.monitors {
+            if let Monitor::Ntff {
+                x0,
+                y0,
+                x1,
+                y1,
+                sides,
+                ..
+            } = m
+                && let Some(id) = contour_nodes(*x0, *y0, *x1, *y1, sides)
+                    .into_iter()
+                    .map(|(i, j)| self.material_at(i, j))
+                    .find(|&id| id != 0)
+            {
+                out.push(Warning::ContourMaterial { material: id });
+            }
+        }
         out
     }
 
@@ -1193,17 +1234,7 @@ impl Scene {
             });
         }
         let GridSpec { nx, ny, .. } = self.grid;
-        let (x0, y0, x1, y1) = (*x0, *y0, *x1, *y1);
-        let mut nodes = Vec::new();
-        for side in sides {
-            match side {
-                Side::Left => nodes.extend((y0..=y1).map(|j| (x0, j))),
-                Side::Right => nodes.extend((y0..=y1).map(|j| (x1, j))),
-                Side::Bottom => nodes.extend((x0..=x1).map(|i| (i, y0))),
-                Side::Top => nodes.extend((x0..=x1).map(|i| (i, y1))),
-            }
-        }
-        for &(i, j) in &nodes {
+        for (i, j) in contour_nodes(*x0, *y0, *x1, *y1, sides) {
             let inside = |i: usize, j: usize| {
                 (1..nx - 1).contains(&i) && (1..ny - 1).contains(&j) && !self.in_pml(i, j)
             };
@@ -2444,6 +2475,20 @@ pub(crate) mod tests {
         }
         assert!(check(ntff(5, 5, 34, 24, &ALL_SIDES), false, true).is_err());
         assert!(check(ntff_angles(5, 5, 34, 24, &ALL_SIDES, 0), false, false).is_err());
+
+        // Paint on the contour is allowed but the status strip says so.
+        let mut s = sample();
+        s.geometry.clear();
+        s.pml = Some(PmlSpec::recommended(4));
+        s.monitors = vec![ntff(5, 5, 34, 24, &ALL_SIDES)];
+        assert!(s.warnings().is_empty());
+        s.geometry.push(Shape::Circle {
+            cx: 34.0,
+            cy: 15.0,
+            r: 2.0,
+            material: 1,
+        });
+        assert_eq!(s.warnings(), vec![Warning::ContourMaterial { material: 1 }]);
     }
 
     /// DFT and flux monitors round trip through their tagged JSON form and

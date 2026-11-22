@@ -29,7 +29,8 @@ export type Mode = "tm" | "te";
 
 export type Warning =
   | { kind: "skin_depth"; material: number; cells: number }
-  | { kind: "material_wavelength"; material: number; cells: number };
+  | { kind: "material_wavelength"; material: number; cells: number }
+  | { kind: "contour_material"; material: number };
 
 /** `Sim.farField`: the pattern of the scene's first contour. */
 export type FarField = {

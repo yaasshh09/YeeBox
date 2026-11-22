@@ -386,9 +386,14 @@ export function TopBar({ onVerify, onShare }: { onVerify: () => void; onShare: (
 }
 
 function warningText(w: Warning): string {
-  return w.kind === "skin_depth"
-    ? `metal skin depth ${w.cells.toFixed(2)} cells (under 2, it acts as a lossy mirror)`
-    : `${w.cells.toFixed(1)} cells per wavelength inside a dispersive material (below 10)`;
+  switch (w.kind) {
+    case "skin_depth":
+      return `metal skin depth ${w.cells.toFixed(2)} cells (under 2, it acts as a lossy mirror)`;
+    case "material_wavelength":
+      return `${w.cells.toFixed(1)} cells per wavelength inside a dispersive material (below 10)`;
+    case "contour_material":
+      return "material on the far-field contour, so the polar plot is only approximate";
+  }
 }
 
 export function StatusStrip() {
