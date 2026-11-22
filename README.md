@@ -26,12 +26,17 @@ That's the goal. Here's where it stands today, honestly:
   polarizations, on the CPU reference, on the GPU, and in the browser. The app
   has a TM/TE switch, silver to paint with, and three new presets: a plasmon
   on a silver wire, a silver mirror and a resonant absorber.
-- **Also done:** a near-to-far-field transform, checked against the 2D
-  analogue of Mie theory: a PEC cylinder and a glass-like (eps 4) cylinder
-  match the analytic scattering width within half a decibel.
-- **Not done yet:** oblique plane waves, the double slit and phased array
-  far-field checks, and far-field patterns in the app. I'll only claim those
-  once their tests pass.
+- **Also done:** far-field patterns. A near-to-far-field transform, checked
+  against the 2D analogue of Mie theory (a PEC and an eps 4 cylinder match
+  the analytic scattering width within half a decibel), against Fraunhofer
+  for a double slit, and against the array factor for a steered line-source
+  array. The app draws a live polar plot with the theory curve over it, and
+  has a scattering cylinder and a phased array you can steer. Three scenes
+  are cross-checked against Meep, and a photonic crystal's band edges
+  against MPB.
+- **Not done yet:** oblique plane waves, and the 3D stretch phase, where
+  real antennas live. These are 2D patterns of structures infinite in z, not
+  antenna patterns. I'll only claim more once its tests pass.
 
 The reference solver stays deliberately simple. Its only job is to be
 obviously correct, so it can prove the fast GPU kernel right.
@@ -136,6 +141,42 @@ because deep nulls belong to the staircase. The PEC cylinder converges at
 first order, which is what a staircased curved wall should do. TEz is
 recorded, not gated: its staircase error is about twice the TMz one (1.8 dB
 for the PEC cylinder at 20 cells, 0.8 dB at 40).
+
+The other far-field checks:
+
+| Check | Result | Gate |
+|---|---|---|
+| Double slit far field vs Fraunhofer, main lobes | 0.47 dB | 1 dB |
+| Phased array beam direction vs the array factor, 0 to 45 deg | 0.08 deg | 1 deg |
+| Photonic crystal Gamma-X gap edges vs MPB | 0.74 percent | 3 percent |
+
+For the double slit I fixed the compare region from Fraunhofer's own limits
+before the run: within 25 degrees of the axis, where the obliquity factor it
+leaves out costs at most 0.42 dB. The crystal's reference is confirmed:
+the same MPB run gives the complete band gap as 0.3225 to 0.4425 c / a,
+the textbook's 0.32 to 0.44.
+
+### Against Meep
+
+Meep is the standard open-source FDTD package. I ran three scenes in it and
+here, like for like: the same Courant number, one Meep pixel per cell, no
+subpixel smoothing, and every material face placed between pixels so both
+codes cover the same cells.
+
+| Scene | YeeBox minus Meep |
+|---|---|
+| eps 4 cylinder, scattering width, k a = 1, 2, 5 | 0.29 dB |
+| Drude slab, R and T | 1.3e-3 |
+| 90 degree waveguide bend, transmission | 6.2e-3 |
+
+The cylinder difference is the largest because the two codes staircase the
+circle by different rules (my nodes count as inside when they sit on or
+inside the circle, Meep fills by pixel center), and both land within 0.3 dB
+of the series on their own.
+
+The first Drude slab comparison was off by 2.4e-2. Meep's slab sat on pixel
+centers and took a 21st cell; once its faces sat between pixels like mine,
+the two agreed to 1.3e-3.
 
 `fdtd validate` runs every case and prints this table with its gates;
 `cargo test` checks the same cases.

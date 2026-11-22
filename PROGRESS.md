@@ -5,9 +5,9 @@ entry at the top of the session log.
 
 ## Current state
 
-**Active phase:** Phase 6 built: TEz and Drude and Lorentz media on the CPU, the GPU and in the browser; A16, A17, A18, A21 pass; the plasmon preset runs with its badge on the A21 plot. Phase 5 people and hardware items still open, CI not yet run on GitHub
+**Active phase:** Phase 7 built: near-to-far-field transform on CPU, GPU and in the browser; the line source isotropy check, A19, A20, A22, A23 and A24 (against MPB) pass; three Meep cross-checks recorded; polar plot, scattering cylinder and phased array presets. CI and Pages green as of 7e1c40e; Phase 7 not pushed yet
 **Blocked on:** nothing
-**Next action:** the owner pushes and enables Pages; then check the silver Drude numbers against Vial et al. 2005, run the self-test in Firefox, and plan Phase 7
+**Next action:** the owner pushes; then check the polar plot headed in Chrome and Firefox on the GPU path, and plan the next phase
 
 ## Decisions log
 
@@ -126,6 +126,17 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-22 | Silver is `material::silver(dx)`, a Drude fit converted per cell size, and joins the palette as `palette(dx)`; presets use the same function | painted silver and preset silver are one material, so TEz never meets two different Drude metals from the palette |
 | 2026-11-22 | `Status` carries `mode` and `warnings`; the UI shows both and has a TM/TE switch; leaving TE on the plasmon preset makes it a custom scene | the mode comes from the same poll as every other status number |
 | 2026-11-22 | A preset badge with a `plot` opens that plot; Vite bundles `validation/report/drude_cylinder.png` into the site | no copy step in the Pages build |
+| 2026-11-22 | `Monitor::Ntff` is a box of Ez nodes (all sides or a listed subset) built from one `FluxLine` per side; its taps are the flux taps, so the GPU gathers and the CPU accumulates as for every monitor | no new sampling code, no DFT in WGSL; an open side covers the double slit |
+| 2026-11-22 | The NTFF phase term uses the continuum k | the numerical k(phi) changed nothing measurable; the residual is the co-location of H (cos(k_n / 2)), second order |
+| 2026-11-22 | The contour must stay clear of the CPML (with its neighbors) and of the TF/SF box plus one node; periodic y is refused; material on the contour is a status warning | the transform assumes the background around it |
+| 2026-11-22 | A19 and A20 gate in TMz at radii fixed by the 20-cell rule before any run (20 cells PEC, 40 cells eps 4); TEz is recorded | doc 01 writes the series for TMz; TEz staircasing is about twice as large |
+| 2026-11-22 | A run that does not go quiet within its budget is judged by how much its far field (or band edges) still moves over the last quarter | the eps 4 cylinder rings in whispering gallery modes above the band, and the crystal holds bound slab modes that never decay; a mode at f_r adds at most amplitude / (2 pi (f - f_r)) from then on |
+| 2026-11-22 | `Gate::Record` for numbers that are measured but not gated | A24 before MPB, and the Meep rows |
+| 2026-11-22 | A24 compares the -10 dB stop band edges with MPB's Gamma-X band edges, gated at 3 percent once MPB reproduced the textbook complete gap | the doc's "promote after the reference is confirmed" |
+| 2026-11-22 | Tier 4 far-field scenes must keep their field past the first 250-step checkpoint (radius 20 cylinder, not 10) | the measure is the reference peak seen at checkpoints; a scene that drains first divides round-off by a residue (1.06e-4 at radius 10, every absolute difference 1e-7 to 3e-7) |
+| 2026-11-22 | Live edits restart the spectral accumulators (`restart_spectra`); `farField` reports an edit count; stored theory curves show only at 0 edits | the polar plot then shows the edited scene, and never a curve that no longer applies |
+| 2026-11-22 | `steer` and `array_factor` live in `ntff.rs`; the array factor counts as theory only for two or more CW line sources at one frequency, no shapes, paint or plane wave, lossless background | no math in TypeScript; never a theory curve where it is not exact |
+| 2026-11-22 | Meep runs offline in WSL (Miniforge, `validation/meep/environment.txt`), one pixel per cell, Courant 0.5, no smoothing, faces between pixel centers; `cases::tier5` compares | like for like, as doc 04 asks |
 
 ## Measured numbers
 
@@ -198,6 +209,18 @@ Fill in as they become available. These go in the README.
 | Browser GPU vs native CPU (self-test page) | drude_te 1.3e-6; the other three scenes unchanged (5.1e-6 worst) | headed Chromium with WebGPU, GTX 1660 Ti | 2026-11-22 |
 | Preset display gains | plasmon 0.95, mirror 27, absorber 0.75 (1 / p99 of the node field) | CPU run of the full presets, 1800 to 2600 steps | 2026-11-22 |
 | First-load weight | 684 kB gzipped (wasm 277 kB) | `web/scripts/weight.mjs`; budget 2 MB | 2026-11-22 |
+| Line source far field ripple | 0.080 dB at 20 cpw, 0.005 dB at 40 cpw, TMz and TEz identical | contour 41 x 41 around the source; gate 0.1 dB | 2026-11-22 |
+| NTFF consistency (40 / 20 cpw) | contour size 3.7e-3 / 1.1e-2; moved-source phase 3.2e-3 / 1.3e-2 rad; moved-source ripple 0.030 / 0.118 dB; source outside 3.0e-3 / 3.0e-2; power vs flux 1.8e-3 / 4.3e-3 | `tests/acceptance_ntff.rs`; bounds 1e-2 (power 5e-3) at 40 cpw set before the runs | 2026-11-22 |
+| NTFF integral vs exact Hankel fields | 1.6e-3 at 20 cpw (trapezoid corner term), halving or better per doubling | `ntff` unit tests, no solver | 2026-11-22 |
+| A19 PEC cylinder | 0.10, 0.19, 0.49 dB at k a = 1, 2, 5 (radius 20, TMz); TEz 0.44, 0.63, 1.79 | angles within 20 dB of the series peak; gate 1 dB | 2026-11-22 |
+| A20 eps 4 cylinder | 0.015, 0.055, 0.277 dB (radius 40, TMz); TEz 0.32, 0.25, 0.38 | same; gate 1 dB | 2026-11-22 |
+| Cylinder convergence, pooled RMS dB at radius 10, 20, 40 | PEC TMz 0.37, 0.18, 0.086 (order 1.05); PEC TEz 1.12, 0.43, 0.20 (1.26); eps 4 TMz 1.14, 0.25, 0.048 (2.29); eps 4 TEz 1.76, 0.29, 0.11 (2.02) | must fall at each doubling | 2026-11-22 |
+| A22 double slit vs Fraunhofer | 0.47 dB | 25 angles within 25 deg of the axis and 10 dB of the peak; obliquity budget 0.42 dB; gate 1 dB | 2026-11-22 |
+| A23 phased array beam | 0.08 deg worst (14.93 vs 15, 44.92 vs 45) | 8 elements, lambda / 2, true time delays; gate 1 deg | 2026-11-22 |
+| A24 crystal Gamma-X edges | 0.2739 to 0.4458 c / a vs MPB 0.2747 to 0.4425: 0.74 percent | 8 rows, a = 40 cells, T below -10 dB; edges moved 3.7e-5 over the last quarter of 40000 steps; gate 3 percent | 2026-11-22 |
+| MPB complete TM gap | 0.3225 to 0.4425 c / a | resolution 64; confirms the textbook 0.32 to 0.44 | 2026-11-22 |
+| Meep cross-checks | Drude slab 1.3e-3 (Meep itself 1.8e-3 from analytic); bend T 6.2e-3; eps 4 cylinder 0.29 dB (Meep itself 0.30 dB from the series, YeeBox 0.28; the two staircase the circle by different rules) | Meep 1.35.1, one pixel per cell, Courant 0.5, no smoothing | 2026-11-22 |
+| GPU vs CPU, far-field scenes | cylinder far field 6.8e-8, fields 3.7e-7; TEz scene far field 3.9e-8; restarted spectra 4.0e-10 of the full peak | gate 1e-4 | 2026-11-22 |
 
 ## Known deviations from reference
 
@@ -239,6 +262,11 @@ Fill in as they become available. These go in the README.
 | Silver Drude parameters | eps_inf 3.718, wp 1.3659e16 rad/s, gamma 2.7909e13 rad/s, quoted from memory as the Vial et al. 2005 fit | not checked against the paper this session | open: check before claiming silver is quantitative |
 | Plasmon preset view | TEz draws Hz; the plasmon field enhancement is in the in-plane E, which the app does not draw | the preset text says what is visible (the wire bends the wave), not more | yes, an E magnitude view could come later |
 | Phase 6 browser checks | Chrome only (headed Chromium); Firefox not rerun | Playwright Firefox here has no WebGPU | open |
+| Phase 7 "GPU DFT accumulation over contour cells only" | The GPU gathers the contour taps and the CPU accumulates in f64, as for every monitor | the Phase 4 decision; the frame-cost measurement on a 1024 grid with the polar plot on is still open | open: measure headed |
+| Phase 7 plan "line source absolute level from a probe Hankel fit" | Checked as far-field power against the flux through the contour (1.8e-3 / 4.3e-3), and against exact Hankel fields in the unit tests | no Hankel functions in Rust outside test code; power balance is the same absolute check | yes |
+| A24 gate wording | The -10 dB stop band edges are compared with MPB band edges | I saw the YeeBox edges before MPB ran; the -10 dB definition and the 3 percent gate were both fixed before MPB | yes, flagged |
+| Phase 7 plan "Meep overlay on the cylinder plot" | Meep numbers are a report table, not an overlay | the plot is the PEC cylinder at radius 20, the Meep run is the eps 4 cylinder at 40 | yes |
+| Double slit preset overlay | Fraunhofer for the preset's own slits (0.8 lambda wide), less exact than at A22's 2 lambda | a display curve, labelled Fraunhofer; A22 checks the 2 lambda geometry | yes |
 
 ## CI coverage
 
@@ -248,13 +276,13 @@ software adapter being available on the runner).
 | Tier | CI | Local only | Notes |
 |---|---|---|---|
 | 1 Unit | yes | | units, grid, dispersion, waveforms, 1D solver, npz |
-| 2 Analytic | yes | | A1 to A18 and A21 through `fdtd_core::cases` (and R + T = 1), plus late-time stability with CPML |
+| 2 Analytic | yes | | A1 to A24 through `fdtd_core::cases` (and R + T = 1), the line source far field, plus late-time stability with CPML |
 | 3 Invariant | yes | | quiescence, linearity (1D and 2D); energy conservation and decay, reciprocity, mirror symmetry, padding (2D); the same with CPML; periodic y (1D equivalence, energy, translation); TF/SF linearity, quiescence, mirror and transpose; reciprocity with TF/SF and monitors |
 | Report | | yes | `fdtd report` regenerates `validation/report` (now with the Tier 4 table and growth plot); not wired into CI yet |
 | 4 GPU vs CPU | yes, on lavapipe (not yet seen running) | | `crates/fdtd-gpu/tests/tier4.rs`; CI sets `FDTD_REQUIRE_GPU=1`; locally on the GTX 1660 Ti; now also live edits, the live probe, the render and the CPU painter |
 | Web unit | yes | | Vitest: uppercase rule, pacing, formatting, share links |
 | Web end to end | yes (CPU path) | GPU path | Playwright on the production build; the GPU self-test page runs headed in Chrome and Firefox only |
-| 5 External | | | |
+| 5 External | the Meep comparisons for the bend and the Drude slab | Meep and MPB runs (WSL) | the scripts run offline; their CSV is committed and compared in tests and the report |
 
 ## Session log
 
@@ -268,6 +296,41 @@ Format:
 
 Write the Broke field carefully, especially when the cause was embarrassing.
 It becomes the devlog.
+
+### 2026-11-22 (Phase 7)
+**Landed:** Phase 7 is built. `ntff.rs` turns a contour of flux lines into
+far fields in both modes, from an integral checked against exact Hankel
+fields; a line source comes out flat to 0.080 dB at 20 cells per wavelength
+(gate 0.1). A19 (PEC cylinder) is 0.49 dB and A20 (eps 4) 0.28 dB against the
+series, both gates 1 dB, and the error falls at every doubling of the radius.
+A22 (double slit vs Fraunhofer) is 0.47 dB, A23 (array beam) 0.08 deg, and A24
+became a gate once MPB reproduced the textbook gap: the crystal's Gamma-X
+edges sit 0.74 percent from MPB's. Meep 1.35.1 runs in WSL; YeeBox and Meep
+agree to 1.3e-3 on the Drude slab, 6.2e-3 on the bend and 0.29 dB on the
+eps 4 cylinder (each within 0.3 dB of the series). The GPU kernel
+gathers the contour taps (Tier 4 far fields at 1e-7 of peak), live edits
+restart the spectra, and the app has a polar plot, a scattering cylinder, a
+steerable phased array and a far field on the double slit. The README shows
+scattering width against the series at three k a. Nothing pushed.
+**Broke:** Several measurements before anything in the solver, every one of
+them mine. The NTFF residuals were above my first estimates; they swung with
+contour size, the numerical k did not help, and the cause was the H average
+on the contour nodes (cos(k_n / 2)), second order and now documented. My
+first power-balance check counted the contour corners twice (a 2 percent
+"error"). The eps 4 cylinder never went quiet: a whispering gallery mode at
+k a = 5.9 rings above the band, so those runs are now judged by how much the
+far field still moves. The crystal holds bound slab modes that never decay
+at all. A Tier 4 cylinder scene at radius 10 failed at 1.06e-4 with every
+absolute difference at f32 round-off, because the pulse had left before the
+first checkpoint; radius 20 keeps it. The restart trial first divided by the
+restarted tail's own peak (2e-4); against the run's peak it is 4e-10. Meep's
+first Drude slab was 2.4e-2 off because its faces sat on pixel centers and it
+took a 21st cell. And several of my shell heredocs got cut short on the way,
+so I wrote through files instead.
+**Open:** the polar plot on the GPU path headed in Chrome and Firefox, and
+its frame cost on a 1024 grid; the silver numbers against Vial et al. 2005;
+the Phase 5 people and hardware items.
+**Next:** the owner pushes, then a headed GPU check of the polar plot.
 
 ### 2026-11-22 (Phase 6, parts C and D)
 **Landed:** the GPU kernel runs TEz and both dispersive models. The medium
