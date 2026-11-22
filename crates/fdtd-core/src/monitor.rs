@@ -71,6 +71,11 @@ impl Dft {
     pub fn get(&self, point: usize, f: usize) -> (f64, f64) {
         self.sums[point * self.freqs.len() + f]
     }
+
+    /// Zeroes every sum, as if no sample had been added.
+    pub fn restart(&mut self) {
+        self.sums.fill((0.0, 0.0));
+    }
 }
 
 /// Which way a flux line's normal points. JSON form: `"x"` or `"y"`.
@@ -198,6 +203,36 @@ impl FluxLine {
         self.e.freqs()
     }
 
+    /// Number of nodes on the line, `to - from + 1`.
+    pub fn len(&self) -> usize {
+        self.e_buf.len()
+    }
+
+    /// Never true: a line has at least one node.
+    pub fn is_empty(&self) -> bool {
+        false
+    }
+
+    /// The transform of the node field at node `p` of the line (counted
+    /// from `from`), frequency index `f`: Ez in TMz, Hz in TEz, each at its
+    /// true time. Normalized.
+    pub fn node_dft(&self, p: usize, f: usize) -> (f64, f64) {
+        self.e.get(p, f)
+    }
+
+    /// The transform of the edge field averaged onto node `p`: Hy (x
+    /// normal) or Hx (y normal) in TMz, Ey or Ex in TEz. Normalized.
+    pub fn edge_dft(&self, p: usize, f: usize) -> (f64, f64) {
+        self.h.get(p, f)
+    }
+
+    /// Zeroes both transforms, so accumulation starts over from the next
+    /// step (after a live edit).
+    pub fn restart(&mut self) {
+        self.e.restart();
+        self.h.restart();
+    }
+
     /// Flux per frequency, positive along +x (or +y).
     pub fn flux(&self) -> Vec<f64> {
         let sign = match (self.normal, self.mode) {
@@ -293,6 +328,31 @@ impl PointProbe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The DFT accessors are the sums `flux` reads: the flux rebuilt from
+    /// them is the same number, and `restart` zeroes both.
+    #[test]
+    fn flux_line_dft_accessors_and_restart() {
+        let mut line = FluxLine::new(Normal::X, 2, 1, 3, &[0.05, 0.1]).unwrap();
+        for n in 1..40u64 {
+            let v: Vec<f64> = (0..9).map(|k| ((n * 7 + k) as f64 * 0.37).sin()).collect();
+            line.record_taps(&v, n, 0.5);
+        }
+        assert_eq!(line.len(), 3);
+        for (f, &flux) in line.flux().iter().enumerate() {
+            let rebuilt: f64 = (0..line.len())
+                .map(|p| {
+                    let (e, h) = (line.node_dft(p, f), line.edge_dft(p, f));
+                    -0.5 * (e.0 * h.0 + e.1 * h.1)
+                })
+                .sum();
+            assert_eq!(rebuilt, flux);
+            assert!(flux != 0.0);
+        }
+        line.restart();
+        assert!(line.flux().iter().all(|&v| v == 0.0));
+        assert_eq!(line.node_dft(1, 1), (0.0, 0.0));
+    }
 
     /// A plane wave domain for the flux tests: vacuum, 32-cell x layers,
     /// TF/SF box [25, 175] x [y0, y1], the given direction, Ricker pulse.
