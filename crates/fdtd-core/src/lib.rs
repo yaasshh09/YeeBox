@@ -5,6 +5,7 @@
 pub mod cases;
 pub mod cpml;
 pub mod dispersion;
+pub mod dispersive;
 pub mod energy;
 pub mod error;
 pub mod fdtd1d;

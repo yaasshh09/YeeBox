@@ -135,9 +135,15 @@ impl GpuSim {
     /// must not depend on it; Tier 4 checks 4, 8 and 16.
     pub fn with_workgroup(gpu: &'static Gpu, scene: &Scene, wg: u32) -> Result<Self> {
         scene.validate()?;
-        // ponytail: TMz only until the TEz shaders land (Phase 6 part C).
+        // ponytail: TMz without dispersion until the Phase 6 part C shaders land.
         if scene.mode != Mode::Tm {
             return Err(FdtdError::WrongMode { mode: scene.mode });
+        }
+        if scene.materials.iter().any(|m| m.is_dispersive()) {
+            return Err(FdtdError::InvalidParameter {
+                name: "dispersive material on the gpu (not yet)",
+                value: f64::NAN,
+            });
         }
         if !(1..=16).contains(&wg) {
             return Err(FdtdError::InvalidParameter {

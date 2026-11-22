@@ -27,8 +27,14 @@
 //! no layer the result is bit for bit the closed-box solver. psi arrays are
 //! full `nx * ny` and named for the field and the derivative axis:
 //! `psi_hxy` (Hx, d/dy), `psi_hyx` (Hy, d/dx), `psi_ezx`, `psi_ezy`.
+//!
+//! Drude and Lorentz nodes (`dispersive.rs`) carry their material id as a
+//! pole id into `rows`, one update row per material, and keep J and P in
+//! `aux` (allocated only when the material table has a dispersive entry).
+//! Every other node runs the plain line, bit for bit as before.
 
 use crate::cpml::Cpml;
+use crate::dispersive::{Aux, Medium, NO_POLE, Row};
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::kernel::{BuildKey, Kernel, Spectrum, material_edit};
@@ -51,6 +57,11 @@ pub struct SimTm {
     ca: Vec<f64>,
     cb: Vec<f64>,
     eps: Vec<f64>,
+    /// Material id of each dispersive node, `NO_POLE` elsewhere.
+    pole: Vec<u32>,
+    /// The update row of every material, indexed by material id.
+    rows: Vec<Row>,
+    aux: Aux,
     pml: Cpml,
     psi_hxy: Vec<f64>,
     psi_hyx: Vec<f64>,
@@ -111,14 +122,24 @@ impl SimTm {
         let mut ca = vec![0.0; nx * ny];
         let mut cb = vec![0.0; nx * ny];
         let mut eps = vec![0.0; nx * ny];
+        let mut pole = vec![NO_POLE; nx * ny];
         for j in scene.live_rows() {
             for i in 1..nx - 1 {
                 let k = j * nx + i;
                 let m = scene.materials[ids[k]];
                 (ca[k], cb[k]) = m.coefficients(s);
                 eps[k] = m.eps();
+                if m.is_dispersive() {
+                    pole[k] = ids[k] as u32;
+                }
             }
         }
+        let rows = scene
+            .materials
+            .iter()
+            .map(|m| Medium::of(m).map_or(Row::PEC, |m| m.row(s)))
+            .collect();
+        let dispersive = scene.materials.iter().any(|m| m.is_dispersive());
         let mut probes = Vec::new();
         let mut spectral = Vec::new();
         for m in &scene.monitors {
@@ -161,6 +182,9 @@ impl SimTm {
             ca,
             cb,
             eps,
+            pole,
+            rows,
+            aux: Aux::new(nx * ny, dispersive),
             pml,
             psi_hxy: vec![0.0; nx * ny],
             psi_hyx: vec![0.0; nx * ny],
@@ -237,7 +261,10 @@ impl SimTm {
                 let curl =
                     hy[k] * ikx - hy[k - 1] * ikx - hx[k] * iky + hx[down] * iky + self.psi_ezx[k]
                         - self.psi_ezy[k];
-                ez[k] = self.ca[k] * ez[k] + self.cb[k] * curl;
+                ez[k] = match self.pole[k] {
+                    NO_POLE => self.ca[k] * ez[k] + self.cb[k] * curl,
+                    r => self.aux.update(&self.rows[r as usize], k, ez[k], curl),
+                };
             }
         }
         // TF/SF: add the incident H^(n+1/2) back on the face nodes.
@@ -401,6 +428,16 @@ impl Kernel for SimTm {
                 let m = scene.materials[id];
                 (self.ca[k], self.cb[k]) = m.coefficients(self.s);
                 self.eps[k] = m.eps();
+                // A node whose pole changes starts its J and P from rest.
+                let pole = if m.is_dispersive() {
+                    id as u32
+                } else {
+                    NO_POLE
+                };
+                if pole != self.pole[k] {
+                    self.aux.clear(k);
+                    self.pole[k] = pole;
+                }
             }
         }
         Ok(())

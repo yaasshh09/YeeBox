@@ -9,7 +9,10 @@ use serde::{Deserialize, Serialize};
 /// from its own cell (staircased, no averaging in TMz).
 ///
 /// JSON form is tagged: `{"kind": "dielectric", "eps_inf": 4, "sigma": 0}`,
-/// `{"kind": "pec"}`.
+/// `{"kind": "pec"}`, `{"kind": "drude", "eps_inf": 4, "wp": 0.9, "gamma":
+/// 0.01}`, `{"kind": "lorentz", "eps_inf": 2, "d_eps": 3, "w0": 0.3,
+/// "delta": 0.02}`. Frequencies are normalized angular frequencies (radians
+/// per dx / c0); see `dispersive.rs` for the models and the update.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum Material {
@@ -19,6 +22,16 @@ pub enum Material {
     Dielectric { eps_inf: f64, sigma: f64 },
     /// Perfect electric conductor: Ez is held at zero.
     Pec,
+    /// Drude metal, `eps(w) = eps_inf - wp^2 / (w^2 - j gamma w)`.
+    Drude { eps_inf: f64, wp: f64, gamma: f64 },
+    /// Lorentz resonance,
+    /// `eps(w) = eps_inf + d_eps w0^2 / (w0^2 - w^2 + 2 j delta w)`.
+    Lorentz {
+        eps_inf: f64,
+        d_eps: f64,
+        w0: f64,
+        delta: f64,
+    },
 }
 
 /// The materials the paint tools offer, by name, in picker order. The
@@ -59,53 +72,57 @@ impl Material {
 
     /// Rejects `eps_inf < 1` (a phase velocity above c0 would break the
     /// vacuum Courant limit), negative conductivity, and non-finite values.
+    /// Dispersive poles need a positive strength (`wp`, `d_eps`) and
+    /// resonance (`w0`), and non-negative damping. The Courant limit on `w0`
+    /// depends on S, so `Scene::validate` checks it.
     pub fn validate(&self) -> Result<()> {
-        if let Material::Dielectric { eps_inf, sigma } = *self {
-            if !(eps_inf.is_finite() && eps_inf >= 1.0) {
-                return Err(FdtdError::InvalidParameter {
-                    name: "eps_inf",
-                    value: eps_inf,
-                });
+        let check = |name, value: f64, ok: bool| {
+            if value.is_finite() && ok {
+                Ok(())
+            } else {
+                Err(FdtdError::InvalidParameter { name, value })
             }
-            if !(sigma.is_finite() && sigma >= 0.0) {
-                return Err(FdtdError::InvalidParameter {
-                    name: "sigma",
-                    value: sigma,
-                });
+        };
+        match *self {
+            Material::Dielectric { eps_inf, sigma } => {
+                check("eps_inf", eps_inf, eps_inf >= 1.0)?;
+                check("sigma", sigma, sigma >= 0.0)
+            }
+            Material::Pec => Ok(()),
+            Material::Drude { eps_inf, wp, gamma } => {
+                check("eps_inf", eps_inf, eps_inf >= 1.0)?;
+                check("wp", wp, wp > 0.0)?;
+                check("gamma", gamma, gamma >= 0.0)
+            }
+            Material::Lorentz {
+                eps_inf,
+                d_eps,
+                w0,
+                delta,
+            } => {
+                check("eps_inf", eps_inf, eps_inf >= 1.0)?;
+                check("d_eps", d_eps, d_eps > 0.0)?;
+                check("w0", w0, w0 > 0.0)?;
+                check("delta", delta, delta >= 0.0)
             }
         }
-        Ok(())
     }
 
-    /// Relative permittivity used in the discrete energy. PEC returns 0, since
-    /// its Ez is always zero and contributes nothing either way.
+    /// Drude or Lorentz: the update needs auxiliary fields, and the material
+    /// must stay out of the CPML.
+    pub fn is_dispersive(&self) -> bool {
+        matches!(self, Material::Drude { .. } | Material::Lorentz { .. })
+    }
+
+    /// Relative permittivity used in the discrete energy (eps_inf for the
+    /// dispersive kinds). PEC returns 0, since its Ez is always zero and
+    /// contributes nothing either way.
     pub fn eps(&self) -> f64 {
         match *self {
-            Material::Dielectric { eps_inf, .. } => eps_inf,
+            Material::Dielectric { eps_inf, .. }
+            | Material::Drude { eps_inf, .. }
+            | Material::Lorentz { eps_inf, .. } => eps_inf,
             Material::Pec => 0.0,
-        }
-    }
-
-    /// The material of a TEz E edge between cells `a` and `b`: the
-    /// arithmetic mean of eps_inf and of sigma (`docs/01-theory.md`,
-    /// Materials), and PEC if either cell is PEC. Staircased: no subpixel
-    /// smoothing, so curved surfaces converge at first order.
-    pub fn edge_mean(a: &Material, b: &Material) -> Material {
-        match (*a, *b) {
-            (
-                Material::Dielectric {
-                    eps_inf: ea,
-                    sigma: sa,
-                },
-                Material::Dielectric {
-                    eps_inf: eb,
-                    sigma: sb,
-                },
-            ) => Material::Dielectric {
-                eps_inf: 0.5 * (ea + eb),
-                sigma: 0.5 * (sa + sb),
-            },
-            _ => Material::Pec,
         }
     }
 
@@ -114,8 +131,10 @@ impl Material {
     ///
     /// `Ca = (1 - l) / (1 + l)`, `Cb = (s / eps) / (1 + l)`, `l = sigma s / (2 eps)`.
     ///
-    /// Lossless gives exactly `(1, s / eps)`. PEC gives `(0, 0)`. Call
-    /// `validate` first; this does not re-check.
+    /// Lossless gives exactly `(1, s / eps)`. PEC gives `(0, 0)`. For a
+    /// dispersive material these are the `Row` coefficients of
+    /// `dispersive.rs`, to which the J and P terms add. Call `validate`
+    /// first; this does not re-check.
     pub fn coefficients(&self, s: f64) -> (f64, f64) {
         match *self {
             Material::Dielectric { eps_inf, sigma } => {
@@ -123,6 +142,11 @@ impl Material {
                 ((1.0 - l) / (1.0 + l), (s / eps_inf) / (1.0 + l))
             }
             Material::Pec => (0.0, 0.0),
+            Material::Drude { .. } | Material::Lorentz { .. } => {
+                let row = crate::dispersive::Medium::of(self)
+                    .map_or(crate::dispersive::Row::PEC, |m| m.row(s));
+                (row.ca, row.cb)
+            }
         }
     }
 }
@@ -160,25 +184,6 @@ mod tests {
         assert!(last < -0.999_999);
     }
 
-    /// The TEz edge rule: the mean of the two cells, and PEC wins.
-    #[test]
-    fn edge_mean() {
-        let glass = Material::Dielectric {
-            eps_inf: 3.0,
-            sigma: 0.25,
-        };
-        assert_eq!(
-            Material::edge_mean(&Material::VACUUM, &glass),
-            Material::Dielectric {
-                eps_inf: 2.0,
-                sigma: 0.125
-            }
-        );
-        assert_eq!(Material::edge_mean(&glass, &glass), glass);
-        assert_eq!(Material::edge_mean(&glass, &Material::Pec), Material::Pec);
-        assert_eq!(Material::edge_mean(&Material::Pec, &glass), Material::Pec);
-    }
-
     #[test]
     fn pec_zero() {
         assert_eq!(Material::Pec.coefficients(0.5), (0.0, 0.0));
@@ -201,6 +206,61 @@ mod tests {
             );
         }
         assert!(Material::VACUUM.validate().is_ok());
+    }
+
+    #[test]
+    fn dispersive_validation_and_json() {
+        let d: Material =
+            serde_json::from_str(r#"{"kind": "drude", "eps_inf": 4, "wp": 0.9, "gamma": 0.01}"#)
+                .unwrap();
+        assert!(d.validate().is_ok() && d.is_dispersive());
+        let l: Material = serde_json::from_str(
+            r#"{"kind": "lorentz", "eps_inf": 2, "d_eps": 3, "w0": 0.3, "delta": 0}"#,
+        )
+        .unwrap();
+        assert!(l.validate().is_ok() && l.is_dispersive());
+        assert_eq!(
+            serde_json::from_str::<Material>(&serde_json::to_string(&l).unwrap()).unwrap(),
+            l
+        );
+        assert!(!Material::VACUUM.is_dispersive());
+        for bad in [
+            Material::Drude {
+                eps_inf: 0.5,
+                wp: 0.9,
+                gamma: 0.0,
+            },
+            Material::Drude {
+                eps_inf: 1.0,
+                wp: 0.0,
+                gamma: 0.0,
+            },
+            Material::Drude {
+                eps_inf: 1.0,
+                wp: 0.9,
+                gamma: -1e-9,
+            },
+            Material::Lorentz {
+                eps_inf: 1.0,
+                d_eps: 0.0,
+                w0: 0.3,
+                delta: 0.0,
+            },
+            Material::Lorentz {
+                eps_inf: 1.0,
+                d_eps: 1.0,
+                w0: f64::NAN,
+                delta: 0.0,
+            },
+            Material::Lorentz {
+                eps_inf: 1.0,
+                d_eps: 1.0,
+                w0: 0.3,
+                delta: -0.1,
+            },
+        ] {
+            assert!(bad.validate().is_err(), "{bad:?}");
+        }
     }
 
     #[test]

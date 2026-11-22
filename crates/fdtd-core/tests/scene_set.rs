@@ -67,6 +67,8 @@ fn features(scene: &Scene) -> BTreeSet<&'static str> {
             Material::Pec => f.insert("pec shape"),
             Material::Dielectric { sigma, .. } if sigma > 0.0 => f.insert("lossy material"),
             Material::Dielectric { .. } => f.insert("dielectric shape"),
+            Material::Drude { .. } => f.insert("drude shape"),
+            Material::Lorentz { .. } => f.insert("lorentz shape"),
         };
     }
     if let Some(paint) = &scene.paint {

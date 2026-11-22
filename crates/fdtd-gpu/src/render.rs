@@ -87,10 +87,14 @@ impl Viewport {
 
 /// The overlay drawn over a node of material `m`: color and opacity, in
 /// encoded sRGB. Vacuum is clear; dielectrics a white veil that thickens
-/// with eps; lossy media a dark brown; conductors an opaque light gray.
+/// with eps; lossy media a dark brown; conductors an opaque light gray;
+/// Drude metals a lighter, nearly opaque silver; Lorentz resonators a violet
+/// veil.
 pub fn overlay(m: &Material) -> [f32; 4] {
     match *m {
         Material::Pec => [0.66, 0.68, 0.72, 1.0],
+        Material::Drude { .. } => [0.82, 0.84, 0.88, 0.9],
+        Material::Lorentz { .. } => [0.55, 0.38, 0.78, 0.45],
         Material::Dielectric { sigma, .. } if sigma > 0.0 => [0.24, 0.16, 0.10, 0.55],
         Material::Dielectric { eps_inf, .. } if eps_inf > 1.0 => {
             let a = 0.10 + 0.25 * ((eps_inf - 1.0) / 11.0).min(1.0);

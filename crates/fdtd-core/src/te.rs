@@ -33,6 +33,11 @@
 //! step sees them. Probes, DFT monitors and flux lines read Hz on the nodes,
 //! entered at its true time (n - 1/2) S.
 //!
+//! Dispersive edges (`dispersive.rs`) carry a pole id into `rows`, the
+//! distinct dispersive edge media, and their J and P live in `aux_x` and
+//! `aux_y` (allocated only when the material table has a dispersive entry).
+//! Every other edge runs the plain line, bit for bit as before.
+//!
 //! TF/SF runs the TMz plane wave (`tfsf.rs`) through duality, in a vacuum
 //! background only (the scene validator enforces it). The auxiliary grid
 //! gets the waveform delayed by S/2, because its Ez^m stands for the
@@ -42,6 +47,7 @@
 //! minus H under duality), correct the Ex and Ey edges from `incident_e`.
 
 use crate::cpml::Cpml;
+use crate::dispersive::{Aux, Medium, NO_POLE, Row, pole_id};
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::kernel::{BuildKey, Kernel, Spectrum};
@@ -70,6 +76,12 @@ pub struct SimTe {
     ca_y: Vec<f64>,
     cb_y: Vec<f64>,
     eps_y: Vec<f64>,
+    /// Index into `rows` per Ex and per Ey edge, `NO_POLE` if plain.
+    pole_x: Vec<u32>,
+    pole_y: Vec<u32>,
+    rows: Vec<Row>,
+    aux_x: Aux,
+    aux_y: Aux,
     pml: Cpml,
     psi_exy: Vec<f64>,
     psi_eyx: Vec<f64>,
@@ -125,6 +137,7 @@ impl SimTe {
         for p in &mut probes {
             p.record(&hz, nx);
         }
+        let dispersive = scene.materials.iter().any(Material::is_dispersive);
         let mut sim = Self {
             nx,
             ny,
@@ -140,6 +153,11 @@ impl SimTe {
             ca_y: vec![0.0; nx * ny],
             cb_y: vec![0.0; nx * ny],
             eps_y: vec![0.0; nx * ny],
+            pole_x: vec![NO_POLE; nx * ny],
+            pole_y: vec![NO_POLE; nx * ny],
+            rows: Vec::new(),
+            aux_x: Aux::new(nx * ny, dispersive),
+            aux_y: Aux::new(nx * ny, dispersive),
             pml: Cpml::for_scene(scene),
             psi_exy: vec![0.0; nx * ny],
             psi_eyx: vec![0.0; nx * ny],
@@ -152,34 +170,47 @@ impl SimTe {
             spectral,
             key: BuildKey::of(scene),
         };
-        sim.set_edges(scene, &scene.rasterize());
+        sim.set_edges(scene, &scene.rasterize())?;
         Ok(sim)
     }
 
     /// Edge coefficients from the rasterized cell ids, over the edges the
     /// loops update: Ex rows `0..ny - 1` (every row with periodic y, row
-    /// ny - 1 then joins row 0), Ey columns `0..nx - 1`.
-    fn set_edges(&mut self, scene: &Scene, ids: &[usize]) {
+    /// ny - 1 then joins row 0), Ey columns `0..nx - 1`. An edge whose pole
+    /// changes starts its J and P at zero.
+    fn set_edges(&mut self, scene: &Scene, ids: &[usize]) -> Result<()> {
         let (nx, ny, s) = (self.nx, self.ny, self.s);
         let mat = |k: usize| &scene.materials[ids[k]];
+        let row = |a: usize, b: usize| -> Result<Row> {
+            Ok(Medium::edge(mat(a), mat(b))?.map_or(Row::PEC, |m| m.row(s)))
+        };
         let ex_rows = if self.periodic_y { ny } else { ny - 1 };
         for j in 0..ex_rows {
             let jn = if j + 1 == ny { 0 } else { j + 1 };
             for i in 0..nx {
                 let (k, up) = (j * nx + i, jn * nx + i);
-                let m = Material::edge_mean(mat(k), mat(up));
-                (self.ca_x[k], self.cb_x[k]) = m.coefficients(s);
-                self.eps_x[k] = m.eps();
+                let r = row(k, up)?;
+                (self.ca_x[k], self.cb_x[k], self.eps_x[k]) = (r.ca, r.cb, r.eps);
+                let id = pole_id(&mut self.rows, &r);
+                if id != self.pole_x[k] {
+                    self.aux_x.clear(k);
+                    self.pole_x[k] = id;
+                }
             }
         }
         for j in 0..ny {
             for i in 0..nx - 1 {
                 let k = j * nx + i;
-                let m = Material::edge_mean(mat(k), mat(k + 1));
-                (self.ca_y[k], self.cb_y[k]) = m.coefficients(s);
-                self.eps_y[k] = m.eps();
+                let r = row(k, k + 1)?;
+                (self.ca_y[k], self.cb_y[k], self.eps_y[k]) = (r.ca, r.cb, r.eps);
+                let id = pole_id(&mut self.rows, &r);
+                if id != self.pole_y[k] {
+                    self.aux_y.clear(k);
+                    self.pole_y[k] = id;
+                }
             }
         }
+        Ok(())
     }
 
     /// Advances one full step: the TF/SF auxiliary grid, Hz to n + 1/2 and
@@ -239,7 +270,11 @@ impl SimTe {
                 let (k, up) = (j * nx + i, jn * nx + i);
                 let psi = &mut self.psi_exy[k];
                 *psi = b * *psi + c * (hz[up] - hz[k]);
-                ex[k] = self.ca_x[k] * ex[k] + self.cb_x[k] * (hz[up] * ik - hz[k] * ik + *psi);
+                let curl = hz[up] * ik - hz[k] * ik + *psi;
+                ex[k] = match self.pole_x[k] {
+                    NO_POLE => self.ca_x[k] * ex[k] + self.cb_x[k] * curl,
+                    r => self.aux_x.update(&self.rows[r as usize], k, ex[k], curl),
+                };
             }
         }
         // Ey[i, j] at (i + 1/2, j): -dHz/dx, x profile at i + 1/2.
@@ -249,7 +284,11 @@ impl SimTe {
                 let k = j * nx + i;
                 let psi = &mut self.psi_eyx[k];
                 *psi = b * *psi + c * (hz[k + 1] - hz[k]);
-                ey[k] = self.ca_y[k] * ey[k] + self.cb_y[k] * (-hz[k + 1] * ik + hz[k] * ik - *psi);
+                let curl = -hz[k + 1] * ik + hz[k] * ik - *psi;
+                ey[k] = match self.pole_y[k] {
+                    NO_POLE => self.ca_y[k] * ey[k] + self.cb_y[k] * curl,
+                    r => self.aux_y.update(&self.rows[r as usize], k, ey[k], curl),
+                };
             }
         }
         if let Some(t) = &self.tfsf {
@@ -409,7 +448,7 @@ impl Kernel for SimTe {
         if crate::kernel::material_edit(scene, bounds)?.is_none() {
             return Ok(());
         }
-        self.set_edges(scene, &scene.rasterize());
+        self.set_edges(scene, &scene.rasterize())?;
         Ok(())
     }
 
