@@ -159,7 +159,11 @@ fn case_table(rows: &[CaseResult]) -> String {
             fmt_num(r.measured),
             r.unit,
             r.gate,
-            if r.pass { "pass" } else { "FAIL" },
+            match (r.gate, r.pass) {
+                (cases::Gate::Record, _) => "recorded",
+                (_, true) => "pass",
+                (_, false) => "FAIL",
+            },
             r.note.replace('|', "/")
         );
     }
@@ -395,7 +399,7 @@ fn case_sections(
     };
     std::fs::write(dir.join("slab_rt.svg"), plot.render())?;
     Ok(format!(
-        "\n## Every case (A1 to A15)\n\n\
+        "\n## Every case\n\n\
          `fdtd validate` prints the same table. Each gate is the one in \
          `docs/04-validation.md`; the conditions column says what was run.\n\n\
          {}\n\
@@ -451,6 +455,7 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut md = std::fs::read_to_string(&md_path)?;
     md += &case_sections(&a.dir, &rows, &slab)?;
     md += &scattering_section(&a.dir)?;
+    md += &tier5_section()?;
     md += &gpu_section(&a.dir)?;
     std::fs::write(&md_path, md)?;
     let failed = rows.iter().filter(|r| !r.pass).count();
@@ -462,6 +467,21 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
 /// Tier 4 in the report: every scene against the CPU for 2000 steps, and
 /// the 50000-step growth run written as `gpu_cpu_diff.csv` and `.svg`.
 /// Without an adapter the section says so and the files of the last run
+/// The Tier 5 Meep cross-checks (`cases::tier5`), recorded.
+fn tier5_section() -> Result<String, Box<dyn std::error::Error>> {
+    let rows = cases::tier5::tier5()?;
+    Ok(format!(
+        "
+## Meep cross-check (Tier 5)
+
+         Three scenes run in Meep {} (offline, in WSL; `validation/meep/`, versions in          `environment.txt`) and here, like for like: Courant 0.5, one Meep pixel per cell, no          subpixel smoothing. Meep is a second implementation, not the reference, so these          are recorded. MPB, from the same install, gives the A24 band edges.
+
+{}",
+        "1.35.1",
+        case_table(&rows)
+    ))
+}
+
 /// Writes `cylinder_scattering.svg` (A19: the PEC cylinder at radius 20
 /// cells in TMz against the series at k a = 1, 2, 5, 0 to 180 degrees; the
 /// pattern is symmetric) and `cylinder_convergence.svg` (pooled RMS dB error
