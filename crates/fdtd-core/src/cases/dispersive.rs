@@ -196,7 +196,12 @@ pub fn drude_cylinder(a: usize) -> Result<(f64, f64)> {
 
 /// A21: the small Drude cylinder resonance in TEz within 5 percent of
 /// wp / sqrt(eps_inf + 1), gated at a = 10 cells, with a = 5 beside it for
-/// the staircasing trend (the a = 20 run is in `fdtd report`).
+/// the staircasing trend (a = 20 is in `validation/gen/plot_drude_cylinder.py`).
+/// The peak is the tallest one, chosen blind. At 5 cells the staircase
+/// splits the surface mode into several peaks (near 0.78, 1.0 and 1.14 of
+/// theory) and the tallest is 14 percent off; at 10 cells the dipole peak
+/// dominates (+0.5 percent), at 20 cells -0.3 percent, which is about the
+/// retardation of a cylinder at k a = 0.1.
 pub fn a21() -> Result<Vec<CaseResult>> {
     let err = |a| -> Result<f64> {
         let (w, theory) = drude_cylinder(a)?;
