@@ -1,0 +1,138 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 400,
+  "ny": 400,
+  "dx_phys_m": 0.0015,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1.0,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ },
+ "sources": [
+  {
+   "i": 199,
+   "j": 164,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": -2.522477413399
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 199,
+   "j": 174,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 2.686219924129
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 199,
+   "j": 184,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 1.611731954477
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 199,
+   "j": 194,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 0.537243984826
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 199,
+   "j": 204,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": -0.537243984826
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 199,
+   "j": 214,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": -1.611731954477
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 199,
+   "j": 224,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": -2.686219924129
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 199,
+   "j": 234,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.05,
+    "ramp_periods": 3,
+    "phase": 2.522477413399
+   },
+   "amplitude": 1
+  }
+ ],
+ "monitors": [
+  {
+   "type": "ntff",
+   "x0": 20,
+   "y0": 20,
+   "x1": 379,
+   "y1": 379,
+   "freqs": [
+    0.05
+   ]
+  }
+ ],
+ "view": {
+  "field": "ez",
+  "gain": 8,
+  "auto_gain": false
+ }
+}

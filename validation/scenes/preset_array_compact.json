@@ -1,0 +1,138 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 160,
+  "ny": 160,
+  "dx_phys_m": 0.003,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  }
+ ],
+ "pml": {
+  "thickness": 10,
+  "m": 3,
+  "sigma_scale": 1.25,
+  "kappa_max": 2,
+  "alpha_max": 0.15
+ },
+ "sources": [
+  {
+   "i": 79,
+   "j": 61,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": -2.415028616434
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 79,
+   "j": 67,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 2.578771127164
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 79,
+   "j": 71,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 1.719180751443
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 79,
+   "j": 77,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 0.429795187861
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 79,
+   "j": 81,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": -0.429795187861
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 79,
+   "j": 87,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": -1.719180751443
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 79,
+   "j": 91,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": -2.578771127164
+   },
+   "amplitude": 1
+  },
+  {
+   "i": 79,
+   "j": 97,
+   "waveform": {
+    "type": "ramped_cw",
+    "f0": 0.1,
+    "ramp_periods": 3,
+    "phase": 2.415028616434
+   },
+   "amplitude": 1
+  }
+ ],
+ "monitors": [
+  {
+   "type": "ntff",
+   "x0": 14,
+   "y0": 14,
+   "x1": 145,
+   "y1": 145,
+   "freqs": [
+    0.1
+   ]
+  }
+ ],
+ "view": {
+  "field": "ez",
+  "gain": 8,
+  "auto_gain": false
+ }
+}

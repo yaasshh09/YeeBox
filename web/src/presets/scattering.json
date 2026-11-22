@@ -1,0 +1,71 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 400,
+  "ny": 400,
+  "dx_phys_m": 0.0015,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1.0,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ },
+ "geometry": [
+  {
+   "shape": "circle",
+   "cx": 199.5,
+   "cy": 199.5,
+   "r": 16,
+   "material": 2
+  }
+ ],
+ "plane_wave": {
+  "x0": 24,
+  "y0": 24,
+  "x1": 375,
+  "y1": 375,
+  "direction": "+x",
+  "waveform": {
+   "type": "ramped_cw",
+   "f0": 0.05,
+   "ramp_periods": 3,
+   "phase": 0.0
+  },
+  "amplitude": 1
+ },
+ "monitors": [
+  {
+   "type": "ntff",
+   "x0": 20,
+   "y0": 20,
+   "x1": 379,
+   "y1": 379,
+   "freqs": [
+    0.05
+   ]
+  }
+ ],
+ "view": {
+  "field": "ez",
+  "gain": 0.8,
+  "auto_gain": false
+ }
+}

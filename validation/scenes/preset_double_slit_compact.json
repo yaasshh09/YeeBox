@@ -1244,6 +1244,21 @@
    "material": 2
   }
  ],
+ "monitors": [
+  {
+   "type": "ntff",
+   "x0": 76,
+   "y0": 11,
+   "x1": 77,
+   "y1": 116,
+   "sides": [
+    "right"
+   ],
+   "freqs": [
+    0.1
+   ]
+  }
+ ],
  "view": {
   "field": "ez",
   "gain": 0.45,
