@@ -26,8 +26,12 @@ That's the goal. Here's where it stands today, honestly:
   polarizations, on the CPU reference, on the GPU, and in the browser. The app
   has a TM/TE switch, silver to paint with, and three new presets: a plasmon
   on a silver wire, a silver mirror and a resonant absorber.
-- **Not done yet:** oblique plane waves, scattering and far-field checks.
-  I'll only claim those once their tests pass.
+- **Also done:** a near-to-far-field transform, checked against the 2D
+  analogue of Mie theory: a PEC cylinder and a glass-like (eps 4) cylinder
+  match the analytic scattering width within half a decibel.
+- **Not done yet:** oblique plane waves, the double slit and phased array
+  far-field checks, and far-field patterns in the app. I'll only claim those
+  once their tests pass.
 
 The reference solver stays deliberately simple. Its only job is to be
 obviously correct, so it can prove the fast GPU kernel right.
@@ -103,6 +107,35 @@ percent off. At 10 cells the dipole peak is 0.5 percent off, and at 20 cells
 re-measures every run on its own.
 
 ![Drude cylinder resonance vs radius](validation/report/drude_cylinder.png)
+
+## Scattering and the far field
+
+The far field comes from a closed contour around the scene: record the fields
+on it, turn them into equivalent surface currents, and integrate them out to
+infinity. A line source inside the contour has to come out the same in every
+direction, and it does, to 0.08 dB at 20 cells per wavelength. That number
+is the grid's own error: the H field averaged onto the contour nodes is low
+by about 1 percent at that resolution, and it shrinks four times when the
+wavelength in cells doubles.
+
+The real test is a cylinder in a plane wave, against the analytic series:
+
+![Scattering width vs angle, simulation over series](validation/report/cylinder_scattering.svg)
+
+| Check | Result | Gate |
+|---|---|---|
+| Line source far field, flat in every direction, TMz and TEz | 0.080 dB | 0.1 dB |
+| PEC cylinder scattering width, k a = 1, 2, 5, radius 20 cells | 0.49 dB | 1 dB |
+| eps 4 cylinder scattering width, k a = 1, 2, 5, radius 40 cells | 0.28 dB | 1 dB |
+| Error as the radius doubles (10, 20, 40 cells) | falls every time | falls |
+
+I picked the radii from the resolution rule before running anything: 20
+cells keeps 25 cells per wavelength at k a = 5, and inside eps 4 that needs a
+radius of 40. Angles more than 20 dB below the series peak are skipped,
+because deep nulls belong to the staircase. The PEC cylinder converges at
+first order, which is what a staircased curved wall should do. TEz is
+recorded, not gated: its staircase error is about twice the TMz one (1.8 dB
+for the PEC cylinder at 20 cells, 0.8 dB at 40).
 
 `fdtd validate` runs every case and prints this table with its gates;
 `cargo test` checks the same cases.

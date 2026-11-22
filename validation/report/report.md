@@ -60,12 +60,27 @@ The layers are `PmlSpec::recommended`, tuned with `fdtd pml-sweep` against the w
 | A17 | Lorentz slab R and T vs complex eps | 4.79e-3 abs | <= 0.02 | pass | 20 cells, f 0.004 to 0.045 (41 points), TMz 4.8e-3, TEz 4.7e-3 |
 | A18 | TEz vs TMz under duality, vacuum line source | 0 rel | <= 1.00e-10 | pass | 121 x 101, 1500 steps; closed box 0.0e0, CPML 16 0.0e0; probe 0.0e0; unshifted source 1.3e-1 |
 | A21 | Drude cylinder resonance vs wp / sqrt(eps_inf + 1), TEz | 5.14e-3 rel | <= 0.05 | pass | k a = 0.1, Q 10; radius 10 cells +5.14e-3, 5 cells +1.38e-1 |
+| NTFF | line source far field isotropy | 0.0797 dB | <= 0.1 | pass | contour 41 x 41 around the source; Tm f 0.025 0.0052 dB, Tm f 0.05 0.0797 dB, Te f 0.025 0.0052 dB, Te f 0.05 0.0797 dB |
+| A19 | PEC cylinder scattering width | 0.4851 dB | <= 1 | pass | TMz, radius 20 cells, k a = 1, 2, 5: 0.100, 0.187, 0.485 dB; TEz recorded: 0.441, 0.625, 1.793 dB; angles within 20 dB of the series peak |
+| A19 conv | error falls as the radius doubles | 0.4846 ratio | <= 1 | pass | pooled RMS dB at a = 10, 20, 40: TMz 0.370, 0.179, 0.086 (order 1.05), TEz 1.124, 0.425, 0.197 (order 1.26) |
+| A20 | dielectric cylinder scattering width | 0.2772 dB | <= 1 | pass | TMz, radius 40 cells, k a = 1, 2, 5: 0.015, 0.055, 0.277 dB; TEz recorded: 0.320, 0.254, 0.377 dB; angles within 20 dB of the series peak |
+| A20 conv | error falls as the radius doubles | 0.2186 ratio | <= 1 | pass | pooled RMS dB at a = 10, 20, 40: TMz 1.141, 0.250, 0.048 (order 2.29), TEz 1.764, 0.287, 0.107 (order 2.02) |
 
 ## Dielectric slab (A13)
 
 ![Slab R and T vs frequency](slab_rt.svg)
 
 The measured curves sit on the exact discrete slab to 1e-7; what separates them from Airy is the grid's own dispersion, 4.9e-3 at the band edge, as the golden file predicts. The numbers are in `slab_rt.csv`.
+
+## Cylinder scattering (A19, A20)
+
+         ![Scattering width vs angle, simulation over series](cylinder_scattering.svg)
+
+         A plane wave on a cylinder, the 2D analogue of Mie theory. The far field comes from          a closed contour in the scattered-field region (`ntff.rs`); the series is          `validation/gen/cylinder_series.py`. The comparison skips angles more than 20 dB          below the series peak, where staircasing owns the deep nulls.
+
+         ![RMS error vs radius](cylinder_convergence.svg)
+
+         The error falls every time the radius in cells doubles. The PEC cylinder in TMz          converges at first order, as a staircased curved wall should; TEz staircasing is          worse, so TEz is recorded and not gated.
 
 ## GPU against CPU (Tier 4)
 

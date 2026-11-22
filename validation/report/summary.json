@@ -139,6 +139,41 @@
       "measured": "5.14e-3 rel",
       "name": "Drude cylinder resonance vs wp / sqrt(eps_inf + 1), TEz",
       "pass": true
+    },
+    {
+      "gate": "<= 0.1",
+      "id": "NTFF",
+      "measured": "0.0797 dB",
+      "name": "line source far field isotropy",
+      "pass": true
+    },
+    {
+      "gate": "<= 1",
+      "id": "A19",
+      "measured": "0.4851 dB",
+      "name": "PEC cylinder scattering width",
+      "pass": true
+    },
+    {
+      "gate": "<= 1",
+      "id": "A19 conv",
+      "measured": "0.4846 ratio",
+      "name": "error falls as the radius doubles",
+      "pass": true
+    },
+    {
+      "gate": "<= 1",
+      "id": "A20",
+      "measured": "0.2772 dB",
+      "name": "dielectric cylinder scattering width",
+      "pass": true
+    },
+    {
+      "gate": "<= 1",
+      "id": "A20 conv",
+      "measured": "0.2186 ratio",
+      "name": "error falls as the radius doubles",
+      "pass": true
     }
   ],
   "cpml": [

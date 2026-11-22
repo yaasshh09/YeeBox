@@ -450,6 +450,7 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
     let md_path = a.dir.join("report.md");
     let mut md = std::fs::read_to_string(&md_path)?;
     md += &case_sections(&a.dir, &rows, &slab)?;
+    md += &scattering_section(&a.dir)?;
     md += &gpu_section(&a.dir)?;
     std::fs::write(&md_path, md)?;
     let failed = rows.iter().filter(|r| !r.pass).count();
@@ -461,6 +462,106 @@ fn report(a: &ReportArgs) -> Result<(), Box<dyn std::error::Error>> {
 /// Tier 4 in the report: every scene against the CPU for 2000 steps, and
 /// the 50000-step growth run written as `gpu_cpu_diff.csv` and `.svg`.
 /// Without an adapter the section says so and the files of the last run
+/// Writes `cylinder_scattering.svg` (A19: the PEC cylinder at radius 20
+/// cells in TMz against the series at k a = 1, 2, 5, 0 to 180 degrees; the
+/// pattern is symmetric) and `cylinder_convergence.svg` (pooled RMS dB error
+/// against radius for every cylinder and mode), and returns their section.
+fn scattering_section(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
+    use cases::scattering::{Cylinder, KA, RADII, cylinder_errors, incident, measured, series};
+    let a = 20;
+    let run = measured(a, Mode::Tm, Cylinder::Pec, &incident(a, Mode::Tm)?)?;
+    let colors = [
+        ("#9ecae1", "#1f77b4"),
+        ("#a1d99b", "#2ca02c"),
+        ("#fdae6b", "#d95f02"),
+    ];
+    let mut curves = Vec::new();
+    for (k, &ka) in KA.iter().enumerate() {
+        let gold = series("pec_tm", ka)?;
+        let line: Vec<(f64, f64)> = (0..=180).map(|m| (m as f64, gold[m])).collect();
+        let dots: Vec<(f64, f64)> = (0..=180)
+            .step_by(5)
+            .map(|m| (m as f64, run.sigma[k][m]))
+            .collect();
+        curves.push((
+            format!("k a = {ka}, series"),
+            format!("k a = {ka}, FDTD"),
+            line,
+            dots,
+        ));
+    }
+    let series_list: Vec<svg::Series> = curves
+        .iter()
+        .zip(colors)
+        .flat_map(|((l1, l2, line, dots), (c1, c2))| {
+            [
+                svg::Series {
+                    label: l1,
+                    color: c1,
+                    points: line,
+                },
+                svg::Series {
+                    label: l2,
+                    color: c2,
+                    points: dots,
+                },
+            ]
+        })
+        .collect();
+    let plot = svg::Plot {
+        title: "PEC cylinder, radius 20 cells, TMz: scattering width (A19)",
+        x_label: "angle from the propagation direction (degrees)",
+        y_label: "sigma / lambda (dB)",
+        x: (0.0, 180.0, 30.0),
+        y: (-5.0, 15.0, 5.0),
+        series: &series_list,
+        hlines: &[],
+    };
+    std::fs::write(dir.join("cylinder_scattering.svg"), plot.render())?;
+    let mut conv = Vec::new();
+    for (cyl, name) in [(Cylinder::Pec, "PEC"), (Cylinder::Dielectric, "eps 4")] {
+        for (mode, m) in [(Mode::Tm, "TMz"), (Mode::Te, "TEz")] {
+            let pts = RADII
+                .iter()
+                .map(|&r| Ok((r as f64, cylinder_errors(r, mode, cyl)?.rms())))
+                .collect::<Result<Vec<_>, fdtd_core::FdtdError>>()?;
+            conv.push((format!("{name}, {m}"), pts));
+        }
+    }
+    let conv_colors = ["#1f77b4", "#9ecae1", "#d95f02", "#fdae6b"];
+    let conv_series: Vec<svg::Series> = conv
+        .iter()
+        .zip(conv_colors)
+        .map(|((label, pts), color)| svg::Series {
+            label,
+            color,
+            points: pts,
+        })
+        .collect();
+    let plot = svg::Plot {
+        title: "Cylinder scattering: RMS error vs radius (A19, A20)",
+        x_label: "cylinder radius (cells)",
+        y_label: "pooled RMS error, k a = 1, 2, 5 (dB)",
+        x: (0.0, 40.0, 10.0),
+        y: (0.0, 2.0, 0.5),
+        series: &conv_series,
+        hlines: &[],
+    };
+    std::fs::write(dir.join("cylinder_convergence.svg"), plot.render())?;
+    Ok("
+## Cylinder scattering (A19, A20)
+
+         ![Scattering width vs angle, simulation over series](cylinder_scattering.svg)
+
+         A plane wave on a cylinder, the 2D analogue of Mie theory. The far field comes from          a closed contour in the scattered-field region (`ntff.rs`); the series is          `validation/gen/cylinder_series.py`. The comparison skips angles more than 20 dB          below the series peak, where staircasing owns the deep nulls.
+
+         ![RMS error vs radius](cylinder_convergence.svg)
+
+         The error falls every time the radius in cells doubles. The PEC cylinder in TMz          converges at first order, as a staircased curved wall should; TEz staircasing is          worse, so TEz is recorded and not gated.
+"
+        .to_string())
+}
+
 /// with a GPU stay as they are.
 fn gpu_section(dir: &Path) -> Result<String, Box<dyn std::error::Error>> {
     use fdtd_gpu::{Gpu, tier4};
