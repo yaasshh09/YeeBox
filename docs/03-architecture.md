@@ -18,7 +18,7 @@
           source.rs             waveforms, soft/hard, phased array
           tfsf.rs               plane wave injection
           monitor.rs            probes, DFT, flux
-          ntff.rs               near-to-far-field (Phase 7)
+          ntff.rs               near-to-far-field, steering, array factor
           dispersion.rs         numerical wavenumber solver
           energy.rs             discrete energy
       fdtd-gpu/                 wgpu kernel, f32
@@ -90,6 +90,14 @@ limits. Resolution problems that are allowed but worth knowing (a Drude skin
 depth under 2 cells, a material wavelength under 10 cells) come back as
 warnings in `Scene::status`, not errors.
 
+A far-field monitor (`"type": "ntff"`) is a box of Ez nodes, all four sides
+or a listed subset (`sides`), with `freqs` and `angles` (360 when left out).
+Its taps are the flux-line taps of each side, so the GPU gathers them and the
+CPU accumulates the DFTs in f64, as for every other monitor; `Spectrum::
+FarField` carries the far-field amplitude per frequency and angle. The
+contour must stay clear of the CPML and of the TF/SF box (one node around
+it), and periodic y has no far field. Material on the contour is a warning.
+
 `mode` defaults to TM and is left out of the JSON when it is TM, so every
 file and link from before Phase 6 decodes and re-encodes unchanged; no
 migration was needed. Anything that builds a CPU kernel from an arbitrary
@@ -134,6 +142,12 @@ order.
     sim.readMonitor(index) -> Promise<Float32Array>
     sim.scene() -> string
     sim.dispose()
+
+Phase 7 adds `sim.farField()` (JSON: the first contour's pattern in dB
+below its peak, the live array factor when the scene is a plain CW array,
+and an edit count) and `sim.steer(degrees)`, which sets every CW source's
+phase in Rust. Every live edit restarts the spectral accumulators, so the
+polar plot shows the new scene once it settles.
 
 Rust owns the wgpu device, pipelines, and the canvas surface. TypeScript never
 touches WebGPU directly. Errors cross the boundary as structured objects with

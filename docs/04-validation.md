@@ -77,9 +77,30 @@ Notes:
   of 10 cells. The peak is the tallest one, picked blind. Staircasing splits
   the surface mode at small radii (several peaks at 5 cells); the trend over
   5, 10, 20 cells is `validation/report/drude_cylinder.png`.
-- A24: confirm the reference gap edges with MPB or the textbook before
-  enabling this as a gate. Until confirmed it is a recorded measurement, not a
-  pass/fail test.
+- A19, A20: gated in TMz (the series in doc 01 is written for TMz) over
+  k a = 1, 2, 5 from one broadband run, at radii picked from the 20-cell
+  rule before any run: 20 cells for PEC, 40 for eps 4 (25 cells per
+  wavelength inside it at k a = 5). TEz runs the same way and is recorded.
+  The convergence row is the pooled RMS dB error at radius 10, 20, 40,
+  which must fall at each doubling. A run that does not go quiet (the eps 4
+  cylinder rings in whispering gallery modes above the band) stops at its
+  budget, and its far field must move less than 0.01 dB over the last
+  quarter.
+- A22: slits 2 lambda wide and 5 lambda apart at 20 cells per wavelength,
+  far field from one contour line behind the screen, compared over |theta|
+  <= 25 deg where Fraunhofer is within 10 dB of its peak; the obliquity
+  factor the formula leaves out costs at most 0.42 dB there (fixed in
+  `validation/gen/fraunhofer.py` before the run).
+- A23: 8 line sources half a wavelength apart with true time delays, steered
+  to 0, 15, 30, 45 deg; the beam peak against the array factor's peak from
+  the same delays.
+- A24: confirmed with MPB (`validation/meep/mpb_crystal.py`): the complete
+  TM gap comes out 0.3225 to 0.4425 c / a, the textbook's 0.32 to 0.44, so
+  this is a gate. A plane wave at normal incidence sees the Gamma-X edges, so
+  the edges of the transmission stop band (T below -10 dB, 8 rows) are
+  compared with MPB's top of band 1 and bottom of band 2 along Gamma-X. A
+  single periodic cell holds bound slab modes that never decay, so the run
+  has a fixed length and its edges must stop moving.
 
 ## Tier 3: invariants
 
@@ -125,6 +146,11 @@ A feature is not done until its scene is in this set.
   the standard open FDTD package; agreement with it is a strong, independent
   statement. This runs offline, not in CI. Document resolution and settings so
   the comparison is like for like.
+  Done in Phase 7 (`validation/meep/`, Meep 1.35.1 in WSL, versions in
+  `environment.txt`): one Meep pixel per YeeBox cell, Courant 0.5, no subpixel
+  smoothing, faces placed between pixel centers so a slab or guide covers the
+  same cells. `cases::tier5` runs the same scenes and the report records the
+  differences.
 
 ## The validation report
 

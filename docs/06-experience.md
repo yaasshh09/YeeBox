@@ -108,7 +108,11 @@ under-resolved.
 - **Oscilloscope**: time trace at a probe, with trigger-free rolling display.
 - **Spectrum**: FFT of the probe trace, peak marker with frequency readout.
 - **Polar plot**: far-field pattern from the contour, with the analytic curve
-  overlaid when the preset has one.
+  overlaid when the preset has one. It appears whenever the scene has a
+  contour, starts over after every edit, and draws the theory dashed: the
+  live array factor for a plain CW array, otherwise the preset's stored curve
+  (series, Fraunhofer) only while the scene is exactly as shipped. Array
+  presets get a steering slider under it.
 - **Transmission**: flux ratio spectrum; guides the user through the
   normalization run ("remove the structure, press Reference, restore").
 - **Energy**: total field energy vs time; shows absorption by the PML when

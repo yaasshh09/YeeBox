@@ -218,6 +218,19 @@ far field with the correct absolute level.
 Use the numerical wavenumber for the contour phase terms where it improves
 agreement, and say so in the validation report.
 
+As built (`ntff.rs`): the contour samples come from flux lines, so E and H
+are co-located on the Ez nodes (H averaged across the two half-cell
+neighbors) and each enters the DFT at its true time. Trapezoid weights along
+each side, corners counted once in total. The phase term uses the continuum
+k: the numerical k(phi) made no difference to the line source test, because
+the error left there is the co-location. The node average of H is low by
+cos(k_n / 2), 1.2 percent at 20 cells per wavelength, which unbalances J and
+M; the line source far field is flat to 0.08 dB at 20 cells per wavelength
+and 0.005 dB at 40. An open contour (one side, `sides`) is the half-space
+form used behind the double slit screen. The scattered field for a
+scattering width needs no subtraction: the contour sits in the TF/SF
+scattered-field region.
+
 ## GPU kernel
 
 - Fields live in storage buffers of f32, one buffer per field, row-major,
