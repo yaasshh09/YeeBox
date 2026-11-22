@@ -5,9 +5,9 @@ entry at the top of the session log.
 
 ## Current state
 
-**Active phase:** Phase 5, built; the acceptance items that need people or other hardware are open (Phases 0 to 4 done, CI not yet run on GitHub)
+**Active phase:** Phase 6, parts A and B done (TEz and dispersive media on the CPU reference, A16, A17, A18, A21 passing); parts C (GPU) and D (browser) to go. Phase 5 people and hardware items still open, CI not yet run on GitHub
 **Blocked on:** nothing
-**Next action:** the owner pushes and enables GitHub Pages (source: GitHub Actions), then runs the ten-second test with three people, opens a shared link on a second device, and records an integrated GPU, Safari and Edge
+**Next action:** Phase 6 part C: the TEz and ADE shaders on the GPU, then Tier 4 on the four dispersive scenes (plan: `~/.claude/plans/woolly-honking-stardust-of-cdad43f4-adb1-43e5-a59e-eabf6d3790d8.md`). The owner still has to push and enable Pages
 
 ## Decisions log
 
@@ -104,6 +104,21 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-21 | Share links are `#s=1.` plus base64url of deflate-raw scene JSON (native `CompressionStream`); over 8000 characters Share saves a file; links pasted into an open tab load on `hashchange` | no dependency, versioned, exact |
 | 2026-11-21 | End-to-end tests run the production build on headless Chromium, which has no WebGPU, so they cover the CPU path; the GPU path and self-test are checked headed in Chrome and Firefox | a CI runner has no browser GPU |
 | 2026-11-21 | CI builds the site, checks the first-load weight, runs the e2e tests and deploys `web/dist` to GitHub Pages on main | the phase asks CI to build and publish |
+| 2026-11-22 | The UI gets a TM/TE toggle, and silver joins the paint palette with a PML guard | the owner chose both when planning Phase 6 |
+| 2026-11-22 | TEz is the TMz layout with the roles swapped: Hz on the nodes, Ex on the y-edges, Ey on the x-edges, Hz updated first | a cell is the same node in both modes, the CPML profiles are shared, and the duality with TMz is exact index for index (A18 bit for bit) |
+| 2026-11-22 | The TEz outer wall is a magnetic wall (Hz ring held at zero), not PEC | the same index ranges as TMz keep the duality exact; behind a CPML the wall type does not matter; painted PEC inside is a real conductor |
+| 2026-11-22 | `Scene.mode` defaults to TM and is skipped when TM; no version bump | older files and links decode and re-encode unchanged |
+| 2026-11-22 | `Component` gains Hz, Ex, Ey; `grid.rs` helpers are mode-neutral (`pos`, `shape`, `curl_stencil`); `Kernel::mode()` defaults to TM; `CpuKernel` dispatches by mode | one name per field, as CLAUDE.md asks; the harnesses read TEz by its own names |
+| 2026-11-22 | TEz TF/SF reuses the TMz auxiliary grid through duality, waveform delayed by S/2, vacuum background only (`PlaneWaveFault::TeNeedsVacuum`) | no second auxiliary implementation; exact (bit-identical to TMz) for all four directions and periodic y |
+| 2026-11-22 | TEz flux: Sx = Ey Hz, Sy = -Ex Hz, node sample at (n - 1/2) S, edge average at n S | the TMz code with times swapped and the sign flipped |
+| 2026-11-22 | One general E update for sigma plus a Drude pole plus a Lorentz pole (`dispersive.rs`): `E+ = Ca E + Cb (curl - cj J) - cp (P+ - P)`, P+ before E+, J after | a mixed TEz edge holds all three; it reduces exactly to each doc 02 formula, and a plain medium uses `Material::coefficients` itself, so every Phase 5 scene keeps its bits |
+| 2026-11-22 | TEz edge medium is the mean of the two eps(w): eps_inf and sigma averaged, each pole at half strength (whole when shared); two different Drude or Lorentz cells on one edge are refused | the doc 01 averaging rule extended to complex eps; one slot per pole kind keeps the update and the GPU layout fixed |
+| 2026-11-22 | Kernels keep a pole id per E location (material id in TMz, the distinct edge medium in TEz) into a table of rows; J and P are allocated only when the material table has a dispersive entry; a location whose pole changes restarts its J and P at zero | no per-location coefficient arrays; live paint cannot resurrect stale polarization |
+| 2026-11-22 | Dispersive cells must sit at least two nodes inside the CPML interface (`Scene::dispersive_allowed`); strokes skip and count the rest | the layer copies the interface node, and a TEz edge next to it reads the node beside it |
+| 2026-11-22 | Lorentz needs `w0 S < 1` | doc 02 says well below 2; 1 is the margin, and the passivity tests run at 0.15 |
+| 2026-11-22 | Drude skin depth under 2 cells and material wavelength under 10 cells are warnings in `Scene::status`, not errors | allowed scenes, but the user should know |
+| 2026-11-22 | The discrete energy includes J^2 / (2 wp^2) and P^2 / (2 d_eps) + V^(n-1/2) V^(n+1/2) / (2 d_eps w0^2) | derived in `Aux::energy`: the Drude part is exactly conserved for gamma = 0 and never increasing otherwise; the Lorentz part is the leapfrog invariant for delta = 0 |
+| 2026-11-22 | A16 and A17 run the A13 slab with the material swapped, in both modes; A21 peaks are picked blind (the tallest), from the probe spectrum over the analytic Ricker spectrum | one slab harness; no normalization run; no tuning toward the theory |
 
 ## Measured numbers
 
@@ -161,6 +176,16 @@ Fill in as they become available. These go in the README.
 | Late-time energy with CPML | 2000-step maxima never rise; final 3.7e-32 of peak after 100000 steps | 50 x 50, 10-cell layer, Ricker over by step 200 | 2026-11-13 |
 | Mirror symmetry with CPML | 2.1e-15 of peak about both axes | 61 x 51, 10-cell layer, dielectric, lossy and PEC shapes | 2026-11-13 |
 | Reflection harness self-checks | reference vs 1.5x-margin reference: exactly equal; bare PEC box: -0.8 to +1.4 dB | small sweep, 400 steps | 2026-11-13 |
+| A18 TEz vs TMz under duality | 0 (bit for bit), closed box and 16-cell CPML; an unshifted source is 1.3e-1 off | 121 x 101, 1500 steps, vacuum line source; gate 1e-10 | 2026-11-22 |
+| TEz TF/SF vs TMz | bit for bit on every node, all four directions and periodic y; flux within 1e-6, DFT magnitudes within 1e-12 | 81 x 61, CPML 10 | 2026-11-22 |
+| TEz energy drift, lossless cavity | 3.2e-15 (eps 4 block), 3.3e-15 (PEC block), 3.6e-15 (periodic y) | 1e4 steps, gate 1e-10 | 2026-11-22 |
+| A16 Drude slab vs complex eps | 2.2e-3 worst (TMz 6.2e-4, TEz 2.2e-3) | eps_inf 1, wp 2 pi 0.02, gamma 0.005, 20 cells, f 0.004 to 0.045 (42 points); gate 0.02 | 2026-11-22 |
+| A17 Lorentz slab vs complex eps | 4.8e-3 worst (TMz 4.8e-3, TEz 4.7e-3) | eps_inf 1, d_eps 2, w0 2 pi 0.02, delta 0.02, 41 points (f = 0.02 left out by the 20-cell rule); gate 0.02 | 2026-11-22 |
+| A21 Drude cylinder resonance | +0.51 percent at radius 10 cells; +13.8 percent at 5 (tallest of split peaks); -0.30 percent at 20; NumPy re-measures the same to 4 digits | TEz, k a = 0.1, Q 10, plane-wave Ricker; gate 5 percent | 2026-11-22 |
+| Energy with lossless Drude and Lorentz | drift 5.9e-14 / 7.9e-14 (Drude TM / TE), 5.2e-15 / 4.9e-15 (Lorentz) | 40 x 30 cavity, 1e4 steps; gate 1e-10 | 2026-11-22 |
+| Energy with lossy Drude and Lorentz | worst single-step rise 0 (Drude), 1.1e-15 of the start (Lorentz, round-off) | 6000 steps, source off | 2026-11-22 |
+| Drude plasma oscillation, uniform field | E_n = cos(n theta) to 1e-11 over 2000 steps | Crank-Nicolson identity, tan(theta/2) = (wp / sqrt(eps_inf)) S / 2 | 2026-11-22 |
+| `fdtd validate` runtime | about 52 s for 20 checks | release build | 2026-11-22 |
 
 ## Known deviations from reference
 
@@ -194,6 +219,11 @@ Fill in as they become available. These go in the README.
 | Phase 5 presets "around 1024 wide" | The full presets are 800 x 500, 700 x 300 and 700 x 450 | sized to their physics at 20 cells per wavelength; the 1024 x 1024 throughput target is measured on its own grid | yes |
 | Phase 5 self-test "matches the native CPU kernel" | Full fields are compared at steps 1000 and 2000; the peaks come from every 250 steps of the native run | the same measure as Tier 4 with a twentieth of the data | yes |
 | Phase 5 ten-second test, second device, Safari, Edge, integrated GPU | Not done by me | they need people and hardware I do not have | open, for the owner |
+| Phase 6 plan "PEC wall" for TEz | The TEz outer wall is PMC | exact duality with the TMz box; documented in doc 01 | yes |
+| Phase 6 plan commit 4 (a separate TEz CPML reflection run) | Not run; A18 makes TEz bit-identical to TMz with the CPML on, so A9 and A10 carry over | a second harness would measure the same numbers | yes |
+| Phase 6 plan "TE cavity resonance against the discrete closed form" | Covered by A18 instead | the TEz box is the exact dual of the TMz box, which A6 and A7 check | yes |
+| A21 convergence study | Radius 5, 10, 20 cells at fixed k a; the 20-cell run is in the plot script, not in `cargo test` | 40 s in release; the error left at 20 cells is retardation, not grid | yes |
+| Lossy Lorentz energy | Asserted non-increasing per step to 1e-14 although not proven | the worst measured rise is 1.1e-15, round-off; it is a regression guard | yes |
 
 ## CI coverage
 
@@ -203,7 +233,7 @@ software adapter being available on the runner).
 | Tier | CI | Local only | Notes |
 |---|---|---|---|
 | 1 Unit | yes | | units, grid, dispersion, waveforms, 1D solver, npz |
-| 2 Analytic | yes | | A1 to A15 through `fdtd_core::cases` (and R + T = 1), plus late-time stability with CPML |
+| 2 Analytic | yes | | A1 to A18 and A21 through `fdtd_core::cases` (and R + T = 1), plus late-time stability with CPML |
 | 3 Invariant | yes | | quiescence, linearity (1D and 2D); energy conservation and decay, reciprocity, mirror symmetry, padding (2D); the same with CPML; periodic y (1D equivalence, energy, translation); TF/SF linearity, quiescence, mirror and transpose; reciprocity with TF/SF and monitors |
 | Report | | yes | `fdtd report` regenerates `validation/report` (now with the Tier 4 table and growth plot); not wired into CI yet |
 | 4 GPU vs CPU | yes, on lavapipe (not yet seen running) | | `crates/fdtd-gpu/tests/tier4.rs`; CI sets `FDTD_REQUIRE_GPU=1`; locally on the GTX 1660 Ti; now also live edits, the live probe, the render and the CPU painter |
@@ -223,6 +253,42 @@ Format:
 
 Write the Broke field carefully, especially when the cause was embarrassing.
 It becomes the devlog.
+
+### 2026-11-22 (Phase 6, parts A and B)
+**Landed:** TEz and dispersive media on the CPU reference. `te.rs` is the TMz
+layout with the roles swapped; its stencil oracle (with random CPML profiles
+and periodic y) matches bit for bit, and two deliberate slips break it. A18 is
+exact: TEz Hz equals TMz Ez to the last bit, closed box and CPML alike, so the
+CPML numbers carry over. TEz has TF/SF (by duality with the TMz auxiliary
+grid), DFT and flux monitors, live paint and source edits, and `CpuKernel`
+builds the right kernel everywhere (CLI, wasm fallback, Tier 4, self-test
+goldens). `dispersive.rs` holds the Drude and Lorentz ADE with one general
+update that a mixed TEz edge needs, derived in its doc comments, and the
+discrete energy with the J and P terms. A16 is 2.2e-3 and A17 4.8e-3 against
+0.02, in both modes; A21 is +0.51 percent against 5. Lossless dispersive
+media conserve energy to 8e-14 and lossy ones never gain. The validator keeps
+dispersive cells out of the CPML, strokes skip those cells, and the status
+strip gets skin-depth and resolution warnings. 264 tests pass, 20 validation
+checks pass, docs 01, 03, 04 and the README say what is done and on what.
+About 20 commits, nothing pushed.
+**Broke:** Four things. First, the Python edit scripts I pipe through a bash
+heredoc died three times on an apostrophe in the text; nothing was applied
+any of those times, and I moved those edits to a script file. Second, the CPML
+oracle helper did not wrap y the way the plain one does, so the periodic TEz
+oracle overflowed an index; it now wraps, which is the identity everywhere
+the TMz tests use it. Third, my dispersive stroke test came up two nodes
+short: a zero-radius brush on a long segment drops nodes, because the
+projection of node 25 onto (0, 15) to (39, 15) lands at 25.000000000000004
+and the distance comes out at 1e-30 instead of 0. That bug predates Phase 6;
+the brush now allows 1e-9 of slack, with its own test. Fourth, the first A21
+spectrum at 5 cells showed three peaks, and the tallest is 14 percent off.
+That is the staircase splitting the surface mode, not a solver error, and I
+kept the blind peak rule rather than choosing the peak nearest the theory;
+at 10 cells the dipole peak dominates.
+**Open:** GPU and browser halves of Phase 6. The dispersive presets need a
+silver Drude fit converted per scene dx. CI and Pages still have not run.
+**Next:** Phase 6 part C, the TEz and ADE shaders, then Tier 4 on Drude TM,
+Drude TE, Lorentz TM and Lorentz TE.
 
 ### 2026-11-21 (Phase 5)
 **Landed:** Phase 5 is built. In core: a paint layer, capsule brush strokes,
