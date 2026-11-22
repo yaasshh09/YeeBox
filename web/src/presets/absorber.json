@@ -1,0 +1,311 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 600,
+  "ny": 400,
+  "dx_phys_m": 2.5e-08,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  },
+  {
+   "kind": "lorentz",
+   "eps_inf": 1.0,
+   "d_eps": 1.5,
+   "w0": 0.3141592653589793,
+   "delta": 0.031415926535897934
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1.0,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ },
+ "geometry": [
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 78.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 100.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 122.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 144.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 166.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 188.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 210.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 232.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 254.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 276.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 298.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 220,
+   "cy": 320.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 78.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 100.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 122.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 144.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 166.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 188.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 210.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 232.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 254.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 276.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 298.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 242,
+   "cy": 320.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 78.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 100.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 122.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 144.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 166.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 188.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 210.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 232.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 254.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 276.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 298.5,
+   "r": 5,
+   "material": 3
+  },
+  {
+   "shape": "circle",
+   "cx": 264,
+   "cy": 320.5,
+   "r": 5,
+   "material": 3
+  }
+ ],
+ "plane_wave": {
+  "x0": 22,
+  "y0": 22,
+  "x1": 577,
+  "y1": 377,
+  "direction": "+x",
+  "waveform": {
+   "type": "ramped_cw",
+   "f0": 0.05,
+   "ramp_periods": 3,
+   "phase": 0.0
+  },
+  "amplitude": 1
+ },
+ "view": {
+  "field": "ez",
+  "gain": 0.75,
+  "auto_gain": false
+ }
+}

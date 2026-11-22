@@ -7,6 +7,13 @@ import waveguide from "./waveguide.json?raw";
 import doubleSlitCompact from "../../../validation/scenes/preset_double_slit_compact.json?raw";
 import lensCompact from "../../../validation/scenes/preset_lens_compact.json?raw";
 import waveguideCompact from "../../../validation/scenes/preset_waveguide_compact.json?raw";
+import plasmon from "./plasmon.json?raw";
+import mirror from "./mirror.json?raw";
+import absorber from "./absorber.json?raw";
+import plasmonCompact from "../../../validation/scenes/preset_plasmon_compact.json?raw";
+import mirrorCompact from "../../../validation/scenes/preset_mirror_compact.json?raw";
+import absorberCompact from "../../../validation/scenes/preset_absorber_compact.json?raw";
+import cylinderPlot from "../../../validation/report/drude_cylinder.png";
 
 export type Preset = {
   id: string;
@@ -15,6 +22,8 @@ export type Preset = {
   tryIt: string;
   /** Validation cases that pass and back this preset; empty for none yet. */
   cases: string[];
+  /** A plot of the case, opened by the badge instead of the Verify panel. */
+  plot?: string;
   full: string;
   compact: string;
 };
@@ -46,6 +55,34 @@ export const PRESETS: Preset[] = [
     cases: ["A13"],
     full: lens,
     compact: lensCompact,
+  },
+  {
+    id: "plasmon",
+    title: "Plasmon on a silver wire",
+    watch: "Light at 360 nm drives the electrons of a 24 nm silver wire, which bends the wave far more than its size suggests.",
+    tryIt: "Switch to TM and the plasmon is gone: it needs the electric field in the plane.",
+    cases: ["A21"],
+    plot: cylinderPlot,
+    full: plasmon,
+    compact: plasmonCompact,
+  },
+  {
+    id: "mirror",
+    title: "Silver mirror",
+    watch: "A source in front of a silver wall: the reflection stands still as a pattern of bands.",
+    tryIt: "Paint silver to bend the mirror and watch the bands follow.",
+    cases: ["A16"],
+    full: mirror,
+    compact: mirrorCompact,
+  },
+  {
+    id: "absorber",
+    title: "Resonant absorber",
+    watch: "Rods tuned to the light soak it up and leave a shadow behind them.",
+    tryIt: "Change the wavelength and the rods go transparent.",
+    cases: ["A17"],
+    full: absorber,
+    compact: absorberCompact,
   },
 ];
 

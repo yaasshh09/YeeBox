@@ -48,5 +48,5 @@ fn presets_validate_and_have_compact_twins() {
             "{name}"
         );
     }
-    assert_eq!(n, 3);
+    assert_eq!(n, 6);
 }

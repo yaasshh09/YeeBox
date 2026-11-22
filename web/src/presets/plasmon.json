@@ -1,0 +1,66 @@
+{
+ "version": 1,
+ "mode": "te",
+ "grid": {
+  "nx": 400,
+  "ny": 400,
+  "dx_phys_m": 2e-09,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2.25,
+   "sigma": 0
+  },
+  {
+   "kind": "pec"
+  },
+  {
+   "kind": "drude",
+   "eps_inf": 3.718,
+   "wp": 0.09112303952623119,
+   "gamma": 0.00018618880665770453
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1.0,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ },
+ "geometry": [
+  {
+   "shape": "circle",
+   "cx": 199.5,
+   "cy": 199.5,
+   "r": 12,
+   "material": 3
+  }
+ ],
+ "plane_wave": {
+  "x0": 22,
+  "y0": 22,
+  "x1": 377,
+  "y1": 377,
+  "direction": "+x",
+  "waveform": {
+   "type": "ramped_cw",
+   "f0": 0.005555555555555556,
+   "ramp_periods": 3,
+   "phase": 0.0
+  },
+  "amplitude": 1
+ },
+ "view": {
+  "field": "ez",
+  "gain": 0.95,
+  "auto_gain": false
+ }
+}
