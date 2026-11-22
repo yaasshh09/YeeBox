@@ -31,6 +31,7 @@ pub fn error_code(e: &FdtdError) -> &'static str {
         FdtdError::GridSize { .. } => "grid_size",
         FdtdError::PmlTooThick { .. } => "pml_too_thick",
         FdtdError::SourceInPml { .. } => "source_in_pml",
+        FdtdError::DispersiveInPml { .. } => "dispersive_in_pml",
         FdtdError::PlaneWave(_) => "plane_wave",
         FdtdError::NotDecayed { .. } => "not_decayed",
         FdtdError::Case(_) => "case",

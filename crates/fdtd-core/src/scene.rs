@@ -161,7 +161,8 @@ pub struct StrokeOutcome {
     /// Live interior nodes under the brush that took its material.
     pub painted: usize,
     /// Nodes under the brush left as they were: sources, TF/SF faces and
-    /// the nodes across them.
+    /// the nodes across them, and for a dispersive material the nodes next
+    /// to the CPML (`Scene::dispersive_allowed`).
     pub skipped: usize,
     /// `[i0, j0, i1, j1]`, inclusive, around every node whose paint was
     /// written; `None` when nothing was. Layer nodes that follow them are
@@ -340,7 +341,25 @@ pub struct Status {
     /// center frequency (plain Gaussian).
     pub sources: Vec<Option<Drive>>,
     pub plane_wave: Option<Drive>,
+    /// Resolution warnings for the dispersive materials in use.
+    pub warnings: Vec<Warning>,
 }
+
+/// A dispersive material the grid does not resolve well. Allowed, but the
+/// status strip says so. `material` is the table index.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum Warning {
+    /// The plasma skin depth `1 / wp` (cells) of a Drude metal is under 2
+    /// cells, so the field inside it decays faster than the grid can follow.
+    SkinDepth { material: usize, cells: f64 },
+    /// The wavelength inside the material at a drive frequency,
+    /// `lambda0 / sqrt(|eps(w)|)`, is under 10 cells.
+    MaterialWavelength { material: usize, cells: f64 },
+}
+
+/// Plasma skin depth below which `Warning::SkinDepth` fires, in cells.
+pub const WARN_SKIN_DEPTH_CELLS: f64 = 2.0;
 
 /// The frequency of one source or plane wave and how well the grid
 /// resolves it in the medium where it is launched.
@@ -848,6 +867,7 @@ impl Scene {
                 });
             }
         }
+        self.check_dispersive()?;
         for src in &self.sources {
             self.check_source(src)?;
         }
@@ -926,7 +946,117 @@ impl Scene {
                 .plane_wave
                 .as_ref()
                 .and_then(|pw| drive(&pw.waveform, self.materials[0].eps())),
+            warnings: self.warnings(),
         })
+    }
+
+    /// `Warning`s for the dispersive materials that shapes or paint use, at
+    /// every drive frequency (sources and the plane wave).
+    fn warnings(&self) -> Vec<Warning> {
+        let mut used: Vec<usize> = self.geometry.iter().map(Shape::material).collect();
+        if let Some(p) = &self.paint {
+            used.extend(p.ids.iter().flatten().copied());
+        }
+        used.sort_unstable();
+        used.dedup();
+        let freqs: Vec<f64> = self
+            .sources
+            .iter()
+            .map(|s| &s.waveform)
+            .chain(self.plane_wave.as_ref().map(|p| &p.waveform))
+            .filter_map(Waveform::frequency)
+            .collect();
+        let mut out = Vec::new();
+        for id in used {
+            let m = &self.materials[id];
+            if let Material::Drude { wp, .. } = *m
+                && 1.0 / wp < WARN_SKIN_DEPTH_CELLS
+            {
+                out.push(Warning::SkinDepth {
+                    material: id,
+                    cells: 1.0 / wp,
+                });
+            }
+            if !m.is_dispersive() {
+                continue;
+            }
+            let Some(medium) = crate::dispersive::Medium::of(m) else {
+                continue;
+            };
+            let shortest = freqs
+                .iter()
+                .map(|f| {
+                    let (re, im) = medium.eps_at(2.0 * std::f64::consts::PI * f);
+                    (1.0 / f) / re.hypot(im).sqrt()
+                })
+                .fold(f64::INFINITY, f64::min);
+            if shortest < WARN_CELLS_PER_WAVELENGTH {
+                out.push(Warning::MaterialWavelength {
+                    material: id,
+                    cells: shortest,
+                });
+            }
+        }
+        out
+    }
+
+    /// Whether a Drude or Lorentz material may sit on node (i, j): anywhere
+    /// in a closed box; with a CPML, at least two nodes inside its interface
+    /// (the layer copies the interface node, and a TEz edge reads the node
+    /// beside it), along x, and along y unless y is periodic.
+    pub fn dispersive_allowed(&self, i: usize, j: usize) -> bool {
+        let d = self.pml_thickness();
+        if d == 0 {
+            return true;
+        }
+        let GridSpec { nx, ny, .. } = self.grid;
+        let inside = |q: usize, n: usize| q >= d + 2 && q + d + 3 <= n;
+        inside(i, nx) && (self.periodic_y || inside(j, ny))
+    }
+
+    /// The dispersive rules of `validate`: w0 S under 1 for every Lorentz
+    /// entry, dispersive nodes where `dispersive_allowed`, and in TEz no edge
+    /// between two different Drude (or two different Lorentz) cells.
+    fn check_dispersive(&self) -> Result<()> {
+        let s = self.grid.courant;
+        for m in &self.materials {
+            if let Material::Lorentz { w0, .. } = *m
+                && w0 * s >= 1.0
+            {
+                return Err(FdtdError::InvalidParameter {
+                    name: "w0 S (must be under 1)",
+                    value: w0 * s,
+                });
+            }
+        }
+        if !self.materials.iter().any(Material::is_dispersive) {
+            return Ok(());
+        }
+        let GridSpec { nx, ny, .. } = self.grid;
+        let ids = self.rasterize();
+        for j in 0..ny {
+            for i in 0..nx {
+                if self.materials[ids[j * nx + i]].is_dispersive() && !self.dispersive_allowed(i, j)
+                {
+                    return Err(FdtdError::DispersiveInPml { i, j });
+                }
+            }
+        }
+        if self.mode == Mode::Te {
+            let mat = |k: usize| &self.materials[ids[k]];
+            for j in 0..ny {
+                for i in 0..nx {
+                    let k = j * nx + i;
+                    if i + 1 < nx {
+                        crate::dispersive::Medium::edge(mat(k), mat(k + 1))?;
+                    }
+                    if j + 1 < ny {
+                        crate::dispersive::Medium::edge(mat(k), mat(k + nx))?;
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     /// Applies `patch` to source `index` of a validated scene at normalized
@@ -1117,6 +1247,7 @@ impl Scene {
         if lo_x > hi_x || lo_y > hi_y {
             return Ok(out);
         }
+        let dispersive = self.materials[material].is_dispersive();
         let mut hit = Vec::new();
         for j in lo_y as usize..=hi_y as usize {
             for i in lo_x as usize..=hi_x as usize {
@@ -1125,7 +1256,7 @@ impl Scene {
                 {
                     continue;
                 }
-                if protected.contains(&(i, j)) {
+                if protected.contains(&(i, j)) || (dispersive && !self.dispersive_allowed(i, j)) {
                     out.skipped += 1;
                 } else {
                     hit.push((i, j));
@@ -2288,6 +2419,131 @@ pub(crate) mod tests {
         s.paint_stroke((7.0, 8.0), (7.0, 8.0), 0.0, 0).unwrap();
         assert_eq!(s.material_at(7, 8), 0);
         assert_eq!(s.material_at(8, 8), 1);
+    }
+
+    const METAL: Material = Material::Drude {
+        eps_inf: 1.0,
+        wp: 0.3,
+        gamma: 0.01,
+    };
+
+    fn rect(x0: f64, y0: f64, x1: f64, y1: f64, material: usize) -> Shape {
+        Shape::Rect {
+            x0,
+            y0,
+            x1,
+            y1,
+            material,
+        }
+    }
+
+    /// Dispersive nodes stay two nodes inside the CPML interface (the layer
+    /// copies the interface node, and a TEz edge next to it is half the
+    /// node beside it), anywhere in a closed box.
+    #[test]
+    fn dispersive_material_stays_out_of_the_pml() {
+        let with = |x0: f64| {
+            let mut s = empty(40, 30, vec![rect(x0, 10.0, 20.0, 14.0, 3)]);
+            s.materials.push(METAL);
+            s.pml = Some(crate::cpml::tests::spec(5));
+            s
+        };
+        // Layer nodes are i < 5, the interface is i = 5, so i = 7 is the first allowed.
+        assert_eq!(
+            with(6.0).validate(),
+            Err(FdtdError::DispersiveInPml { i: 6, j: 10 })
+        );
+        assert!(with(7.0).validate().is_ok());
+        let mut closed = with(1.0);
+        closed.pml = None;
+        assert!(closed.validate().is_ok());
+        assert!(with(7.0).dispersive_allowed(7, 7) && !with(7.0).dispersive_allowed(7, 6));
+    }
+
+    #[test]
+    fn lorentz_resonance_under_the_step() {
+        let mut s = sample();
+        let lorentz = |w0| Material::Lorentz {
+            eps_inf: 1.0,
+            d_eps: 1.0,
+            w0,
+            delta: 0.0,
+        };
+        s.materials.push(lorentz(1.9));
+        assert!(s.validate().is_ok(), "S = 0.5, w0 S = 0.95");
+        s.materials[3] = lorentz(2.0);
+        assert!(s.validate().is_err(), "w0 S = 1");
+    }
+
+    /// TEz: two different Drude cells on one edge have one pole slot.
+    #[test]
+    fn te_refuses_two_drudes_on_an_edge() {
+        let mut s = empty(
+            40,
+            30,
+            vec![
+                rect(10.0, 10.0, 14.0, 14.0, 3),
+                rect(15.0, 10.0, 18.0, 14.0, 4),
+            ],
+        );
+        s.materials.push(METAL);
+        s.materials.push(Material::Drude {
+            eps_inf: 1.0,
+            wp: 0.2,
+            gamma: 0.0,
+        });
+        assert!(s.validate().is_ok(), "TMz has no edges to share");
+        s.mode = Mode::Te;
+        assert!(s.validate().is_err());
+        s.geometry[1] = rect(16.0, 10.0, 18.0, 14.0, 4);
+        assert!(s.validate().is_ok(), "a vacuum column between them");
+    }
+
+    /// A dispersive stroke across the whole grid skips the guarded nodes
+    /// next to the layer, counts them, and leaves the scene valid.
+    #[test]
+    fn dispersive_stroke_skips_the_guard() {
+        let mut s = empty(40, 30, vec![]);
+        s.materials.push(METAL);
+        s.pml = Some(crate::cpml::tests::spec(5));
+        let out = s.paint_stroke((0.0, 15.0), (39.0, 15.0), 0.5, 3).unwrap();
+        // Live non-layer nodes on the row: 5..=34, of which 5, 6, 33, 34 are guarded.
+        assert_eq!((out.painted, out.skipped), (26, 4));
+        s.validate().unwrap();
+        // A plain wall still runs into the layer.
+        let out = s.paint_stroke((0.0, 18.0), (39.0, 18.0), 0.5, 2).unwrap();
+        assert_eq!((out.painted, out.skipped), (30, 0));
+    }
+
+    /// Warnings for a dispersive material in use: plasma skin depth 1 / wp
+    /// under 2 cells, and lambda / sqrt(|eps|) under 10 cells at a drive.
+    #[test]
+    fn dispersive_warnings_in_status() {
+        let mut s = sample();
+        s.materials.push(Material::Drude {
+            eps_inf: 1.0,
+            wp: 0.9,
+            gamma: 0.0,
+        });
+        assert!(s.status(0).unwrap().warnings.is_empty(), "unused material");
+        s.geometry.push(rect(20.0, 20.0, 24.0, 24.0, 3));
+        let w = s.status(0).unwrap().warnings;
+        assert!(w.iter().any(|w| matches!(w, Warning::SkinDepth { material: 3, cells } if (cells - 1.0 / 0.9).abs() < 1e-12)), "{w:?}");
+        assert!(
+            w.iter()
+                .any(|w| matches!(w, Warning::MaterialWavelength { material: 3, .. })),
+            "{w:?}"
+        );
+        s.materials[3] = Material::Drude {
+            eps_inf: 1.0,
+            wp: 0.05,
+            gamma: 0.0,
+        };
+        assert!(
+            s.status(0).unwrap().warnings.is_empty(),
+            "{:?}",
+            s.status(0).unwrap().warnings
+        );
     }
 
     #[test]

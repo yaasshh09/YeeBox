@@ -42,6 +42,11 @@ pub enum FdtdError {
         nx: usize,
         ny: usize,
     },
+    /// A Drude or Lorentz node is inside the CPML or within two nodes of its
+    /// interface (`Scene::dispersive_allowed`); the standard CPML is unstable
+    /// against dispersive media.
+    #[error("dispersive material at node ({i}, {j}) is in or next to the pml")]
+    DispersiveInPml { i: usize, j: usize },
     /// A source sits strictly inside the CPML layer.
     #[error("source at node ({i}, {j}) is inside the pml")]
     SourceInPml { i: usize, j: usize },
