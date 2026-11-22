@@ -52,3 +52,38 @@ test("a share link reproduces the scene exactly", async ({ page, context }) => {
   await ready(other);
   expect(await scene(other)).toBe(shared);
 });
+
+test("the plasmon preset runs in TE with its badge on the A21 plot", async ({ page }) => {
+  await page.goto("/");
+  await ready(page);
+  await page.getByLabel("Experiment").selectOption("plasmon");
+  await expect(page.locator(".status")).toContainText("TE");
+  await expect.poll(async () => JSON.parse(await scene(page)).mode).toBe("te");
+  await expect(page.locator("a.badge")).toHaveAttribute("href", /drude_cylinder/);
+});
+
+test("switching the plasmon to TM rebuilds it and drops the preset", async ({ page }) => {
+  await page.goto("/");
+  await ready(page);
+  await page.getByLabel("Experiment").selectOption("plasmon");
+  await expect(page.locator(".status")).toContainText("TE");
+  await page.getByRole("button", { name: "TM (E out of plane)" }).click();
+  await expect(page.locator(".status")).toContainText("TM");
+  await expect.poll(async () => JSON.parse(await scene(page)).mode).toBeUndefined();
+  await expect(page.locator(".notice")).toContainText("Surface plasmons need TE");
+  await expect(page.getByLabel("Experiment")).toHaveValue("");
+});
+
+test("silver painted across the stage stays clear of the absorbing border", async ({ page }) => {
+  await page.goto("/");
+  await ready(page);
+  await page.getByRole("button", { name: "Silver" }).click();
+  const box = (await page.locator(".stage").boundingBox())!;
+  const y = box.y + box.height * 0.5;
+  await page.mouse.move(box.x + 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width - 2, y, { steps: 20 });
+  await page.mouse.up();
+  await expect(page.locator(".notice")).toContainText("two cells clear of the absorbing border");
+  await expect.poll(async () => JSON.parse(await scene(page)).paint?.runs.length ?? 0).toBeGreaterThan(1);
+});

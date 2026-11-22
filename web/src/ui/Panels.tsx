@@ -4,7 +4,7 @@
 // only arithmetic is display formatting.
 import { useEffect, useRef, useState } from "react";
 import { PRESETS, presetById } from "../presets";
-import { engineRef, PALETTE, useStore, type Drive, type Tool } from "../state/store";
+import { engineRef, PALETTE, useStore, type Drive, type Mode, type Tool, type Warning } from "../state/store";
 import { count, si } from "./format";
 import { hintDone } from "./Hints";
 import { run } from "./Stage";
@@ -150,6 +150,34 @@ export function Transport() {
   );
 }
 
+/** TM or TE: rebuilds the kernel in the other polarization, scene kept.
+ *  Leaving TE on the plasmon preset makes it a custom scene, with the reason,
+ *  so a plasmon is never shown in TM. */
+export function ModeSwitch() {
+  const mode = useStore((s) => s.status?.mode ?? "tm");
+  const choose = (m: Mode) => {
+    if (m === mode) return;
+    void run(async (e) => {
+      await e.call("setMode", m);
+      const s = useStore.getState();
+      if (m === "tm" && s.presetId === "plasmon") {
+        s.set({ presetId: "" });
+        s.toast("Surface plasmons need TE, the electric field in the plane. In TM this silver wire only scatters.");
+      }
+    });
+  };
+  return (
+    <div className="buttons" role="group" aria-label="Polarization">
+      <button type="button" aria-pressed={mode === "tm"} className={mode === "tm" ? "active" : ""} onClick={() => choose("tm")}>
+        TM (E out of plane)
+      </button>
+      <button type="button" aria-pressed={mode === "te"} className={mode === "te" ? "active" : ""} onClick={() => choose("te")}>
+        TE (E in plane)
+      </button>
+    </div>
+  );
+}
+
 export function ViewControls() {
   const field = useStore((s) => s.field);
   const gain = useStore((s) => s.gain);
@@ -161,6 +189,7 @@ export function ViewControls() {
   return (
     <section>
       <h2 className="section-title">View</h2>
+      <ModeSwitch />
       <div className="buttons">
         <button type="button" aria-pressed={field === "ez"} className={field === "ez" ? "active" : ""} onClick={() => apply("ez", gain)}>
           Field
@@ -296,7 +325,7 @@ export function RectForm() {
 
 export function TopBar({ onVerify, onShare }: { onVerify: () => void; onShare: () => void }) {
   const presetId = useStore((s) => s.presetId);
-  const p = presetById(presetId);
+  const p = PRESETS.find((x) => x.id === presetId);
   return (
     <header className="topbar">
       <div className="brand">YeeBox</div>
@@ -308,20 +337,28 @@ export function TopBar({ onVerify, onShare }: { onVerify: () => void; onShare: (
           loadPreset(e.target.value);
         }}
       >
+        {!p && <option value="">Custom scene</option>}
         {PRESETS.map((x) => (
           <option key={x.id} value={x.id}>
             {x.title}
           </option>
         ))}
       </select>
-      <p className="watch">
-        {p.watch} <span className="try">{p.tryIt}</span>
-        {p.cases.length > 0 && (
-          <button type="button" className="badge" onClick={onVerify}>
-            matches theory ({p.cases.join(", ")})
-          </button>
-        )}
-      </p>
+      {p && (
+        <p className="watch">
+          {p.watch} <span className="try">{p.tryIt}</span>
+          {p.cases.length > 0 &&
+            (p.plot ? (
+              <a className="badge" href={p.plot} target="_blank" rel="noreferrer">
+                matches theory ({p.cases.join(", ")})
+              </a>
+            ) : (
+              <button type="button" className="badge" onClick={onVerify}>
+                matches theory ({p.cases.join(", ")})
+              </button>
+            ))}
+        </p>
+      )}
       <div className="topbar-right">
         <label className="file-button">
           Open
@@ -346,6 +383,12 @@ export function TopBar({ onVerify, onShare }: { onVerify: () => void; onShare: (
       </div>
     </header>
   );
+}
+
+function warningText(w: Warning): string {
+  return w.kind === "skin_depth"
+    ? `metal skin depth ${w.cells.toFixed(2)} cells (under 2, it acts as a lossy mirror)`
+    : `${w.cells.toFixed(1)} cells per wavelength inside a dispersive material (below 10)`;
 }
 
 export function StatusStrip() {
@@ -373,6 +416,12 @@ export function StatusStrip() {
           </span>
         </>
       )}
+      <span>{status.mode === "te" ? "TE" : "TM"}</span>
+      {status.warnings.map((w, k) => (
+        <span key={k} className="warn">
+          {warningText(w)}
+        </span>
+      ))}
       <span>t {si(status.time_s, "s")}</span>
       <span>
         {count(mcells)} Mcells/s, {spf} steps per frame

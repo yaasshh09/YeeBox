@@ -20,15 +20,27 @@ export type Status = {
   time_s: number;
   sources: (Drive | null)[];
   plane_wave: Drive | null;
+  /** Resolution warnings for dispersive materials in use (`scene::Warning`). */
+  warnings: Warning[];
+  mode: Mode;
 };
+
+export type Mode = "tm" | "te";
+
+export type Warning =
+  | { kind: "skin_depth"; material: number; cells: number }
+  | { kind: "material_wavelength"; material: number; cells: number };
 
 /** The scene to load and the compact twin for the CPU fallback. */
 export type SceneSource = { full: string; compact: string | null; key: number };
 
 export const engineRef: { current: Engine | null } = { current: null };
 
-/** Palette order, as `material::PALETTE` in fdtd-core. */
-export const PALETTE = ["Vacuum", "Glass", "High index", "Conductor", "Absorber"] as const;
+/** Palette order, as `material::palette` in fdtd-core. */
+export const PALETTE = ["Vacuum", "Glass", "High index", "Conductor", "Absorber", "Silver"] as const;
+
+/** Palette index of silver, the one dispersive paint. */
+export const SILVER = 5;
 
 const reducedMotion =
   typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;

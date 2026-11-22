@@ -343,6 +343,8 @@ pub struct Status {
     pub plane_wave: Option<Drive>,
     /// Resolution warnings for the dispersive materials in use.
     pub warnings: Vec<Warning>,
+    /// The polarization the scene runs in.
+    pub mode: Mode,
 }
 
 /// A dispersive material the grid does not resolve well. Allowed, but the
@@ -948,6 +950,7 @@ impl Scene {
                 .as_ref()
                 .and_then(|pw| drive(&pw.waveform, self.materials[0].eps())),
             warnings: self.warnings(),
+            mode: self.mode,
         })
     }
 

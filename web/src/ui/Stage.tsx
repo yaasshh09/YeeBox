@@ -4,7 +4,10 @@
 import { useEffect, useRef } from "react";
 import { createEngine, type Engine } from "../sim/engine";
 import { toSimError } from "../sim/protocol";
-import { engineRef, SCOPE_LEN, useStore } from "../state/store";
+import { engineRef, SCOPE_LEN, SILVER, useStore } from "../state/store";
+
+// When the last "silver kept clear of the border" note was shown.
+let lastSkipNote = -Infinity;
 import { hintDone } from "./Hints";
 
 type Pt = { x: number; y: number };
@@ -132,7 +135,12 @@ export function Stage() {
       void run(async (e) => {
         const a = await cell(e, from);
         const b = await cell(e, to);
-        return e.call("paintStroke", a[0], a[1], b[0], b[1], s.brush, mat);
+        const out = JSON.parse(await e.call<string>("paintStroke", a[0], a[1], b[0], b[1], s.brush, mat));
+        // Silver may not touch the absorbing border; say so, once in a while.
+        if (mat === SILVER && out.skipped > 0 && performance.now() - lastSkipNote > 4000) {
+          lastSkipNote = performance.now();
+          useStore.getState().toast("Metal stays two cells clear of the absorbing border, so a few cells were left as they were.");
+        }
       });
     };
 
