@@ -191,6 +191,7 @@ fn scene_set_covers_every_feature() {
         "te mode",
         "drude shape",
         "lorentz shape",
+        "far-field contour",
     ];
     let missing: Vec<_> = wanted.iter().filter(|w| !covered.contains(*w)).collect();
     assert!(missing.is_empty(), "no scene exercises {missing:?}");

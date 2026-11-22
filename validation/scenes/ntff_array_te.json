@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "grid": {
+    "nx": 81,
+    "ny": 81,
+    "dx_phys_m": 0.001,
+    "courant": 0.5
+  },
+  "materials": [
+    {
+      "kind": "dielectric",
+      "eps_inf": 1.0,
+      "sigma": 0.0
+    },
+    {
+      "kind": "dielectric",
+      "eps_inf": 2.25,
+      "sigma": 0.0
+    }
+  ],
+  "geometry": [
+    {
+      "shape": "rect",
+      "x0": 30.0,
+      "y0": 30.0,
+      "x1": 34.0,
+      "y1": 50.0,
+      "material": 1
+    }
+  ],
+  "sources": [
+    {
+      "i": 36,
+      "j": 44,
+      "waveform": {
+        "type": "ricker",
+        "t0": 50.0,
+        "f_peak": 0.04
+      },
+      "amplitude": 1.0,
+      "kind": "soft"
+    },
+    {
+      "i": 46,
+      "j": 38,
+      "waveform": {
+        "type": "ricker",
+        "t0": 50.0,
+        "f_peak": 0.04
+      },
+      "amplitude": 1.0,
+      "kind": "soft"
+    }
+  ],
+  "monitors": [
+    {
+      "type": "ntff",
+      "x0": 20,
+      "y0": 20,
+      "x1": 60,
+      "y1": 60,
+      "freqs": [
+        0.03,
+        0.05
+      ]
+    },
+    {
+      "type": "ntff",
+      "x0": 55,
+      "y0": 25,
+      "x1": 62,
+      "y1": 55,
+      "sides": [
+        "right"
+      ],
+      "freqs": [
+        0.05
+      ],
+      "angles": 90
+    }
+  ],
+  "pml": {
+    "thickness": 16,
+    "m": 4.0,
+    "sigma_scale": 1.0,
+    "kappa_max": 2.0,
+    "alpha_max": 0.1
+  },
+  "mode": "te"
+}
