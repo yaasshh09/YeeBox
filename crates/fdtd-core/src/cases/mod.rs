@@ -1,5 +1,5 @@
 //! The Tier 2 analytic acceptance cases (`docs/04-validation.md`), A1 to
-//! A15, as library functions. The acceptance tests, `fdtd validate` and
+//! A15 and the Phase 6 cases, as library functions. The acceptance tests, `fdtd validate` and
 //! `fdtd report` all run these, so the table they print cannot drift from
 //! what the tests check.
 //!
@@ -9,6 +9,7 @@
 //! and `all` reports it as a failed row. Normalized units throughout.
 
 pub mod boundary;
+pub mod duality;
 pub mod plane_wave;
 pub mod signal;
 pub mod tier1d;
@@ -118,6 +119,7 @@ pub const CASES: &[(&str, CaseFn)] = &[
     ("A13, R+T", plane_wave::a13),
     ("A14", plane_wave::a14),
     ("A15", plane_wave::a15),
+    ("A18", duality::a18),
 ];
 
 /// Runs every case. A case that errors becomes a failed row carrying the error.
