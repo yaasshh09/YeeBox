@@ -9,10 +9,12 @@
 //! `H0^(2)(k |r - r'|) ~ sqrt(2j / (pi k rho)) exp(-j k rho) exp(j k rhat . r')`
 //! the far field is
 //!
-//!     TMz: Ez ~ F(phi) exp(-j k rho) / sqrt(rho),
-//!          F = -(k/4) sqrt(2j / (pi k)) sum w [eta Jz - (cos phi My - sin phi Mx)] exp(j k rhat . r')
-//!     TEz: Hz ~ F(phi) exp(-j k rho) / sqrt(rho),
-//!          F = -(k/4) sqrt(2j / (pi k)) sum w [Mz / eta + (cos phi Jy - sin phi Jx)] exp(j k rhat . r')
+//! ```text
+//! TMz: Ez ~ F(phi) exp(-j k rho) / sqrt(rho),
+//!      F = -(k/4) sqrt(2j / (pi k)) sum w [eta Jz - (cos phi My - sin phi Mx)] exp(j k rhat . r')
+//! TEz: Hz ~ F(phi) exp(-j k rho) / sqrt(rho),
+//!      F = -(k/4) sqrt(2j / (pi k)) sum w [Mz / eta + (cos phi Jy - sin phi Jx)] exp(j k rhat . r')
+//! ```
 //!
 //! where `w` is the trapezoid weight of a node along its side (1, and 1/2 at
 //! each end, so a closed rectangle counts each corner once in total), `r'` is
@@ -213,6 +215,11 @@ impl Ntff {
             .iter()
             .flat_map(|(_, l)| l.taps(nx, ny))
             .collect()
+    }
+
+    /// How many taps `taps` returns.
+    pub fn taps_len(&self) -> usize {
+        self.lines.iter().map(|(_, l)| 3 * l.len()).sum()
     }
 
     /// Adds one step from the values of `taps`, taken after step `n`.

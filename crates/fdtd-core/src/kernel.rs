@@ -258,6 +258,9 @@ pub enum Spectrum {
     Field(Vec<(f64, f64)>),
     /// Poynting flux through a line, positive along its normal, normalized.
     Flux(Vec<f64>),
+    /// Far-field amplitude `F(phi_m, f)` of a contour, `(re, im)`, entry
+    /// `f * angles + m` (`ntff::Ntff::far_field`), normalized.
+    FarField(Vec<(f64, f64)>),
 }
 
 /// How far kernel `b` is from the reference kernel `a` after `step` steps.
@@ -316,7 +319,9 @@ fn flatten(spectra: &[Spectrum]) -> Vec<f64> {
     let mut out = Vec::new();
     for s in spectra {
         match s {
-            Spectrum::Field(v) => out.extend(v.iter().flat_map(|&(re, im)| [re, im])),
+            Spectrum::Field(v) | Spectrum::FarField(v) => {
+                out.extend(v.iter().flat_map(|&(re, im)| [re, im]))
+            }
             Spectrum::Flux(v) => out.extend(v),
         }
     }

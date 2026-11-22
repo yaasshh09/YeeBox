@@ -98,7 +98,7 @@ pub fn rt_spectrum(
             .into_iter()
             .filter_map(|m| match m {
                 Spectrum::Flux(f) => Some(f),
-                Spectrum::Field(_) => None,
+                Spectrum::Field(_) | Spectrum::FarField(_) => None,
             });
         match (fluxes.next(), fluxes.next()) {
             (Some(r), Some(t)) => Ok((r, t, steps)),

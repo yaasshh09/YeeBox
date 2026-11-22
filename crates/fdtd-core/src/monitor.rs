@@ -8,6 +8,7 @@
 
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
+use crate::ntff::Ntff;
 use crate::scene::{Mode, Monitor};
 use crate::tm::SimTm;
 use serde::{Deserialize, Serialize};
@@ -276,7 +277,8 @@ pub fn read_taps(sim: &SimTm, taps: &[Tap]) -> Vec<f64> {
 impl Monitor {
     /// The samples this monitor reads after every step on an `nx` by `ny`
     /// grid in `mode`: one node tap (Ez or Hz) for a point or DFT monitor,
-    /// `FluxLine::taps` for a flux line. Call on a validated scene.
+    /// `FluxLine::taps` for a flux line, `Ntff::taps` for a far-field
+    /// contour. Call on a validated scene.
     pub fn taps(&self, mode: Mode, nx: usize, ny: usize) -> Result<Vec<Tap>> {
         let node = match mode {
             Mode::Tm => Component::Ez,
@@ -293,7 +295,27 @@ impl Monitor {
             } => FluxLine::new(*normal, *at, *from, *to, freqs)?
                 .in_mode(mode)
                 .taps(nx, ny),
+            Monitor::Ntff { .. } => self.ntff(mode, 1.0)?.map_or(vec![], |f| f.taps(nx, ny)),
         })
+    }
+
+    /// The far-field monitor this is, for a kernel in `mode` with
+    /// background permittivity `eps` (material 0); `None` for the other
+    /// monitor kinds.
+    pub fn ntff(&self, mode: Mode, eps: f64) -> Result<Option<Ntff>> {
+        let Monitor::Ntff {
+            x0,
+            y0,
+            x1,
+            y1,
+            sides,
+            freqs,
+            angles,
+        } = self
+        else {
+            return Ok(None);
+        };
+        Ntff::new(*x0, *y0, *x1, *y1, sides, freqs, *angles, mode, eps).map(Some)
     }
 }
 

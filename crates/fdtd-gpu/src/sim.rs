@@ -12,6 +12,7 @@ use fdtd_core::kernel::{BuildKey, material_edit};
 #[cfg(not(target_arch = "wasm32"))]
 use fdtd_core::kernel::{Kernel, Spectrum};
 use fdtd_core::monitor::{Dft, FluxLine};
+use fdtd_core::ntff::Ntff;
 use fdtd_core::scene::{Mode, Monitor, Scene, Source};
 use fdtd_core::source::SourceKind;
 use fdtd_core::tfsf::Tfsf;
@@ -49,6 +50,7 @@ enum Mon {
     Point(Vec<f64>),
     Dft(Dft),
     Flux(FluxLine),
+    Ntff(Ntff),
 }
 
 /// The f32 GPU kernel for one scene.
@@ -408,6 +410,9 @@ impl GpuSim {
                         to,
                         ref freqs,
                     } => Mon::Flux(FluxLine::new(normal, at, from, to, freqs)?.in_mode(scene.mode)),
+                    Monitor::Ntff { .. } => m
+                        .ntff(scene.mode, scene.materials[0].eps())?
+                        .map_or(Mon::Point(vec![]), Mon::Ntff),
                 },
             ));
         }
@@ -879,6 +884,10 @@ impl GpuSim {
                         let len = 3 * (line.to - line.from + 1);
                         line.record_taps(&row[*at..*at + len], n, s);
                     }
+                    Mon::Ntff(ntff) => {
+                        let len = ntff.taps_len();
+                        ntff.record_taps(&row[*at..*at + len], n, s);
+                    }
                 }
             }
             if self.probe.is_some() {
@@ -1005,6 +1014,7 @@ impl Kernel for GpuSim {
                     (0..d.freqs().len()).map(|f| d.get(0, f)).collect(),
                 )),
                 Mon::Flux(line) => Some(Spectrum::Flux(line.flux())),
+                Mon::Ntff(ntff) => Some(Spectrum::FarField(ntff.far_field())),
             })
             .collect())
     }

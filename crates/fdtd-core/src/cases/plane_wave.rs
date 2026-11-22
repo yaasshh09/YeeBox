@@ -283,7 +283,7 @@ pub fn a14() -> Result<Vec<CaseResult>> {
             .zip(&spectra)
             .filter_map(|(&x, s)| match s {
                 Spectrum::Field(v) => Some((x as f64, v[f].0.hypot(v[f].1).ln())),
-                Spectrum::Flux(_) => None,
+                Spectrum::Flux(_) | Spectrum::FarField(_) => None,
             })
             .collect();
         let alpha = -slope(&pts);

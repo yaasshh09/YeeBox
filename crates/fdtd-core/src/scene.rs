@@ -11,6 +11,7 @@ use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::material::{Material, palette};
 use crate::monitor::{Dft, FluxLine, Normal};
+use crate::ntff::{ALL_SIDES, Side};
 use crate::source::{SourceKind, Waveform};
 use crate::tfsf::{Direction, PlaneWave, PlaneWaveFault};
 use crate::units::{C0, Units};
@@ -566,6 +567,40 @@ pub enum Monitor {
         to: usize,
         freqs: Vec<f64>,
     },
+    /// Far field from a contour on the Ez nodes of the box `[x0, x1] x
+    /// [y0, y1]`: the listed `sides` (all four, a closed contour, when
+    /// omitted), at `angles` directions `2 pi m / angles` from +x (360 when
+    /// omitted). See `ntff::Ntff`.
+    Ntff {
+        x0: usize,
+        y0: usize,
+        x1: usize,
+        y1: usize,
+        #[serde(default = "all_sides", skip_serializing_if = "is_all_sides")]
+        sides: Vec<Side>,
+        freqs: Vec<f64>,
+        #[serde(default = "default_angles", skip_serializing_if = "is_default_angles")]
+        angles: usize,
+    },
+}
+
+fn all_sides() -> Vec<Side> {
+    ALL_SIDES.to_vec()
+}
+
+fn is_all_sides(s: &[Side]) -> bool {
+    s == ALL_SIDES
+}
+
+/// Far-field directions of an `Ntff` monitor when the scene names none.
+pub const DEFAULT_ANGLES: usize = 360;
+
+fn default_angles() -> usize {
+    DEFAULT_ANGLES
+}
+
+fn is_default_angles(a: &usize) -> bool {
+    *a == DEFAULT_ANGLES
 }
 
 fn finite(name: &'static str, value: f64) -> Result<()> {
@@ -1125,6 +1160,75 @@ impl Scene {
                             return out(to, at);
                         }
                     }
+                }
+            }
+            Monitor::Ntff { .. } => self.check_ntff(m)?,
+        }
+        Ok(())
+    }
+
+    /// Far-field contour placement. Every contour node and its four
+    /// neighbors are live interior nodes outside the CPML, so the averaged
+    /// edges sit in the plain medium. With a TF/SF box, no contour node may
+    /// be in the box or one node around it: the contour must lie wholly in
+    /// the scattered field (around the box or beside it). Periodic y has no
+    /// far field, so it is refused.
+    fn check_ntff(&self, m: &Monitor) -> Result<()> {
+        let Monitor::Ntff {
+            x0,
+            y0,
+            x1,
+            y1,
+            sides,
+            ..
+        } = m
+        else {
+            return Ok(());
+        };
+        m.ntff(self.mode, 1.0)?;
+        if self.periodic_y {
+            return Err(FdtdError::InvalidParameter {
+                name: "far-field contour with periodic y",
+                value: 1.0,
+            });
+        }
+        let GridSpec { nx, ny, .. } = self.grid;
+        let (x0, y0, x1, y1) = (*x0, *y0, *x1, *y1);
+        let mut nodes = Vec::new();
+        for side in sides {
+            match side {
+                Side::Left => nodes.extend((y0..=y1).map(|j| (x0, j))),
+                Side::Right => nodes.extend((y0..=y1).map(|j| (x1, j))),
+                Side::Bottom => nodes.extend((x0..=x1).map(|i| (i, y0))),
+                Side::Top => nodes.extend((x0..=x1).map(|i| (i, y1))),
+            }
+        }
+        for &(i, j) in &nodes {
+            let inside = |i: usize, j: usize| {
+                (1..nx - 1).contains(&i) && (1..ny - 1).contains(&j) && !self.in_pml(i, j)
+            };
+            let ok = i >= 1
+                && j >= 1
+                && inside(i, j)
+                && inside(i - 1, j)
+                && inside(i + 1, j)
+                && inside(i, j - 1)
+                && inside(i, j + 1);
+            if !ok {
+                return Err(FdtdError::OutOfDomain {
+                    what: "far-field contour",
+                    i,
+                    j,
+                });
+            }
+            if let Some(pw) = &self.plane_wave {
+                let near = |v: usize, lo: usize, hi: usize| v + 1 >= lo && v <= hi + 1;
+                if near(i, pw.x0, pw.x1) && near(j, pw.y0, pw.y1) {
+                    return Err(FdtdError::OutOfDomain {
+                        what: "far-field contour (on the plane wave box)",
+                        i,
+                        j,
+                    });
                 }
             }
         }
@@ -2253,6 +2357,93 @@ pub(crate) mod tests {
             ok((5, 5), (1, 0), 0.0, &[1.0], 0.04, 2.0).is_err(),
             "ramp under 3"
         );
+    }
+
+    /// A far-field contour: JSON leaves out the default sides and angles
+    /// and reads them back; every contour node and its neighbors must be
+    /// interior nodes outside the CPML; the contour must stay clear of the
+    /// TF/SF box and the node around it; periodic y is refused.
+    #[test]
+    fn ntff_monitor_json_and_placement() {
+        let ntff_angles = |x0, y0, x1, y1, sides: &[Side], angles| Monitor::Ntff {
+            x0,
+            y0,
+            x1,
+            y1,
+            sides: sides.to_vec(),
+            freqs: vec![0.05],
+            angles,
+        };
+        let ntff =
+            |x0, y0, x1, y1, sides: &[Side]| ntff_angles(x0, y0, x1, y1, sides, DEFAULT_ANGLES);
+        let mut s = sample();
+        s.geometry.clear();
+        s.pml = Some(PmlSpec::recommended(4));
+        s.monitors = vec![ntff(5, 5, 34, 24, &ALL_SIDES)];
+        let text = s.to_json().unwrap();
+        assert!(text.contains("\"type\": \"ntff\""), "{text}");
+        assert!(
+            !text.contains("sides") && !text.contains("angles"),
+            "{text}"
+        );
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+        s.monitors = vec![ntff_angles(5, 5, 34, 24, &[Side::Right], 90)];
+        let text = s.to_json().unwrap();
+        assert!(
+            text.contains("\"sides\"") && text.contains("\"angles\": 90"),
+            "{text}"
+        );
+        assert_eq!(Scene::from_json(&text).unwrap(), s);
+
+        let check = |m: Monitor, pw: bool, periodic: bool| {
+            let mut s = sample();
+            s.geometry.clear();
+            s.pml = Some(PmlSpec::recommended(4));
+            s.periodic_y = periodic;
+            if pw {
+                s.plane_wave = Some(PlaneWave {
+                    x0: 12,
+                    y0: 10,
+                    x1: 26,
+                    y1: 19,
+                    direction: Direction::PlusX,
+                    waveform: Waveform::Ricker {
+                        t0: 60.0,
+                        f_peak: 0.05,
+                    },
+                    amplitude: 1.0,
+                });
+            }
+            s.monitors = vec![m];
+            s.validate()
+        };
+        // 40 x 30 with a 4-cell layer: nodes 4..=35 and 4..=25 are outside
+        // it, so a contour (with its neighbors) fits in 5..=34 by 5..=24.
+        for (m, pw, ok) in [
+            (ntff(5, 5, 34, 24, &ALL_SIDES), false, true),
+            (ntff(4, 5, 34, 24, &ALL_SIDES), false, false),
+            (ntff(5, 5, 35, 24, &ALL_SIDES), false, false),
+            (ntff(5, 4, 34, 24, &ALL_SIDES), false, false),
+            (ntff(5, 5, 34, 25, &ALL_SIDES), false, false),
+            // Only the listed sides are checked.
+            (ntff(2, 5, 34, 24, &[Side::Right]), false, true),
+            (ntff(5, 5, 5, 24, &ALL_SIDES), false, false),
+            // Around the TF/SF box [12, 26] x [10, 19], one node clear.
+            (ntff(10, 8, 28, 21, &ALL_SIDES), true, true),
+            (ntff(11, 8, 28, 21, &ALL_SIDES), true, false),
+            (ntff(10, 9, 28, 21, &ALL_SIDES), true, false),
+            (ntff(10, 8, 27, 21, &ALL_SIDES), true, false),
+            (ntff(10, 8, 28, 20, &ALL_SIDES), true, false),
+            // Inside it, or crossing it.
+            (ntff(14, 12, 24, 17, &ALL_SIDES), true, false),
+            (ntff(5, 14, 34, 16, &ALL_SIDES), true, false),
+            // Beside it.
+            (ntff(29, 5, 34, 24, &ALL_SIDES), true, true),
+        ] {
+            assert_eq!(check(m.clone(), pw, false).is_ok(), ok, "{m:?}");
+        }
+        assert!(check(ntff(5, 5, 34, 24, &ALL_SIDES), false, true).is_err());
+        assert!(check(ntff_angles(5, 5, 34, 24, &ALL_SIDES, 0), false, false).is_err());
     }
 
     /// DFT and flux monitors round trip through their tagged JSON form and

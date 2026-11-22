@@ -38,7 +38,8 @@ use crate::dispersive::{Aux, Medium, NO_POLE, Row};
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::kernel::{BuildKey, Kernel, Spectrum, material_edit};
-use crate::monitor::{Dft, FluxLine, PointProbe};
+use crate::monitor::{Dft, FluxLine, PointProbe, read_taps};
+use crate::ntff::Ntff;
 use crate::scene::{Mode, Monitor, Scene, Source};
 use crate::source::SourceKind;
 use crate::tfsf::Tfsf;
@@ -83,6 +84,7 @@ pub(crate) enum Spectral {
     /// Transform of the node field (Ez, or Hz in TEz) at node index k.
     Field(usize, Dft),
     Flux(FluxLine),
+    Ntff(Ntff),
 }
 
 impl Spectral {
@@ -93,7 +95,30 @@ impl Spectral {
                 Spectrum::Field((0..dft.freqs().len()).map(|f| dft.get(0, f)).collect())
             }
             Spectral::Flux(line) => Spectrum::Flux(line.flux()),
+            Spectral::Ntff(ntff) => Spectrum::FarField(ntff.far_field()),
         }
+    }
+
+    /// The `Spectral` of a scene's DFT, flux or far-field monitor for a
+    /// kernel in `mode`; `None` for a point probe.
+    pub(crate) fn of(m: &Monitor, scene: &Scene) -> Result<Option<Self>> {
+        let nx = scene.grid.nx;
+        Ok(match m {
+            Monitor::Point { .. } => None,
+            Monitor::Dft { i, j, freqs } => Some(Spectral::Field(j * nx + i, Dft::new(freqs, 1)?)),
+            Monitor::Flux {
+                normal,
+                at,
+                from,
+                to,
+                freqs,
+            } => Some(Spectral::Flux(
+                FluxLine::new(*normal, *at, *from, *to, freqs)?.in_mode(scene.mode),
+            )),
+            Monitor::Ntff { .. } => m
+                .ntff(scene.mode, scene.materials[0].eps())?
+                .map(Spectral::Ntff),
+        })
     }
 }
 
@@ -143,21 +168,10 @@ impl SimTm {
         let mut probes = Vec::new();
         let mut spectral = Vec::new();
         for m in &scene.monitors {
-            match m {
-                &Monitor::Point { i, j } => probes.push(PointProbe::new(i, j)),
-                Monitor::Dft { i, j, freqs } => {
-                    spectral.push(Spectral::Field(j * nx + i, Dft::new(freqs, 1)?))
-                }
-                Monitor::Flux {
-                    normal,
-                    at,
-                    from,
-                    to,
-                    freqs,
-                } => spectral.push(Spectral::Flux(FluxLine::new(
-                    *normal, *at, *from, *to, freqs,
-                )?)),
+            if let &Monitor::Point { i, j } = m {
+                probes.push(PointProbe::new(i, j));
             }
+            spectral.extend(Spectral::of(m, scene)?);
         }
         let ez = vec![0.0; nx * ny];
         for p in &mut probes {
@@ -293,6 +307,10 @@ impl SimTm {
             match m {
                 Spectral::Field(k, dft) => dft.add(&[self.ez[*k]], n * s, s),
                 Spectral::Flux(line) => line.record(self),
+                Spectral::Ntff(ntff) => {
+                    let values = read_taps(self, &ntff.taps(nx, self.ny));
+                    ntff.record_taps(&values, self.n, s);
+                }
             }
         }
         self.spectral = spectral;

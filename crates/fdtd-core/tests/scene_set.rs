@@ -135,6 +135,7 @@ fn features(scene: &Scene) -> BTreeSet<&'static str> {
             Monitor::Flux {
                 normal: Normal::Y, ..
             } => "flux y",
+            Monitor::Ntff { .. } => "far-field contour",
         });
     }
     f

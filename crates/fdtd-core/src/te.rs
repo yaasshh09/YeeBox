@@ -52,7 +52,7 @@ use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::kernel::{BuildKey, Kernel, Spectrum};
 use crate::material::Material;
-use crate::monitor::{Dft, FluxLine, PointProbe};
+use crate::monitor::PointProbe;
 use crate::scene::{Mode, Monitor, Scene, Source};
 use crate::source::SourceKind;
 use crate::tfsf::Tfsf;
@@ -108,21 +108,10 @@ impl SimTe {
         let mut probes = Vec::new();
         let mut spectral = Vec::new();
         for m in &scene.monitors {
-            match m {
-                &Monitor::Point { i, j } => probes.push(PointProbe::new(i, j)),
-                Monitor::Dft { i, j, freqs } => {
-                    spectral.push(Spectral::Field(j * nx + i, Dft::new(freqs, 1)?))
-                }
-                Monitor::Flux {
-                    normal,
-                    at,
-                    from,
-                    to,
-                    freqs,
-                } => spectral.push(Spectral::Flux(
-                    FluxLine::new(*normal, *at, *from, *to, freqs)?.in_mode(Mode::Te),
-                )),
+            if let &Monitor::Point { i, j } = m {
+                probes.push(PointProbe::new(i, j));
             }
+            spectral.extend(Spectral::of(m, scene)?);
         }
         // Validated: material 0 is vacuum when there is a plane wave.
         let tfsf = match &scene.plane_wave {
@@ -319,6 +308,14 @@ impl SimTe {
                         .map(|&(c, k)| self.field(c).map_or(0.0, |f| f[k]))
                         .collect();
                     line.record_taps(&values, n, s);
+                }
+                Spectral::Ntff(ntff) => {
+                    let values: Vec<f64> = ntff
+                        .taps(nx, ny)
+                        .iter()
+                        .map(|&(c, k)| self.field(c).map_or(0.0, |f| f[k]))
+                        .collect();
+                    ntff.record_taps(&values, n, s);
                 }
             }
         }
