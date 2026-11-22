@@ -471,7 +471,7 @@ fn tier5_section() -> Result<String, Box<dyn std::error::Error>> {
         "
 ## Meep cross-check (Tier 5)
 
-         Three scenes run in Meep {} (offline, in WSL; `validation/meep/`, versions in \
+Three scenes run in Meep {} (offline, in WSL; `validation/meep/`, versions in \
          `environment.txt`) and here, like for like: Courant 0.5, one Meep pixel per cell, \
          no subpixel smoothing. Meep is a second implementation, not the reference, so \
          these are recorded. MPB, from the same install, gives the A24 band edges.

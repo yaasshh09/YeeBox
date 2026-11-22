@@ -87,7 +87,7 @@ The error falls every time the radius in cells doubles. The PEC cylinder in TMz 
 
 ## Meep cross-check (Tier 5)
 
-         Three scenes run in Meep 1.35.1 (offline, in WSL; `validation/meep/`, versions in `environment.txt`) and here, like for like: Courant 0.5, one Meep pixel per cell, no subpixel smoothing. Meep is a second implementation, not the reference, so these are recorded. MPB, from the same install, gives the A24 band edges.
+Three scenes run in Meep 1.35.1 (offline, in WSL; `validation/meep/`, versions in `environment.txt`) and here, like for like: Courant 0.5, one Meep pixel per cell, no subpixel smoothing. Meep is a second implementation, not the reference, so these are recorded. MPB, from the same install, gives the A24 band edges.
 
 | Case | Check | Measured | Gate | Result | Conditions |
 |---|---|---|---|---|---|
