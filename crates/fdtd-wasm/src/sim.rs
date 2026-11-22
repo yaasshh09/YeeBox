@@ -32,6 +32,9 @@ pub struct Sim {
     session: Session,
     viewport: Viewport,
     backend: Backend,
+    /// Scene edits since the scene was loaded: paint, shapes, sources and
+    /// the mode. A preset's stored theory curve holds only while it is 0.
+    edits: u32,
 }
 
 /// Parses JSON into `T`, as a coded `json` error.
@@ -93,6 +96,7 @@ pub async fn create_sim(canvas: HtmlCanvasElement, scene_json: String) -> JsResu
     let mut out = Sim {
         session,
         viewport,
+        edits: 0,
         backend: Backend::Gpu {
             gpu,
             surface,
@@ -121,6 +125,7 @@ pub fn create_cpu_sim(scene_json: &str, width: u32, height: u32) -> JsResult<Sim
         session,
         viewport,
         backend: Backend::Cpu(cpu),
+        edits: 0,
     };
     out.apply_view()?;
     Ok(out)
@@ -145,7 +150,10 @@ impl Sim {
             Backend::Gpu { sim, .. } => sim.set_sources(scene),
             Backend::Cpu(cpu) => cpu.set_sources(scene),
         }
-        .map_err(js_err)
+        .map_err(js_err)?;
+        self.restart_spectra();
+        self.edits += 1;
+        Ok(())
     }
 
     fn materials_changed(&mut self, bounds: [usize; 4]) -> JsResult<()> {
@@ -154,7 +162,19 @@ impl Sim {
             Backend::Gpu { sim, .. } => sim.set_materials(scene, bounds),
             Backend::Cpu(cpu) => cpu.set_materials(scene, bounds),
         }
-        .map_err(js_err)
+        .map_err(js_err)?;
+        self.restart_spectra();
+        self.edits += 1;
+        Ok(())
+    }
+
+    /// After a live edit the far field starts over, so the polar plot shows
+    /// the new state once it settles instead of a blend of old and new.
+    fn restart_spectra(&mut self) {
+        match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.restart_spectra(),
+            Backend::Cpu(cpu) => cpu.restart_spectra(),
+        }
     }
 
     /// Turns the intensity mean on or off to match the scene's view.
@@ -320,6 +340,7 @@ impl Sim {
             }
         };
         self.session.set_mode(mode).map_err(js_err)?;
+        self.edits += 1;
         self.reset_fields()
     }
 
@@ -501,6 +522,65 @@ impl Sim {
             Backend::Cpu(cpu) => cpu.set_probe(None),
         }
         .map_err(js_err)
+    }
+
+    /// The far field of the scene's first contour at its first frequency,
+    /// as JSON: `{"freq", "angles", "db", "theory", "edits"}`, `db` the pattern in dB
+    /// below its own peak (floored at -60) at `angles` directions from +x,
+    /// counterclockwise, and `theory` the array factor the same way when
+    /// the scene is a plain CW array (`ntff::array_factor`), else null.
+    /// `edits` counts scene edits since loading. `null` when the scene has
+    /// no contour. Accumulated since the last edit.
+    #[wasm_bindgen(js_name = farField)]
+    pub fn far_field(&mut self) -> JsResult<String> {
+        let found = self.session.scene.monitors.iter().find_map(|m| match m {
+            fdtd_core::scene::Monitor::Ntff { freqs, angles, .. } => {
+                Some((freqs.first().copied(), *angles))
+            }
+            _ => None,
+        });
+        let Some((Some(freq), angles)) = found else {
+            return Ok("null".into());
+        };
+        let far = match &mut self.backend {
+            Backend::Gpu { sim, .. } => sim.far_fields(),
+            Backend::Cpu(cpu) => cpu.far_fields().map_err(js_err)?,
+        };
+        let Some(row) = far.first().map(|v| &v[..angles.min(v.len())]) else {
+            return Ok("null".into());
+        };
+        let to_db = |v: &[f64]| -> Vec<f64> {
+            let peak = v.iter().fold(0.0_f64, |m, &x| m.max(x));
+            v.iter()
+                .map(|&x| {
+                    if peak > 0.0 {
+                        (20.0 * (x / peak).log10()).max(-60.0)
+                    } else {
+                        -60.0
+                    }
+                })
+                .collect()
+        };
+        let mags: Vec<f64> = row.iter().map(|v| v.0.hypot(v.1)).collect();
+        let theory =
+            fdtd_core::ntff::array_factor(&self.session.scene, freq, angles).map(|af| to_db(&af));
+        Ok(serde_json::json!({
+            "freq": freq,
+            "angles": angles,
+            "db": to_db(&mags),
+            "theory": theory,
+            "edits": self.edits,
+        })
+        .to_string())
+    }
+
+    /// Points every CW source at `degrees` from +x (`ntff::steer`); returns
+    /// how many were steered.
+    pub fn steer(&mut self, degrees: f64) -> JsResult<u32> {
+        let n = fdtd_core::ntff::steer(&mut self.session.scene, degrees.to_radians())
+            .map_err(js_err)?;
+        self.sources_changed()?;
+        Ok(n as u32)
     }
 
     /// The probe's Ez samples, one per step, since the last call.

@@ -69,6 +69,23 @@ impl CpuBackend {
         self.sim.set_sources(scene)
     }
 
+    pub fn restart_spectra(&mut self) {
+        self.sim.restart_spectra();
+    }
+
+    /// The far fields of the scene's contours so far, in scene order.
+    pub fn far_fields(&mut self) -> Result<Vec<Vec<(f64, f64)>>> {
+        Ok(self
+            .sim
+            .monitor_spectra()?
+            .into_iter()
+            .filter_map(|s| match s {
+                fdtd_core::kernel::Spectrum::FarField(v) => Some(v),
+                _ => None,
+            })
+            .collect())
+    }
+
     /// As `GpuSim::set_intensity`: a fresh mean with time constant `tau`
     /// steps (at least 1), or off.
     pub fn set_intensity(&mut self, tau: Option<f64>) -> Result<()> {
