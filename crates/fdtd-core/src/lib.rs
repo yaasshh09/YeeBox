@@ -17,6 +17,7 @@ pub mod scene;
 pub mod selftest;
 pub mod source;
 pub mod spectra;
+pub mod te;
 pub mod tfsf;
 pub mod tm;
 pub mod units;

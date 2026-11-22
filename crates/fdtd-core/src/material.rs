@@ -86,6 +86,29 @@ impl Material {
         }
     }
 
+    /// The material of a TEz E edge between cells `a` and `b`: the
+    /// arithmetic mean of eps_inf and of sigma (`docs/01-theory.md`,
+    /// Materials), and PEC if either cell is PEC. Staircased: no subpixel
+    /// smoothing, so curved surfaces converge at first order.
+    pub fn edge_mean(a: &Material, b: &Material) -> Material {
+        match (*a, *b) {
+            (
+                Material::Dielectric {
+                    eps_inf: ea,
+                    sigma: sa,
+                },
+                Material::Dielectric {
+                    eps_inf: eb,
+                    sigma: sb,
+                },
+            ) => Material::Dielectric {
+                eps_inf: 0.5 * (ea + eb),
+                sigma: 0.5 * (sa + sb),
+            },
+            _ => Material::Pec,
+        }
+    }
+
     /// Ez update coefficients `(Ca, Cb)` for Courant number `s`, so that
     /// `Ez = Ca * Ez + Cb * curl_H` at a node of this material:
     ///
@@ -135,6 +158,25 @@ mod tests {
             last = ca;
         }
         assert!(last < -0.999_999);
+    }
+
+    /// The TEz edge rule: the mean of the two cells, and PEC wins.
+    #[test]
+    fn edge_mean() {
+        let glass = Material::Dielectric {
+            eps_inf: 3.0,
+            sigma: 0.25,
+        };
+        assert_eq!(
+            Material::edge_mean(&Material::VACUUM, &glass),
+            Material::Dielectric {
+                eps_inf: 2.0,
+                sigma: 0.125
+            }
+        );
+        assert_eq!(Material::edge_mean(&glass, &glass), glass);
+        assert_eq!(Material::edge_mean(&glass, &Material::Pec), Material::Pec);
+        assert_eq!(Material::edge_mean(&Material::Pec, &glass), Material::Pec);
     }
 
     #[test]

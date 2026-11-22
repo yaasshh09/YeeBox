@@ -581,18 +581,20 @@ pub(crate) mod tests {
     }
 
     /// Fields and coefficients for the oracle step, padded like `SimTm`.
-    struct Fields {
-        nx: usize,
-        ny: usize,
-        ez: Vec<f64>,
-        hx: Vec<f64>,
-        hy: Vec<f64>,
-        ca: Vec<f64>,
-        cb: Vec<f64>,
+    /// Arrays by layout slot: `ez` is the node field, `hx` the y-edge field,
+    /// `hy` the x-edge field, so the TEz oracle (`te.rs`) uses it too.
+    pub(crate) struct Fields {
+        pub(crate) nx: usize,
+        pub(crate) ny: usize,
+        pub(crate) ez: Vec<f64>,
+        pub(crate) hx: Vec<f64>,
+        pub(crate) hy: Vec<f64>,
+        pub(crate) ca: Vec<f64>,
+        pub(crate) cb: Vec<f64>,
     }
 
     impl Fields {
-        fn apply(&self, target: Component, i: usize, j: usize) -> f64 {
+        pub(crate) fn apply(&self, target: Component, i: usize, j: usize) -> f64 {
             curl_stencil(target)
                 .iter()
                 .map(|t| {
@@ -644,7 +646,7 @@ pub(crate) mod tests {
     }
 
     /// Random b in [0, 1), c in (-1, 0], 1/kappa in (0.1, 1], `n` entries.
-    fn random_profile(seed: u64, n: usize) -> Profile {
+    pub(crate) fn random_profile(seed: u64, n: usize) -> Profile {
         let r = |k| random_fields(seed + k, n);
         Profile {
             b: r(1).iter().map(|v| 0.5 * (v + 1.0)).collect(),
@@ -659,11 +661,11 @@ pub(crate) mod tests {
     /// axis, `psi = b psi + c D` and `update = coef * (sum(term / kappa) + psi)`.
     /// The solver keeps psi on the plain difference, which for the two
     /// y-derivatives (Hx and the Hx part of Ez) is exactly minus this one.
-    struct CpmlFields {
-        f: Fields,
-        pml: Cpml,
-        /// Hx along y, Hy along x, Ez along x, Ez along y.
-        psi: [Vec<f64>; 4],
+    pub(crate) struct CpmlFields {
+        pub(crate) f: Fields,
+        pub(crate) pml: Cpml,
+        /// Hx along y, Hy along x, Ez along x, Ez along y (TEz: Ex, Ey, Hz, Hz).
+        pub(crate) psi: [Vec<f64>; 4],
     }
 
     impl CpmlFields {
@@ -689,7 +691,7 @@ pub(crate) mod tests {
             (p.b[k], p.c[k], p.inv_kappa[k])
         }
 
-        fn apply(&mut self, target: Component, i: usize, j: usize) -> f64 {
+        pub(crate) fn apply(&mut self, target: Component, i: usize, j: usize) -> f64 {
             let nx = self.f.nx;
             let (mut d, mut used, mut sum) = ([0.0; 2], [false; 2], 0.0);
             for t in curl_stencil(target) {
@@ -698,7 +700,9 @@ pub(crate) mod tests {
                     Component::Hx | Component::Ex => &self.f.hx,
                     Component::Hy | Component::Ey => &self.f.hy,
                 };
-                let (si, sj) = ((i as i64 + t.di) as usize, (j as i64 + t.dj) as usize);
+                // y wraps modulo ny, the identity inside non-periodic ranges.
+                let si = (i as i64 + t.di) as usize;
+                let sj = (j as i64 + t.dj).rem_euclid(self.f.ny as i64) as usize;
                 let v = t.sign * src[sj * nx + si];
                 sum += v * self.coef(target, t.axis, i, j).2;
                 d[t.axis as usize] += v;
