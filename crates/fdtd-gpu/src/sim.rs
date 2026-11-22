@@ -15,6 +15,9 @@ use fdtd_core::monitor::{Dft, FluxLine};
 use fdtd_core::scene::{Mode, Monitor, Scene, Source};
 use fdtd_core::source::SourceKind;
 use fdtd_core::tfsf::Tfsf;
+
+/// The medium update every E shader calls, prepended to its source.
+const MEDIUM: &str = include_str!("../shaders/medium.wgsl");
 use fdtd_core::{FdtdError, Result};
 use std::collections::VecDeque;
 use wgpu::util::DeviceExt;
@@ -22,7 +25,8 @@ use wgpu::util::DeviceExt;
 /// Most steps encoded into one submission.
 pub const BATCH: u64 = 64;
 
-/// Field and psi buffers, in this order.
+/// Field and psi buffers, in this order, named for TMz. TEz uses the same
+/// slots by layout: Hz, Ex, Ey, then psi_exy, psi_eyx, psi_hzx, psi_hzy.
 const EZ: usize = 0;
 const HX: usize = 1;
 const HY: usize = 2;
@@ -54,12 +58,19 @@ pub struct GpuSim {
     /// The Courant number in f64, for source times; `base.s` is its f32 copy.
     courant: f64,
     base: Params,
-    /// Cb per node in f64, zero on walls and PEC nodes.
-    cb: Vec<f64>,
-    /// Material id per node, as the E update reads it.
+    mode: Mode,
+    /// The uploaded layout in f64, kept current through live edits: node
+    /// material ids, the medium table, the TEz edge ids.
+    layout: Layout,
+    /// Nodes whose field `set_ez` forces to zero: walls and PEC in TMz, the
+    /// ring in TEz (as `SimTm::set_ez` and `SimTe::set_hz`).
+    node_zero: Vec<bool>,
+    /// Material id per node: the TMz E update and the render pass read it.
     ids: wgpu::Buffer,
-    /// (Ca, Cb) per material in f64, the wall entry last.
-    table: Vec<(f64, f64)>,
+    /// TEz: the medium row of every Ex and every Ey edge.
+    edge_ids: Option<[wgpu::Buffer; 2]>,
+    /// J, P and P^(n-1) of each E array: one in TMz, Ex and Ey in TEz.
+    aux: Vec<wgpu::Buffer>,
     /// What live edits must leave alone.
     key: BuildKey,
     /// Index in `stages` of the sources stage, which always exists.
@@ -135,16 +146,6 @@ impl GpuSim {
     /// must not depend on it; Tier 4 checks 4, 8 and 16.
     pub fn with_workgroup(gpu: &'static Gpu, scene: &Scene, wg: u32) -> Result<Self> {
         scene.validate()?;
-        // ponytail: TMz without dispersion until the Phase 6 part C shaders land.
-        if scene.mode != Mode::Tm {
-            return Err(FdtdError::WrongMode { mode: scene.mode });
-        }
-        if scene.materials.iter().any(|m| m.is_dispersive()) {
-            return Err(FdtdError::InvalidParameter {
-                name: "dispersive material on the gpu (not yet)",
-                value: f64::NAN,
-            });
-        }
         if !(1..=16).contains(&wg) {
             return Err(FdtdError::InvalidParameter {
                 name: "workgroup edge",
@@ -152,27 +153,43 @@ impl GpuSim {
             });
         }
         let (nx, ny) = (scene.grid.nx, scene.grid.ny);
+        let layout = Layout::new(scene);
         let limits = gpu.device.limits();
         let bytes = (nx * ny * 4) as u64;
+        let aux_bytes = if layout.dispersive() { 3 * bytes } else { 16 };
         let groups = nx.max(ny).div_ceil(wg as usize) as u32;
-        if bytes > limits.max_storage_buffer_binding_size
-            || bytes > limits.max_buffer_size
+        let too_big =
+            |b: u64| b > limits.max_storage_buffer_binding_size || b > limits.max_buffer_size;
+        if too_big(bytes)
+            || too_big(aux_bytes)
             || groups > limits.max_compute_workgroups_per_dimension
         {
             return Err(FdtdError::GridSize { nx, ny });
         }
-        let layout = Layout::new(scene);
         let device = &gpu.device;
         // Storage buffers are never empty: a zero-sized binding is invalid,
         // so a scene without sources still gets a 16-byte buffer.
         let storage = |label: &str, contents: &[u8]| storage_buffer(device, label, contents);
         let zeros = vec![0f32; nx * ny];
-        let fields: Vec<_> = ["ez", "hx", "hy", "psi_hxy", "psi_hyx", "psi_ezx", "psi_ezy"]
-            .iter()
-            .map(|name| storage(name, bytemuck::cast_slice(&zeros)))
-            .collect();
+        let fields: Vec<_> = [
+            "field 0", "field 1", "field 2", "psi 3", "psi 4", "psi 5", "psi 6",
+        ]
+        .iter()
+        .map(|name| storage(name, bytemuck::cast_slice(&zeros)))
+        .collect();
         let ids = storage("ids", bytemuck::cast_slice(&layout.ids));
         let coef = storage("coef", bytemuck::cast_slice(&layout.coef()));
+        let aux_len = if layout.dispersive() { 3 * nx * ny } else { 0 };
+        let n_aux = if scene.mode == Mode::Te { 2 } else { 1 };
+        let aux: Vec<_> = (0..n_aux)
+            .map(|_| storage("aux", bytemuck::cast_slice(&vec![0f32; aux_len])))
+            .collect();
+        let edge_ids = layout.edge_ids.as_ref().map(|[x, y]| {
+            [
+                storage("edge ids x", bytemuck::cast_slice(x)),
+                storage("edge ids y", bytemuck::cast_slice(y)),
+            ]
+        });
         let params = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("params"),
             size: BATCH * PARAMS_STRIDE,
@@ -182,119 +199,78 @@ impl GpuSim {
         let params_layout = pipeline::params_layout(device);
         let params_group = pipeline::params_group(device, &params_layout, &params);
         use Access::{Read, ReadWrite};
-        let h = pipeline::pass(
-            device,
-            &params_layout,
-            "update_h",
-            include_str!("../shaders/update_h.wgsl"),
-            wg,
-            &[Read, ReadWrite, ReadWrite, ReadWrite, ReadWrite, Read],
-        );
-        let h_group = pipeline::storage_group(
-            device,
-            &h,
-            &[
-                &fields[EZ],
-                &fields[HX],
-                &fields[HY],
-                &fields[PSI_HXY],
-                &fields[PSI_HYX],
-                &coef,
-            ],
-        );
-        let e = pipeline::pass(
-            device,
-            &params_layout,
-            "update_e",
-            include_str!("../shaders/update_e.wgsl"),
-            wg,
-            &[ReadWrite, Read, Read, ReadWrite, ReadWrite, Read, Read],
-        );
-        let e_group = pipeline::storage_group(
-            device,
-            &e,
-            &[
-                &fields[EZ],
-                &fields[HX],
-                &fields[HY],
-                &fields[PSI_EZX],
-                &fields[PSI_EZY],
-                &ids,
-                &coef,
-            ],
-        );
+        let shader = |label: &str, src: &str, access: &[Access]| {
+            pipeline::pass(device, &params_layout, label, src, wg, access)
+        };
+        let stage = |pass: Pass, buffers: &[&wgpu::Buffer], count: (u32, u32)| Stage {
+            group: pipeline::storage_group(device, &pass, buffers),
+            pass,
+            count,
+        };
+        let with_medium = |src: &str| format!("{MEDIUM}\n{src}");
         let grid = (
             nx.div_ceil(wg as usize) as u32,
             ny.div_ceil(wg as usize) as u32,
         );
-        let mut incident = None;
-        let mut stages = vec![
-            Stage {
-                pass: h,
-                group: h_group,
-                count: grid,
-            },
-            Stage {
-                pass: e,
-                group: e_group,
-                count: grid,
-            },
-        ];
-        // TF/SF: H corrections right after H, E corrections right after E,
-        // from the same lists the CPU applies.
+        // TF/SF, from the same lists the CPU applies. TEz runs the TMz
+        // auxiliary grid through duality (`SimTe`): waveform delayed by S/2,
+        // vacuum, and the edge corrections with the sign flipped.
+        let s = scene.grid.courant;
         let tfsf = match &scene.plane_wave {
-            Some(pw) => Some(Tfsf::new(pw, scene.materials[0].eps(), scene.grid.courant)?),
+            Some(pw) => {
+                let mut launch = *pw;
+                let eps = match scene.mode {
+                    Mode::Tm => scene.materials[0].eps(),
+                    Mode::Te => {
+                        launch.waveform = pw.waveform.delayed(0.5 * s);
+                        1.0
+                    }
+                };
+                Some(Tfsf::new(&launch, eps, s)?)
+            }
             None => None,
         };
         let (mut n_inc, mut n_hgroups, mut n_egroups) = (0, 0, 0);
-        if let Some(t) = &tfsf {
-            n_inc = t.incident_e().len();
-            let hc = t.h_corrections(nx, scene.grid.courant, scene.periodic_y);
-            let ec = t.e_corrections(nx, &layout.cb_nodes());
-            (n_hgroups, n_egroups) = (hc.len(), ec.len());
-            let hc = storage("tfsf h", bytemuck::cast_slice(&pack_corrections(&hc)));
-            let ec = storage("tfsf e", bytemuck::cast_slice(&pack_corrections(&ec)));
-            let inc_e = storage("inc e", &vec![0u8; BATCH as usize * n_inc * 4]);
-            let inc_h = storage("inc h", &vec![0u8; BATCH as usize * 2 * 4]);
-            let pass = pipeline::pass(
-                device,
-                &params_layout,
-                "tfsf_h",
-                include_str!("../shaders/tfsf_h.wgsl"),
-                wg,
-                &[ReadWrite, ReadWrite, Read, Read],
-            );
-            let group =
-                pipeline::storage_group(device, &pass, &[&fields[HX], &fields[HY], &hc, &inc_e]);
-            stages.insert(
-                1,
-                Stage {
+        let (mut edge_fix, mut node_fix) = (None, None);
+        let (inc_e, inc_h) = match &tfsf {
+            Some(t) => {
+                n_inc = t.incident_e().len();
+                let mut hc = t.h_corrections(nx, s, scene.periodic_y);
+                if scene.mode == Mode::Te {
+                    for c in hc.iter_mut().flatten() {
+                        c.factor = -c.factor;
+                    }
+                }
+                let ec = t.e_corrections(nx, &layout.cb_nodes());
+                (n_hgroups, n_egroups) = (hc.len(), ec.len());
+                let hc = storage("tfsf edges", bytemuck::cast_slice(&pack_corrections(&hc)));
+                let ec = storage("tfsf nodes", bytemuck::cast_slice(&pack_corrections(&ec)));
+                let inc_e = storage("inc e", &vec![0u8; BATCH as usize * n_inc * 4]);
+                let inc_h = storage("inc h", &vec![0u8; BATCH as usize * 2 * 4]);
+                let pass = shader(
+                    "tfsf_h",
+                    include_str!("../shaders/tfsf_h.wgsl"),
+                    &[ReadWrite, ReadWrite, Read, Read],
+                );
+                edge_fix = Some(stage(
                     pass,
-                    group,
-                    count: ((n_hgroups as u32).div_ceil(64), 1),
-                },
-            );
-            let pass = pipeline::pass(
-                device,
-                &params_layout,
-                "tfsf_e",
-                include_str!("../shaders/tfsf_e.wgsl"),
-                wg,
-                &[ReadWrite, Read, Read],
-            );
-            let group = pipeline::storage_group(device, &pass, &[&fields[EZ], &ec, &inc_h]);
-            stages.insert(
-                3,
-                Stage {
+                    &[&fields[HX], &fields[HY], &hc, &inc_e],
+                    ((n_hgroups as u32).div_ceil(64), 1),
+                ));
+                let pass = shader(
+                    "tfsf_e",
+                    include_str!("../shaders/tfsf_e.wgsl"),
+                    &[ReadWrite, Read, Read],
+                );
+                node_fix = Some(stage(
                     pass,
-                    group,
-                    count: ((n_egroups as u32).div_ceil(64), 1),
-                },
-            );
-            incident = Some((inc_e, inc_h));
-        }
-        let (inc_e, inc_h) =
-            incident.unwrap_or_else(|| (storage("inc e", &[]), storage("inc h", &[])));
+                    &[&fields[EZ], &ec, &inc_h],
+                    ((n_egroups as u32).div_ceil(64), 1),
+                ));
+                (inc_e, inc_h)
+            }
+            None => (storage("inc e", &[]), storage("inc h", &[])),
+        };
         let n_src = scene.sources.len();
         let nodes: Vec<[u32; 2]> = scene
             .sources
@@ -307,22 +283,109 @@ impl GpuSim {
         let src_nodes = storage("source nodes", bytemuck::cast_slice(&nodes));
         let src_values = storage("source values", &vec![0u8; BATCH as usize * n_src * 4]);
         // Always there, so a live edit can add the first source; with none
-        // the shader loop is empty.
-        let pass = pipeline::pass(
-            device,
-            &params_layout,
+        // the shader loop is empty. It writes the node field in both modes.
+        let pass = shader(
             "sources",
             include_str!("../shaders/sources.wgsl"),
-            wg,
             &[ReadWrite, Read, Read],
         );
-        let group = pipeline::storage_group(device, &pass, &[&fields[EZ], &src_nodes, &src_values]);
-        let src_stage = stages.len();
-        stages.push(Stage {
-            pass,
-            group,
-            count: (1, 1),
-        });
+        let sources_stage = stage(pass, &[&fields[EZ], &src_nodes, &src_values], (1, 1));
+        // The dispatches of one step, in the order of `SimTm::step` or
+        // `SimTe::step`.
+        let mut stages = Vec::new();
+        let src_stage;
+        match scene.mode {
+            Mode::Tm => {
+                let h = shader(
+                    "update_h",
+                    include_str!("../shaders/update_h.wgsl"),
+                    &[Read, ReadWrite, ReadWrite, ReadWrite, ReadWrite, Read],
+                );
+                let h_buffers = [
+                    &fields[EZ],
+                    &fields[HX],
+                    &fields[HY],
+                    &fields[PSI_HXY],
+                    &fields[PSI_HYX],
+                    &coef,
+                ];
+                stages.push(stage(h, &h_buffers, grid));
+                stages.extend(edge_fix);
+                let e = shader(
+                    "update_e",
+                    &with_medium(include_str!("../shaders/update_e.wgsl")),
+                    &[
+                        ReadWrite, Read, Read, ReadWrite, ReadWrite, Read, Read, ReadWrite,
+                    ],
+                );
+                let e_buffers = [
+                    &fields[EZ],
+                    &fields[HX],
+                    &fields[HY],
+                    &fields[PSI_EZX],
+                    &fields[PSI_EZY],
+                    &ids,
+                    &coef,
+                    &aux[0],
+                ];
+                stages.push(stage(e, &e_buffers, grid));
+                stages.extend(node_fix);
+                src_stage = stages.len();
+                stages.push(sources_stage);
+            }
+            Mode::Te => {
+                let Some([ids_x, ids_y]) = edge_ids.as_ref() else {
+                    return Err(FdtdError::Gpu("a TEz layout without edge ids".into()));
+                };
+                let hz = shader(
+                    "update_hz",
+                    include_str!("../shaders/update_hz.wgsl"),
+                    &[ReadWrite, Read, Read, ReadWrite, ReadWrite, Read],
+                );
+                let hz_buffers = [
+                    &fields[EZ],
+                    &fields[HX],
+                    &fields[HY],
+                    &fields[PSI_EZX],
+                    &fields[PSI_EZY],
+                    &coef,
+                ];
+                stages.push(stage(hz, &hz_buffers, grid));
+                stages.extend(node_fix);
+                src_stage = stages.len();
+                stages.push(sources_stage);
+                let edge_access = [Read, ReadWrite, ReadWrite, Read, Read, ReadWrite];
+                let ex = shader(
+                    "update_ex",
+                    &with_medium(include_str!("../shaders/update_ex.wgsl")),
+                    &edge_access,
+                );
+                let ex_buffers = [
+                    &fields[EZ],
+                    &fields[HX],
+                    &fields[PSI_HXY],
+                    &coef,
+                    ids_x,
+                    &aux[0],
+                ];
+                stages.push(stage(ex, &ex_buffers, grid));
+                let ey = shader(
+                    "update_ey",
+                    &with_medium(include_str!("../shaders/update_ey.wgsl")),
+                    &edge_access,
+                );
+                let ey_buffers = [
+                    &fields[EZ],
+                    &fields[HY],
+                    &fields[PSI_HYX],
+                    &coef,
+                    ids_y,
+                    &aux[1],
+                ];
+                stages.push(stage(ey, &ey_buffers, grid));
+                stages.extend(edge_fix);
+            }
+        }
         let mut taps: Vec<[u32; 2]> = Vec::new();
         let mut monitors = Vec::new();
         for m in &scene.monitors {
@@ -344,7 +407,7 @@ impl GpuSim {
                         from,
                         to,
                         ref freqs,
-                    } => Mon::Flux(FluxLine::new(normal, at, from, to, freqs)?),
+                    } => Mon::Flux(FluxLine::new(normal, at, from, to, freqs)?.in_mode(scene.mode)),
                 },
             ));
         }
@@ -392,6 +455,15 @@ impl GpuSim {
             count: grid,
         };
         gpu.check()?;
+        let node_zero = match scene.mode {
+            Mode::Tm => layout.cb_nodes().iter().map(|&cb| cb == 0.0).collect(),
+            Mode::Te => (0..nx * ny)
+                .map(|k| {
+                    let (i, j) = (k % nx, k / nx);
+                    i == 0 || i == nx - 1 || !scene.live_rows().contains(&j)
+                })
+                .collect(),
+        };
         Ok(GpuSim {
             gpu,
             n: 0,
@@ -409,9 +481,12 @@ impl GpuSim {
                 n_inc: n_inc as u32,
                 pad: [0; 2],
             },
-            cb: layout.cb_nodes(),
+            mode: scene.mode,
+            node_zero,
+            layout,
             ids,
-            table: layout.table.clone(),
+            edge_ids,
+            aux,
             key: BuildKey::of(scene),
             src_stage,
             mean,
@@ -438,10 +513,11 @@ impl GpuSim {
         })
     }
 
-    /// Replaces Ez (one value per node, `j * nx + i`, normalized), forcing
-    /// wall and PEC nodes to zero, like `SimTm::set_ez`. H is left alone.
+    /// Replaces the node field (Ez, or Hz in TEz; one value per node,
+    /// `j * nx + i`, normalized), forcing the nodes `SimTm::set_ez` or
+    /// `SimTe::set_hz` force to zero. The edge fields are left alone.
     pub fn set_ez(&mut self, values: &[f64]) -> Result<()> {
-        if values.len() != self.cb.len() {
+        if values.len() != self.node_zero.len() {
             return Err(FdtdError::InvalidParameter {
                 name: "ez length",
                 value: values.len() as f64,
@@ -455,8 +531,8 @@ impl GpuSim {
         }
         let ez: Vec<f32> = values
             .iter()
-            .zip(&self.cb)
-            .map(|(&v, &cb)| if cb == 0.0 { 0.0 } else { v as f32 })
+            .zip(&self.node_zero)
+            .map(|(&v, &zero)| if zero { 0.0 } else { v as f32 })
             .collect();
         self.gpu
             .queue
@@ -464,25 +540,66 @@ impl GpuSim {
         Ok(())
     }
 
-    /// Rewrites the edited rows of the id buffer and the f64 Cb copy. The
-    /// write lands between the batches already submitted and the next.
+    /// Rewrites the ids an edit changes (node material ids, and in TEz every
+    /// edge id) and restarts J and P where a pole changed, by the rule of the
+    /// CPU kernel of the mode: the material id in TMz, the row value in TEz.
+    /// The writes land between the batches already submitted and the next.
     pub fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
         self.key.check(scene)?;
         let Some(edit) = material_edit(scene, bounds)? else {
             return Ok(());
         };
         let nx = self.base.nx as usize;
+        let n = nx * self.base.ny as usize;
         let w = edit.i1 - edit.i0 + 1;
+        let dispersive = self.layout.dispersive();
+        let mut restart: Vec<Vec<usize>> = vec![Vec::new(); self.aux.len()];
+        let queue = &self.gpu.queue;
         for (r, j) in edit.rows.clone().enumerate() {
-            let row = &edit.ids[r * w..(r + 1) * w];
             let k0 = j * nx + edit.i0;
-            for (c, &id) in row.iter().enumerate() {
-                self.cb[k0 + c] = self.table[id].1;
+            for (c, &id) in edit.ids[r * w..(r + 1) * w].iter().enumerate() {
+                let k = k0 + c;
+                let table = &self.layout.table;
+                if self.mode == Mode::Tm {
+                    let pole = |m: usize| table[m].is_dispersive().then_some(m);
+                    if dispersive && pole(self.layout.ids[k] as usize) != pole(id) {
+                        restart[0].push(k);
+                    }
+                    self.node_zero[k] = table[id].cb == 0.0;
+                }
+                self.layout.ids[k] = id as u32;
             }
-            let ids: Vec<u32> = row.iter().map(|&id| id as u32).collect();
-            self.gpu
-                .queue
-                .write_buffer(&self.ids, (k0 * 4) as u64, bytemuck::cast_slice(&ids));
+            let row = &self.layout.ids[k0..k0 + w];
+            queue.write_buffer(&self.ids, (k0 * 4) as u64, bytemuck::cast_slice(row));
+        }
+        if let Some(bufs) = &self.edge_ids {
+            let new = self.layout.edges(scene, &scene.rasterize());
+            if let Some(old) = &self.layout.edge_ids {
+                let table = &self.layout.table;
+                let pole = |m: u32| {
+                    let r = table[m as usize];
+                    r.is_dispersive().then_some(r)
+                };
+                for a in 0..2 {
+                    for k in 0..n {
+                        if dispersive && pole(old[a][k]) != pole(new[a][k]) {
+                            restart[a].push(k);
+                        }
+                    }
+                }
+            }
+            for a in 0..2 {
+                queue.write_buffer(&bufs[a], 0, bytemuck::cast_slice(&new[a]));
+            }
+            self.layout.edge_ids = Some(new);
+        }
+        for (a, ks) in restart.iter().enumerate() {
+            for &k in ks {
+                for part in 0..3 {
+                    let at = ((part * n + k) * 4) as u64;
+                    queue.write_buffer(&self.aux[a], at, bytemuck::bytes_of(&0f32));
+                }
+            }
         }
         Ok(())
     }
@@ -538,7 +655,7 @@ impl GpuSim {
                     });
                 }
                 let q = &self.gpu.queue;
-                q.write_buffer(&self.mean, 0, &vec![0u8; self.cb.len() * 4]);
+                q.write_buffer(&self.mean, 0, &vec![0u8; self.node_zero.len() * 4]);
                 q.write_buffer(&self.alpha, 0, bytemuck::bytes_of(&((1.0 / t) as f32)));
                 self.intensity_on = true;
             }
@@ -620,12 +737,20 @@ impl GpuSim {
         // The auxiliary grid runs ahead of the GPU by one batch: for each
         // step, its E^n for the H corrections, then its step, then its
         // H^(n+1/2) for the E corrections, as in `SimTm::step`.
+        // TEz advances the auxiliary grid first and reads both from it then,
+        // as `SimTe::step` does.
+        let mode = self.mode;
         if let Some(t) = &mut self.tfsf {
             let mut inc_e = Vec::with_capacity(steps as usize * self.base.n_inc as usize);
             let mut inc_h = Vec::with_capacity(steps as usize * 2);
             for _ in 0..steps {
+                if mode == Mode::Te {
+                    t.advance();
+                }
                 inc_e.extend(t.incident_e().iter().map(|&v| v as f32));
-                t.advance();
+                if mode == Mode::Tm {
+                    t.advance();
+                }
                 inc_h.extend(t.incident_h().iter().map(|&v| v as f32));
             }
             gpu.queue
@@ -633,12 +758,16 @@ impl GpuSim {
             gpu.queue
                 .write_buffer(&self.inc_h, 0, bytemuck::cast_slice(&inc_h));
         }
-        // Step b of the batch takes E to n + b + 1, at t = (n + b + 1) S.
+        // Step b of the batch takes E to n + b + 1, with TMz sources at
+        // t = (n + b + 1) S and TEz sources on Hz at (n + b + 1/2) S.
         if !self.sources.is_empty() {
             let s = self.courant;
             let mut values = Vec::with_capacity(steps as usize * self.sources.len());
             for b in 0..steps {
-                let t = (self.n + b + 1) as f64 * s;
+                let t = match mode {
+                    Mode::Tm => (self.n + b + 1) as f64,
+                    Mode::Te => (self.n + b) as f64 + 0.5,
+                } * s;
                 values.extend(self.sources.iter().map(|src| src.value_at(t) as f32));
             }
             gpu.queue
@@ -738,12 +867,14 @@ impl GpuSim {
             .map(|&v| v as f64)
             .collect();
         let s = self.courant;
+        // The node field is E at n S in TMz and Hz at (n - 1/2) S in TEz.
+        let lag = if self.mode == Mode::Te { 0.5 } else { 0.0 };
         for (b, row) in values.chunks_exact(self.n_taps).enumerate() {
             let n = first + b as u64 + 1;
             for (at, m) in &mut self.monitors {
                 match m {
                     Mon::Point(h) => h.push(row[*at]),
-                    Mon::Dft(d) => d.add(&row[*at..*at + 1], n as f64 * s, s),
+                    Mon::Dft(d) => d.add(&row[*at..*at + 1], (n as f64 - lag) * s, s),
                     Mon::Flux(line) => {
                         let len = 3 * (line.to - line.from + 1);
                         line.record_taps(&row[*at..*at + len], n, s);
@@ -773,13 +904,11 @@ impl GpuSim {
         if let Some(e) = self.pending.take() {
             return Err(e);
         }
-        let buf = &self.fields[match which {
-            Component::Ez => EZ,
-            Component::Hx => HX,
-            Component::Hy => HY,
-            component @ (Component::Hz | Component::Ex | Component::Ey) => {
-                return Err(FdtdError::FieldNotInMode { component });
-            }
+        let buf = &self.fields[match (self.mode, which) {
+            (Mode::Tm, Component::Ez) | (Mode::Te, Component::Hz) => EZ,
+            (Mode::Tm, Component::Hx) | (Mode::Te, Component::Ex) => HX,
+            (Mode::Tm, Component::Hy) | (Mode::Te, Component::Ey) => HY,
+            (_, component) => return Err(FdtdError::FieldNotInMode { component }),
         }];
         let bytes = self.gpu.read_async(buf, 0, buf.size()).await?;
         Ok(bytemuck::cast_slice::<u8, f32>(&bytes)
@@ -854,6 +983,10 @@ impl Kernel for GpuSim {
 
     fn set_sources(&mut self, scene: &Scene) -> Result<()> {
         GpuSim::set_sources(self, scene)
+    }
+
+    fn mode(&self) -> Mode {
+        self.mode
     }
 
     /// The same shapes as `SimTm`: point monitors skipped, one entry per

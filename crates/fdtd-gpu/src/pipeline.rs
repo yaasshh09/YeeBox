@@ -142,9 +142,13 @@ pub(crate) mod tests {
     use super::WG_LINE;
 
     /// Every shader of the kernel, so the checks below cannot miss one.
-    pub(crate) const SHADERS: [(&str, &str); 6] = [
+    pub(crate) const SHADERS: [(&str, &str); 10] = [
         ("update_h", include_str!("../shaders/update_h.wgsl")),
         ("update_e", include_str!("../shaders/update_e.wgsl")),
+        ("update_hz", include_str!("../shaders/update_hz.wgsl")),
+        ("update_ex", include_str!("../shaders/update_ex.wgsl")),
+        ("update_ey", include_str!("../shaders/update_ey.wgsl")),
+        ("medium", include_str!("../shaders/medium.wgsl")),
         ("sources", include_str!("../shaders/sources.wgsl")),
         ("gather", include_str!("../shaders/gather.wgsl")),
         ("tfsf_h", include_str!("../shaders/tfsf_h.wgsl")),
@@ -199,7 +203,7 @@ pub(crate) mod tests {
     /// Every 2D shader can have its workgroup edge swapped.
     #[test]
     fn shaders_declare_the_workgroup_line() {
-        for (name, src) in &SHADERS[..2] {
+        for (name, src) in &SHADERS[..5] {
             assert!(src.contains(WG_LINE), "{name}");
         }
     }

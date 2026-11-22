@@ -415,6 +415,12 @@ impl SimTe {
         self.n
     }
 
+    /// The per edge update coefficients `[Ca_x, Cb_x, Ca_y, Cb_y]`, `nx * ny`
+    /// each, zero on PEC edges. Read only, so the GPU can check its upload.
+    pub fn edge_coefficients(&self) -> [&[f64]; 4] {
+        [&self.ca_x, &self.cb_x, &self.ca_y, &self.cb_y]
+    }
+
     /// The J and P part of the discrete energy (`Aux::energy`), 0 without
     /// dispersion.
     pub fn dispersive_energy(&self) -> f64 {

@@ -2,7 +2,8 @@
 // loop of fdtd-core/src/tm.rs, summed in the same order. The outer ring of
 // Ez nodes is the PEC wall and is never written (with periodic y every row
 // is live and only the x walls remain). PEC material nodes have Ca = Cb = 0
-// in the uploaded table.
+// in the uploaded table. The last step goes through the node medium row
+// (medium.wgsl, prepended), plain or dispersive.
 
 struct Params {
     nx: u32,
@@ -28,8 +29,9 @@ const WG: u32 = 8u;
 @group(1) @binding(3) var<storage, read_write> psi_ezx: array<f32>;
 @group(1) @binding(4) var<storage, read_write> psi_ezy: array<f32>;
 @group(1) @binding(5) var<storage, read> ids: array<u32>;
-// Packed profiles and material table, see src/buffers.rs.
+// Packed profiles and medium table, see src/buffers.rs.
 @group(1) @binding(6) var<storage, read> coef: array<vec4<f32>>;
+@group(1) @binding(7) var<storage, read_write> aux: array<f32>;
 
 @compute @workgroup_size(WG, WG)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
@@ -56,6 +58,5 @@ fn main(@builtin(global_invocation_id) id: vec3<u32>) {
     psi_ezy[k] = py;
     let curl = hy[k] * px_prof.z - hy[k - 1u] * px_prof.z - hx[k] * py_prof.z
         + hx[down] * py_prof.z + px - py;
-    let m = coef[2u * (p.nx + p.ny) + ids[k]];
-    ez[k] = m.x * ez[k] + m.y * curl;
+    ez[k] = medium_update(2u * (p.nx + p.ny) + 3u * ids[k], k, ez[k], curl);
 }
