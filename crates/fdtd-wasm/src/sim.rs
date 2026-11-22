@@ -304,6 +304,25 @@ impl Sim {
         self.session.scene.to_json().map_err(js_err)
     }
 
+    /// Switches the polarization, `"tm"` or `"te"`, keeping the scene, and
+    /// rebuilds the kernel: the fields start again from zero. A scene the
+    /// other mode cannot run is refused and nothing changes.
+    #[wasm_bindgen(js_name = setMode)]
+    pub fn set_mode(&mut self, mode: &str) -> JsResult<()> {
+        let mode = match mode {
+            "tm" => fdtd_core::scene::Mode::Tm,
+            "te" => fdtd_core::scene::Mode::Te,
+            _ => {
+                return Err(js_err(FdtdError::InvalidParameter {
+                    name: "mode (tm or te)",
+                    value: f64::NAN,
+                }));
+            }
+        };
+        self.session.set_mode(mode).map_err(js_err)?;
+        self.reset_fields()
+    }
+
     /// Zeroes the fields and time, keeping the scene.
     #[wasm_bindgen(js_name = resetFields)]
     pub fn reset_fields(&mut self) -> JsResult<()> {

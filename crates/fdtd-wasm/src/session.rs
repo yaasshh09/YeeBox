@@ -4,7 +4,7 @@
 //! `fdtd-core`; this only routes.
 
 use fdtd_core::scene::{
-    MAX_WAVELENGTH_CELLS, MIN_WAVELENGTH_CELLS, Scene, Shape, SlitPair, Source, SourcePatch,
+    MAX_WAVELENGTH_CELLS, MIN_WAVELENGTH_CELLS, Mode, Scene, Shape, SlitPair, Source, SourcePatch,
     StrokeOutcome, slit_pair,
 };
 use fdtd_core::source::{SourceKind, Waveform};
@@ -14,7 +14,7 @@ use fdtd_core::{FdtdError, Result};
 #[derive(Debug, Clone)]
 pub struct Session {
     pub scene: Scene,
-    /// Table index of each palette entry, in `material::PALETTE` order.
+    /// Table index of each palette entry, in `material::palette` order.
     palette: Vec<usize>,
 }
 
@@ -25,6 +25,20 @@ impl Session {
         let palette = scene.with_palette();
         scene.validate()?;
         Ok(Session { scene, palette })
+    }
+
+    /// Runs the scene in `mode`, with its geometry, materials and sources
+    /// kept. A scene the other mode cannot run (a TEz plane wave in a
+    /// dielectric background, two different Drude cells side by side in TEz)
+    /// is refused and left as it was. The kernel must be rebuilt after.
+    pub fn set_mode(&mut self, mode: Mode) -> Result<()> {
+        let old = self.scene.mode;
+        self.scene.mode = mode;
+        if let Err(e) = self.scene.validate() {
+            self.scene.mode = old;
+            return Err(e);
+        }
+        Ok(())
     }
 
     fn material(&self, palette_index: usize) -> Result<usize> {
@@ -228,7 +242,7 @@ impl Session {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use fdtd_core::material::PALETTE;
+    use fdtd_core::material::{Material, palette};
 
     /// 60 x 50 vacuum with a 5-cell layer and one CW source at (20, 25).
     const SCENE: &str = r#"{"version": 1,
@@ -241,11 +255,44 @@ mod tests {
     #[test]
     fn load_merges_the_palette() {
         let s = Session::load(SCENE).unwrap();
-        assert_eq!(s.scene.materials.len(), PALETTE.len());
-        for (k, (_, m)) in PALETTE.iter().enumerate() {
+        let p = palette(s.scene.grid.dx_phys_m);
+        assert_eq!(s.scene.materials.len(), p.len());
+        for (k, (_, m)) in p.iter().enumerate() {
             assert_eq!(s.scene.materials[s.palette[k]], *m);
         }
         assert!(Session::load("{").is_err());
+    }
+
+    /// The toggle keeps the scene and refuses what the other mode cannot run.
+    #[test]
+    fn set_mode_keeps_the_scene_or_refuses() {
+        let mut s = Session::load(SCENE).unwrap();
+        let before = s.scene.clone();
+        s.set_mode(Mode::Te).unwrap();
+        assert_eq!(s.scene.mode, Mode::Te);
+        assert_eq!(
+            (&s.scene.sources, &s.scene.geometry),
+            (&before.sources, &before.geometry)
+        );
+        s.set_mode(Mode::Tm).unwrap();
+        assert_eq!(s.scene, before);
+        // Two different Drude metals side by side: fine in TMz, not in TEz.
+        let silver = s.palette[5];
+        s.scene.materials.push(Material::Drude {
+            eps_inf: 1.0,
+            wp: 0.2,
+            gamma: 0.0,
+        });
+        let other = s.scene.materials.len() - 1;
+        s.scene
+            .paint_stroke((20.0, 30.0), (20.0, 40.0), 0.5, silver)
+            .unwrap();
+        s.scene
+            .paint_stroke((21.0, 30.0), (21.0, 40.0), 0.5, other)
+            .unwrap();
+        s.scene.validate().unwrap();
+        assert!(s.set_mode(Mode::Te).is_err());
+        assert_eq!(s.scene.mode, Mode::Tm);
     }
 
     #[test]

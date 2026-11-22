@@ -64,6 +64,30 @@ pub const PALETTE: [(&str, Material); 5] = [
     ),
 ];
 
+/// Silver as a Drude metal, after the Drude fit of Vial et al., Phys. Rev.
+/// B 71, 085416 (2005), for the visible: eps_inf 3.718, wp = 1.3659e16
+/// rad/s, gamma = 2.7909e13 rad/s. Normalized to cells of `dx_m` metres:
+/// one time unit is dx / c0, so w_n = w dx / c0. At the 25 nm cells of the
+/// presets its plasma skin depth 1 / wp is under one cell, and the status
+/// strip says so: it then acts as a lossy mirror, which is what it is good
+/// for at that scale.
+pub fn silver(dx_m: f64) -> Material {
+    let per_unit_time = dx_m / crate::units::C0;
+    Material::Drude {
+        eps_inf: 3.718,
+        wp: 1.3659e16 * per_unit_time,
+        gamma: 2.7909e13 * per_unit_time,
+    }
+}
+
+/// The paint palette of a scene with cells of `dx_m` metres: `PALETTE`,
+/// then silver (`silver`), whose normalized frequencies depend on the cell.
+pub fn palette(dx_m: f64) -> Vec<(&'static str, Material)> {
+    let mut p = PALETTE.to_vec();
+    p.push(("silver", silver(dx_m)));
+    p
+}
+
 impl Material {
     pub const VACUUM: Material = Material::Dielectric {
         eps_inf: 1.0,
@@ -182,6 +206,26 @@ mod tests {
             last = ca;
         }
         assert!(last < -0.999_999);
+    }
+
+    /// Silver at 25 nm cells: wp = 1.3659e16 * 2.5e-8 / c0 = 1.139, so its
+    /// skin depth is under a cell; at 2 nm cells it is about 11 cells.
+    #[test]
+    fn silver_scales_with_the_cell() {
+        let Material::Drude { eps_inf, wp, gamma } = silver(2.5e-8) else {
+            panic!("silver is a Drude metal")
+        };
+        assert_eq!(eps_inf, 3.718);
+        assert!((wp - 1.13903).abs() < 1e-4, "{wp}");
+        assert!((gamma / wp - 2.7909e13 / 1.3659e16).abs() < 1e-15);
+        let Material::Drude { wp, .. } = silver(2e-9) else {
+            panic!()
+        };
+        assert!((1.0 / wp - 10.97).abs() < 0.01, "{}", 1.0 / wp);
+        let p = palette(2.5e-8);
+        assert_eq!(p.len(), PALETTE.len() + 1);
+        assert_eq!(p.last().unwrap().0, "silver");
+        assert!(silver(2.5e-8).validate().is_ok());
     }
 
     #[test]

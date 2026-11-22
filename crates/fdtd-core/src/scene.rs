@@ -9,7 +9,7 @@ use crate::cpml::PmlSpec;
 use crate::dispersion::courant_limit;
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
-use crate::material::{Material, PALETTE};
+use crate::material::{Material, palette};
 use crate::monitor::{Dft, FluxLine, Normal};
 use crate::source::{SourceKind, Waveform};
 use crate::tfsf::{Direction, PlaneWave, PlaneWaveFault};
@@ -733,12 +733,13 @@ impl Scene {
             .collect()
     }
 
-    /// Makes sure every `material::PALETTE` entry is in the table, appending
+    /// Makes sure every `material::palette` entry (for this scene's cell
+    /// size) is in the table, appending
     /// the missing ones at the end, and returns the table index of each
     /// entry in palette order. Existing entries and indices never change, so
     /// the rasterized grid stays the same. Entries match by exact value.
     pub fn with_palette(&mut self) -> Vec<usize> {
-        PALETTE
+        palette(self.grid.dx_phys_m)
             .iter()
             .map(|(_, m)| match self.materials.iter().position(|t| t == m) {
                 Some(k) => k,
@@ -1991,13 +1992,17 @@ pub(crate) mod tests {
         let mut s = sample();
         let before = s.rasterize();
         let ids = s.with_palette();
-        assert_eq!(ids.len(), PALETTE.len());
-        for (k, (name, m)) in PALETTE.iter().enumerate() {
+        assert_eq!(ids.len(), palette(s.grid.dx_phys_m).len());
+        for (k, (name, m)) in palette(s.grid.dx_phys_m).iter().enumerate() {
             assert_eq!(s.materials[ids[k]], *m, "{name}");
         }
         assert_eq!(ids[0], 0);
         assert_eq!(ids[3], 2);
-        assert_eq!(s.materials.len(), 3 + 3);
+        assert_eq!(
+            s.materials.len(),
+            3 + 4,
+            "glass, high index, absorber, silver"
+        );
         assert_eq!(s.materials[1], sample().materials[1]);
         assert_eq!(s.rasterize(), before);
         s.validate().unwrap();
