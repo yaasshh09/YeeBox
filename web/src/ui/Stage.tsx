@@ -69,6 +69,8 @@ export function Stage() {
           wavelength,
           scope: [],
           probeSet: false,
+          far: null,
+          steer: 20,
         });
       } catch (e) {
         useStore.getState().toast(toSimError(e).message);
@@ -81,9 +83,10 @@ export function Stage() {
       try {
         const status = JSON.parse(await e.call<string>("status"));
         const samples = await e.call<Float32Array>("takeProbe");
+        const far = JSON.parse(await e.call<string>("farField"));
         const s = useStore.getState();
         const scope = samples.length ? [...s.scope, ...samples].slice(-SCOPE_LEN) : s.scope;
-        s.set({ status, scope });
+        s.set({ status, scope, far });
       } catch {
         // The next poll tries again.
       }

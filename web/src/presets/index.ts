@@ -13,7 +13,12 @@ import absorber from "./absorber.json?raw";
 import plasmonCompact from "../../../validation/scenes/preset_plasmon_compact.json?raw";
 import mirrorCompact from "../../../validation/scenes/preset_mirror_compact.json?raw";
 import absorberCompact from "../../../validation/scenes/preset_absorber_compact.json?raw";
+import scattering from "./scattering.json?raw";
+import array from "./array.json?raw";
+import scatteringCompact from "../../../validation/scenes/preset_scattering_compact.json?raw";
+import arrayCompact from "../../../validation/scenes/preset_array_compact.json?raw";
 import cylinderPlot from "../../../validation/report/drude_cylinder.png";
+import scatteringPlot from "../../../validation/report/cylinder_scattering.svg";
 
 export type Preset = {
   id: string;
@@ -24,6 +29,8 @@ export type Preset = {
   cases: string[];
   /** A plot of the case, opened by the badge instead of the Verify panel. */
   plot?: string;
+  /** Shows a steering slider on the polar plot (CW arrays). */
+  steer?: boolean;
   full: string;
   compact: string;
 };
@@ -34,9 +41,29 @@ export const PRESETS: Preset[] = [
     title: "Double slit",
     watch: "Two slits turn one wave into a fan of bright and dark fringes.",
     tryIt: "Paint over one slit and watch the fringes vanish.",
-    cases: [],
+    cases: ["A22"],
     full: doubleSlit,
     compact: doubleSlitCompact,
+  },
+  {
+    id: "scattering",
+    title: "Scattering cylinder",
+    watch: "A metal cylinder in a plane wave casts a shadow and throws a bright forward lobe; the polar plot sits on the analytic series.",
+    tryIt: "Paint over the cylinder to change its shape and watch the pattern leave the dashed curve.",
+    cases: ["A19"],
+    plot: scatteringPlot,
+    full: scattering,
+    compact: scatteringCompact,
+  },
+  {
+    id: "array",
+    title: "Phased array",
+    watch: "Eight sources half a wavelength apart send one beam where their phases point it.",
+    tryIt: "Drag the steer slider under the polar plot and the beam swings with the dashed array factor.",
+    cases: ["A23"],
+    steer: true,
+    full: array,
+    compact: arrayCompact,
   },
   {
     id: "waveguide",

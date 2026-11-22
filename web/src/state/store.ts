@@ -31,6 +31,18 @@ export type Warning =
   | { kind: "skin_depth"; material: number; cells: number }
   | { kind: "material_wavelength"; material: number; cells: number };
 
+/** `Sim.farField`: the pattern of the scene's first contour. */
+export type FarField = {
+  freq: number;
+  angles: number;
+  /** dB below the peak at each angle from +x, counterclockwise, floored at -60. */
+  db: number[];
+  /** The array factor the same way when the scene is a plain CW array. */
+  theory: number[] | null;
+  /** Scene edits since loading. */
+  edits: number;
+};
+
 /** The scene to load and the compact twin for the CPU fallback. */
 export type SceneSource = { full: string; compact: string | null; key: number };
 
@@ -64,6 +76,9 @@ type State = {
   notice: string | null;
   scope: number[];
   probeSet: boolean;
+  far: FarField | null;
+  /** The steering slider of an array preset, degrees from +x. */
+  steer: number;
   set: (p: Partial<State>) => void;
   toast: (msg: string) => void;
 };
@@ -89,6 +104,8 @@ export const useStore = create<State>((set) => ({
   notice: null,
   scope: [],
   probeSet: false,
+  far: null,
+  steer: 20,
   set: (p) => set(p),
   toast: (msg) => {
     set({ notice: msg });

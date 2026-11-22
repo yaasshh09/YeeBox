@@ -225,6 +225,27 @@ input:focus-visible {
   border: 1px solid var(--edge);
   border-radius: 6px;
 }
+.polar {
+  width: 100%;
+  max-width: 240px;
+  display: block;
+  margin: 0 auto;
+}
+.polar-ring {
+  fill: none;
+  stroke: var(--edge);
+}
+.polar-sim {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+.polar-theory {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
 .rect-form {
   display: grid;
   grid-template-columns: 1fr 1fr;

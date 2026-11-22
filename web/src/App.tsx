@@ -14,6 +14,7 @@ import {
   useShortcuts,
   ViewControls,
 } from "./ui/Panels";
+import { PolarPlot } from "./ui/Polar";
 import { Stage } from "./ui/Stage";
 import { Verify } from "./ui/Verify";
 import { Hints } from "./ui/Hints";
@@ -114,6 +115,7 @@ export default function App() {
             <Transport />
             <ViewControls />
             <SourceControls />
+            <PolarPlot />
             <Oscilloscope />
           </div>
         )}
@@ -143,6 +145,7 @@ export default function App() {
           <Transport />
           <ViewControls />
           <SourceControls />
+          <PolarPlot />
           <Oscilloscope />
         </aside>
       </div>

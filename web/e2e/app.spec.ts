@@ -87,3 +87,33 @@ test("silver painted across the stage stays clear of the absorbing border", asyn
   await expect(page.locator(".notice")).toContainText("two cells clear of the absorbing border");
   await expect.poll(async () => JSON.parse(await scene(page)).paint?.runs.length ?? 0).toBeGreaterThan(1);
 });
+
+test("the phased array draws its far field over the array factor and steers", async ({ page }) => {
+  await page.goto("/");
+  await ready(page);
+  await page.getByLabel("Experiment").selectOption("array");
+  await expect(page.getByRole("img", { name: "Far-field pattern" })).toBeVisible();
+  await expect(page.locator(".polar-theory")).toHaveCount(1);
+  await expect(page.locator(".polar-sim")).toHaveCount(1);
+  const phases = async () =>
+    (JSON.parse(await scene(page)).sources as { waveform: { phase: number } }[]).map((s) => s.waveform.phase);
+  const before = await phases();
+  const slider = page.getByLabel("Steer");
+  await slider.fill("-40");
+  await expect.poll(phases).not.toEqual(before);
+  await expect(page.locator(".polar-theory")).toHaveCount(1);
+});
+
+test("the double slit shows Fraunhofer until the scene is edited", async ({ page }) => {
+  await page.goto("/");
+  await ready(page);
+  await expect(page.locator(".polar-sim")).toHaveCount(1);
+  await expect(page.locator(".polar-theory")).toHaveCount(1);
+  const box = (await page.locator(".stage").boundingBox())!;
+  const x = box.x + box.width * 0.2;
+  await page.mouse.move(x, box.y + box.height * 0.3);
+  await page.mouse.down();
+  await page.mouse.move(x, box.y + box.height * 0.5, { steps: 6 });
+  await page.mouse.up();
+  await expect(page.locator(".polar-theory")).toHaveCount(0);
+});
