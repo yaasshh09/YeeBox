@@ -16,6 +16,7 @@ pub mod scattering;
 pub mod signal;
 pub mod tier1d;
 pub mod tier2d;
+pub mod tier5;
 
 use crate::error::{FdtdError, Result};
 

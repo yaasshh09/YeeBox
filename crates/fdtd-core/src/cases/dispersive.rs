@@ -24,13 +24,13 @@ use crate::spectra::rt_spectrum;
 const GOLDEN: &str = include_str!("../../../../validation/golden/slab_dispersive.csv");
 const PARAMS: &str =
     "# S = 0.5, L = 20, slab on nodes 1..L, exp(+jwt), lambda in material >= 20.0 cells";
-const L: usize = 20;
+pub(super) const L: usize = 20;
 
 /// One golden row: frequency, continuum R and T.
 type Row = (f64, f64, f64);
 
 /// The golden material of `kind` and its rows.
-fn golden_slab(kind: &str, what: &str) -> Result<(Material, Vec<Row>)> {
+pub(super) fn golden_slab(kind: &str, what: &str) -> Result<(Material, Vec<Row>)> {
     let rows: Vec<Vec<String>> = golden(GOLDEN, PARAMS, what)?
         .into_iter()
         .filter(|r| r[0] == kind)
