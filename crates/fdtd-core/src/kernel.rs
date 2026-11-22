@@ -81,6 +81,14 @@ impl CpuKernel {
         }
     }
 
+    /// Zeroes every spectral accumulator (`SimTm::restart_spectra`).
+    pub fn restart_spectra(&mut self) {
+        match self {
+            CpuKernel::Tm(k) => k.restart_spectra(),
+            CpuKernel::Te(k) => k.restart_spectra(),
+        }
+    }
+
     /// The Courant number S, which is dt in normalized units.
     pub fn courant(&self) -> f64 {
         match self {

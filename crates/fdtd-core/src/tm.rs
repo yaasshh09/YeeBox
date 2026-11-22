@@ -120,6 +120,15 @@ impl Spectral {
                 .map(Spectral::Ntff),
         })
     }
+
+    /// Zeroes the accumulated transform.
+    pub(crate) fn restart(&mut self) {
+        match self {
+            Spectral::Field(_, dft) => dft.restart(),
+            Spectral::Flux(line) => line.restart(),
+            Spectral::Ntff(ntff) => ntff.restart(),
+        }
+    }
 }
 
 impl SimTm {
@@ -317,6 +326,13 @@ impl SimTm {
     }
 
     /// Advances `steps` full steps.
+    /// Zeroes every DFT, flux and far-field accumulator, so the spectra
+    /// describe only what happens from now on (after a live edit). Point
+    /// probes keep their history.
+    pub fn restart_spectra(&mut self) {
+        self.spectral.iter_mut().for_each(Spectral::restart);
+    }
+
     pub fn step_n(&mut self, steps: u64) {
         for _ in 0..steps {
             self.step();
@@ -1174,6 +1190,41 @@ pub(crate) mod tests {
     /// Spectral monitors from the scene equal hand-driven `Dft` and
     /// `FluxLine` objects bit for bit, come back in scene order with the
     /// point probes skipped, and leave the point probes untouched.
+    /// `restart_spectra` zeroes every spectrum and accumulation starts over.
+    #[test]
+    fn restart_spectra_starts_over() {
+        let mut scene = vacuum_box(30, 24, 0.5);
+        scene.sources.push(Source {
+            i: 10,
+            j: 12,
+            waveform: Waveform::Ricker {
+                t0: 40.0,
+                f_peak: 0.05,
+            },
+            amplitude: 1.0,
+            kind: SourceKind::Soft,
+        });
+        scene.monitors.push(Monitor::Dft {
+            i: 20,
+            j: 12,
+            freqs: vec![0.05],
+        });
+        let mut sim = SimTm::from_scene(&scene).unwrap();
+        sim.step_n(100);
+        let before = Kernel::monitor_spectra(&mut sim).unwrap();
+        assert_ne!(before, vec![Spectrum::Field(vec![(0.0, 0.0)])]);
+        sim.restart_spectra();
+        assert_eq!(
+            Kernel::monitor_spectra(&mut sim).unwrap(),
+            vec![Spectrum::Field(vec![(0.0, 0.0)])]
+        );
+        sim.step_n(1);
+        assert_ne!(
+            Kernel::monitor_spectra(&mut sim).unwrap(),
+            vec![Spectrum::Field(vec![(0.0, 0.0)])]
+        );
+    }
+
     #[test]
     fn monitor_spectra_from_the_scene() {
         use crate::monitor::Normal;

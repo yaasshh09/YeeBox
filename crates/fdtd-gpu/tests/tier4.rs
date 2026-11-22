@@ -595,6 +595,59 @@ fn long_run_growth(gpu: &'static Gpu) -> Result<(), Failed> {
     Ok(())
 }
 
+/// Both kernels restart their spectra at step 600 of the TEz far-field
+/// scene and run on to 1200. By then the pulse has left, so what the
+/// restarted transforms hold is a small tail; as everywhere in Tier 4 the
+/// difference is measured against the reference peak over the run, here
+/// the peak of the far field of a CPU run without the restart. The
+/// restart must also have changed that far field.
+fn restarted_spectra_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    let s = scene("ntff_array_te.json");
+    let mut cpu = CpuKernel::from_scene(&s)?;
+    let mut sim = GpuSim::new(gpu, &s)?;
+    cpu.step(600);
+    Kernel::step(&mut sim, 600);
+    // Settle the GPU queue first, so the restart cuts at step 600 exactly.
+    Kernel::monitor_spectra(&mut sim)?;
+    cpu.restart_spectra();
+    sim.restart_spectra();
+    cpu.step(600);
+    Kernel::step(&mut sim, 600);
+    let flat = |v: Vec<fdtd_core::kernel::Spectrum>| -> Vec<f64> {
+        v.into_iter()
+            .flat_map(|s| match s {
+                fdtd_core::kernel::Spectrum::FarField(v) => {
+                    v.into_iter().flat_map(|(a, b)| [a, b]).collect::<Vec<_>>()
+                }
+                _ => vec![],
+            })
+            .collect()
+    };
+    let (a, b) = (
+        flat(cpu.monitor_spectra()?),
+        flat(Kernel::monitor_spectra(&mut sim)?),
+    );
+    let mut whole = CpuKernel::from_scene(&s)?;
+    whole.step(1200);
+    let full = flat(whole.monitor_spectra()?);
+    let peak = full.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+    let worst = a
+        .iter()
+        .zip(&b)
+        .fold(0.0_f64, |m, (x, y)| m.max((x - y).abs()));
+    let moved = a
+        .iter()
+        .zip(&full)
+        .fold(0.0_f64, |m, (x, y)| m.max((x - y).abs()))
+        / peak;
+    let d = worst / peak;
+    println!("restarted far fields: {d:.2e} of the full peak; the restart moved them {moved:.2e}");
+    if moved < 0.1 || d >= GATE {
+        return Err(format!("restarted far fields: {d:.2e}, moved {moved:.2e}").into());
+    }
+    Ok(())
+}
+
 fn main() {
     let args = Arguments::from_args();
     let gpu = match Gpu::shared() {
@@ -634,6 +687,7 @@ fn main() {
         ("intensity_matches_cpu", intensity_matches_cpu),
         ("live_probe_matches_cpu", live_probe_matches_cpu),
         ("cpu_painter_matches_gpu", cpu_painter_matches_gpu),
+        ("restarted_spectra_match_cpu", restarted_spectra_match_cpu),
     ];
     let mut trials: Vec<Trial> = checks
         .into_iter()

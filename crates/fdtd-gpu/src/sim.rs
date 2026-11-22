@@ -716,6 +716,34 @@ impl GpuSim {
         std::mem::take(&mut self.probe_samples)
     }
 
+    /// Zeroes every DFT, flux and far-field accumulator, as
+    /// `SimTm::restart_spectra`. Samples of batches already in flight still
+    /// land afterwards, a few steps from before the edit; the browser calls
+    /// this after live edits, where the field itself takes far longer than
+    /// that to settle.
+    pub fn restart_spectra(&mut self) {
+        for (_, m) in &mut self.monitors {
+            match m {
+                Mon::Point(_) => {}
+                Mon::Dft(d) => d.restart(),
+                Mon::Flux(line) => line.restart(),
+                Mon::Ntff(ntff) => ntff.restart(),
+            }
+        }
+    }
+
+    /// The far fields of every contour as accumulated so far, in scene
+    /// order (`Ntff::far_field`), without waiting for batches in flight.
+    pub fn far_fields(&self) -> Vec<Vec<(f64, f64)>> {
+        self.monitors
+            .iter()
+            .filter_map(|(_, m)| match m {
+                Mon::Ntff(ntff) => Some(ntff.far_field()),
+                _ => None,
+            })
+            .collect()
+    }
+
     /// The Ez buffer, for the render pass.
     pub(crate) fn ez_buffer(&self) -> &wgpu::Buffer {
         &self.fields[EZ]

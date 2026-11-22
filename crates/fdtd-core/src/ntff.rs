@@ -37,8 +37,10 @@
 // per wavelength.
 
 use crate::error::{FdtdError, Result};
+use crate::material::Material;
 use crate::monitor::{FluxLine, Normal, Tap};
-use crate::scene::Mode;
+use crate::scene::{Mode, Scene};
+use crate::source::Waveform;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
 
@@ -293,6 +295,96 @@ impl Ntff {
     }
 }
 
+/// Points every CW source of `scene` (`Waveform::RampedCw`) at the
+/// direction `phi0` (radians from +x): each one gets the phase
+/// `-k (r_n - r_c) . u(phi0)`, wrapped to (-pi, pi], with `r_c` the
+/// centroid of the CW sources and `k = 2 pi f0 sqrt(eps)` of the material
+/// at the source. Since a CW drive is `sin(2 pi f0 t + phase)`, the waves
+/// then add in phase along `u(phi0)`. Other sources are left alone; the
+/// phase changes at once, so the drive takes a step. Returns how many
+/// sources were steered.
+pub fn steer(scene: &mut Scene, phi0: f64) -> Result<usize> {
+    if !phi0.is_finite() {
+        return Err(FdtdError::InvalidParameter {
+            name: "steering angle",
+            value: phi0,
+        });
+    }
+    let cw: Vec<usize> = (0..scene.sources.len())
+        .filter(|&k| matches!(scene.sources[k].waveform, Waveform::RampedCw { .. }))
+        .collect();
+    if cw.is_empty() {
+        return Ok(0);
+    }
+    let n = cw.len() as f64;
+    let cx = cw.iter().map(|&k| scene.sources[k].i as f64).sum::<f64>() / n;
+    let cy = cw.iter().map(|&k| scene.sources[k].j as f64).sum::<f64>() / n;
+    let (c, s) = (phi0.cos(), phi0.sin());
+    for &k in &cw {
+        let src = scene.sources[k];
+        let eps = scene.materials[scene.material_at(src.i, src.j)].eps();
+        if let Waveform::RampedCw {
+            f0,
+            ramp_periods,
+            start,
+            ..
+        } = src.waveform
+        {
+            let kn = 2.0 * PI * f0 * eps.sqrt();
+            let p = -kn * ((src.i as f64 - cx) * c + (src.j as f64 - cy) * s);
+            let wrapped = PI - (PI - p).rem_euclid(2.0 * PI);
+            scene.sources[k].waveform = Waveform::RampedCw {
+                f0,
+                ramp_periods,
+                phase: wrapped,
+                start,
+            };
+        }
+    }
+    Ok(cw.len())
+}
+
+/// The array factor `|sum_n a_n exp(j (phase_n + k r_n . rhat))|` of the
+/// scene's sources at `angles` directions `2 pi m / angles`, normalized to
+/// its peak, when that is the exact far field: two or more sources, every
+/// one a CW line source at `freq`, no shapes, no paint, no plane wave and
+/// a lossless background, so each source radiates the same isotropic
+/// cylindrical wave. `None` otherwise.
+pub fn array_factor(scene: &Scene, freq: f64, angles: usize) -> Option<Vec<f64>> {
+    let background = scene.materials[0];
+    let plain = scene.sources.len() >= 2
+        && scene.geometry.is_empty()
+        && scene.paint.is_none()
+        && scene.plane_wave.is_none()
+        && matches!(background, Material::Dielectric { sigma, .. } if sigma == 0.0);
+    if !plain || angles == 0 {
+        return None;
+    }
+    let mut elements = Vec::new();
+    for src in &scene.sources {
+        match src.waveform {
+            Waveform::RampedCw { f0, phase, .. } if f0 == freq => {
+                elements.push((src.i as f64, src.j as f64, src.amplitude, phase))
+            }
+            _ => return None,
+        }
+    }
+    let k = 2.0 * PI * freq * background.eps().sqrt();
+    let af: Vec<f64> = (0..angles)
+        .map(|m| {
+            let phi = 2.0 * PI * m as f64 / angles as f64;
+            let (c, s) = (phi.cos(), phi.sin());
+            let (re, im) = elements.iter().fold((0.0, 0.0), |(re, im), &(x, y, a, p)| {
+                let ph = p + k * (x * c + y * s);
+                (re + a * ph.cos(), im + a * ph.sin())
+            });
+            re.hypot(im)
+        })
+        .collect();
+    let peak = af.iter().fold(0.0_f64, |m, &v| m.max(v));
+    (peak > 0.0).then(|| af.iter().map(|v| v / peak).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -493,5 +585,46 @@ mod tests {
         assert!(new(20, &ALL_SIDES, &f, 0).is_err());
         assert!(new(20, &ALL_SIDES, &f, MAX_ANGLES + 1).is_err());
         assert!(new(20, &ALL_SIDES, &[], 360).is_err());
+    }
+    /// Two in-phase sources half a wavelength apart along y: broadside
+    /// (along x) they add, endfire (along y) they cancel. Steering to 90
+    /// degrees makes y the beam, and the array factor follows; anything
+    /// that is not a plain CW array has no exact array factor.
+    #[test]
+    fn steering_and_the_array_factor() {
+        let f = 0.05;
+        let cw = |j| crate::scene::Source {
+            i: 30,
+            j,
+            waveform: Waveform::RampedCw {
+                f0: f,
+                ramp_periods: 3.0,
+                phase: 0.0,
+                start: 0.0,
+            },
+            amplitude: 1.0,
+            kind: crate::source::SourceKind::Soft,
+        };
+        let mut s = crate::scene::tests::sample();
+        s.geometry.clear();
+        s.sources = vec![cw(10), cw(20)];
+        let af = array_factor(&s, f, 4).unwrap();
+        assert!((af[0] - 1.0).abs() < 1e-12 && af[1] < 1e-12, "{af:?}");
+        assert_eq!(steer(&mut s, PI / 2.0).unwrap(), 2);
+        let af = array_factor(&s, f, 4).unwrap();
+        assert!((af[1] - 1.0).abs() < 1e-12 && af[0] < 0.75, "{af:?}");
+        // Phases are -k (r - r_c) . u: +-pi/2 for y = 10, 20 about 15.
+        let phase = |k: usize| match s.sources[k].waveform {
+            Waveform::RampedCw { phase, .. } => phase,
+            _ => f64::NAN,
+        };
+        assert!((phase(0) - PI / 2.0).abs() < 1e-12 && (phase(1) + PI / 2.0).abs() < 1e-12);
+        assert!(array_factor(&s, 0.04, 8).is_none(), "wrong frequency");
+        let mut shaped = s.clone();
+        shaped.geometry = crate::scene::tests::sample().geometry;
+        assert!(array_factor(&shaped, f, 8).is_none(), "shapes");
+        s.sources.truncate(1);
+        assert!(array_factor(&s, f, 8).is_none(), "one source");
+        assert!(steer(&mut s, f64::NAN).is_err());
     }
 }

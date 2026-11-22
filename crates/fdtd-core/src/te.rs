@@ -333,6 +333,11 @@ impl SimTe {
     }
 
     /// Advances `steps` full steps.
+    /// Zeroes every spectral accumulator, as `SimTm::restart_spectra`.
+    pub fn restart_spectra(&mut self) {
+        self.spectral.iter_mut().for_each(Spectral::restart);
+    }
+
     pub fn step_n(&mut self, steps: u64) {
         for _ in 0..steps {
             self.step();
