@@ -3,7 +3,6 @@
 //! measure and gate. Browser only.
 
 use crate::{ErrorInfo, JsResult, js_err};
-use fdtd_core::grid::Component;
 use fdtd_core::kernel::{Comparator, GPU_GATE, Snapshot};
 use fdtd_core::scene::Scene;
 use fdtd_core::selftest::{CHECKPOINTS, read_golden};
@@ -43,7 +42,7 @@ pub async fn run_self_test(name: String, scene_json: String, golden: Vec<u8>) ->
     let gpu = Gpu::request(&instance, None)
         .await
         .map_err(|e| ErrorInfo::no_webgpu(e.to_string()))?;
-    // ponytail: one small leaked device per self-test run (three per page).
+    // ponytail: one small leaked device per self-test run (four per page).
     let gpu: &'static Gpu = Box::leak(Box::new(gpu));
     let mut sim = GpuSim::new(gpu, &scene).map_err(js_err)?;
     let mut cmp = Comparator::new();
@@ -51,10 +50,7 @@ pub async fn run_self_test(name: String, scene_json: String, golden: Vec<u8>) ->
     for (k, &n) in CHECKPOINTS.iter().enumerate() {
         sim.step_n(n - sim.time_step());
         let mut snap = Snapshot::default();
-        for (f, c) in [Component::Ez, Component::Hx, Component::Hy]
-            .into_iter()
-            .enumerate()
-        {
+        for (f, c) in scene.mode.fields().into_iter().enumerate() {
             snap.fields[f] = sim.read_async(c).await.map_err(js_err)?;
         }
         // The reference peak over the run so far, as Tier 4 measures it.

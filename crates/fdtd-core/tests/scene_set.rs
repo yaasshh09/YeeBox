@@ -48,6 +48,9 @@ fn features(scene: &Scene) -> BTreeSet<&'static str> {
     if scene.periodic_y {
         f.insert("periodic y");
     }
+    if scene.mode == fdtd_core::scene::Mode::Te {
+        f.insert("te mode");
+    }
     for shape in &scene.geometry {
         let id = match shape {
             Shape::Rect { material, .. } => {
@@ -184,6 +187,9 @@ fn scene_set_covers_every_feature() {
         "dft monitor",
         "flux x",
         "flux y",
+        "te mode",
+        "drude shape",
+        "lorentz shape",
     ];
     let missing: Vec<_> = wanted.iter().filter(|w| !covered.contains(*w)).collect();
     assert!(missing.is_empty(), "no scene exercises {missing:?}");

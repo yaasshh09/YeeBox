@@ -1,0 +1,66 @@
+{
+ "version": 1,
+ "grid": {
+  "nx": 120,
+  "ny": 100,
+  "dx_phys_m": 0.001,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "drude",
+   "eps_inf": 1,
+   "wp": 0.3,
+   "gamma": 0.01
+  }
+ ],
+ "geometry": [
+  {
+   "shape": "circle",
+   "cx": 65,
+   "cy": 50,
+   "r": 10,
+   "material": 1
+  }
+ ],
+ "sources": [
+  {
+   "i": 35,
+   "j": 50,
+   "waveform": {
+    "type": "ricker",
+    "t0": 30,
+    "f_peak": 0.04
+   },
+   "amplitude": 1
+  }
+ ],
+ "monitors": [
+  {
+   "type": "point",
+   "i": 90,
+   "j": 50
+  },
+  {
+   "type": "dft",
+   "i": 65,
+   "j": 50,
+   "freqs": [
+    0.03,
+    0.04
+   ]
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ }
+}

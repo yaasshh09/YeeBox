@@ -1,0 +1,111 @@
+{
+ "version": 1,
+ "mode": "te",
+ "grid": {
+  "nx": 120,
+  "ny": 100,
+  "dx_phys_m": 0.001,
+  "courant": 0.5
+ },
+ "materials": [
+  {
+   "kind": "dielectric",
+   "eps_inf": 1,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 4,
+   "sigma": 0
+  },
+  {
+   "kind": "dielectric",
+   "eps_inf": 2,
+   "sigma": 0.05
+  },
+  {
+   "kind": "pec"
+  }
+ ],
+ "geometry": [
+  {
+   "shape": "circle",
+   "cx": 70,
+   "cy": 50,
+   "r": 9,
+   "material": 1
+  },
+  {
+   "shape": "rect",
+   "x0": 40,
+   "y0": 62,
+   "x1": 43,
+   "y1": 80,
+   "material": 3
+  },
+  {
+   "shape": "polygon",
+   "points": [
+    [
+     85,
+     20
+    ],
+    [
+     100,
+     22
+    ],
+    [
+     92,
+     34
+    ]
+   ],
+   "material": 2
+  }
+ ],
+ "sources": [
+  {
+   "i": 35,
+   "j": 45,
+   "waveform": {
+    "type": "ricker",
+    "t0": 30,
+    "f_peak": 0.04
+   },
+   "amplitude": 1
+  }
+ ],
+ "monitors": [
+  {
+   "type": "point",
+   "i": 95,
+   "j": 50
+  },
+  {
+   "type": "dft",
+   "i": 60,
+   "j": 30,
+   "freqs": [
+    0.03,
+    0.04
+   ]
+  },
+  {
+   "type": "flux",
+   "normal": "y",
+   "at": 25,
+   "from": 30,
+   "to": 90,
+   "freqs": [
+    0.03,
+    0.04
+   ]
+  }
+ ],
+ "pml": {
+  "thickness": 16,
+  "m": 4,
+  "sigma_scale": 1,
+  "kappa_max": 2,
+  "alpha_max": 0.1
+ }
+}

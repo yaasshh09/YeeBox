@@ -19,12 +19,14 @@ use crate::kernel::{CpuKernel, Kernel, Snapshot};
 use crate::scene::Scene;
 
 /// The self-test scenes, in `validation/scenes`: a closed box with
-/// dielectric and PEC, painted walls in a CPML, and a TF/SF plane wave on a
-/// rod in a CPML.
-pub const SCENES: [&str; 3] = [
+/// dielectric and PEC, painted walls in a CPML, a TF/SF plane wave on a
+/// rod in a CPML, and a TEz plane wave on a Drude cylinder (the plasmon
+/// path: TEz, dispersion and TF/SF by duality).
+pub const SCENES: [&str; 4] = [
     "cavity_tm.json",
     "painted_walls.json",
     "tfsf_rod_minus_x.json",
+    "drude_te.json",
 ];
 
 /// Steps at which the fields are compared.

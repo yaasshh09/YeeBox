@@ -8,6 +8,8 @@ import rod from "../../validation/scenes/tfsf_rod_minus_x.json?raw";
 import cavityGold from "../../validation/golden/selftest/cavity_tm.bin?url";
 import paintedGold from "../../validation/golden/selftest/painted_walls.bin?url";
 import rodGold from "../../validation/golden/selftest/tfsf_rod_minus_x.bin?url";
+import drude from "../../validation/scenes/drude_te.json?raw";
+import drudeGold from "../../validation/golden/selftest/drude_te.bin?url";
 
 type Report = {
   scene: string;
@@ -22,6 +24,7 @@ const SCENES: [string, string, string][] = [
   ["cavity_tm", cavity, cavityGold],
   ["painted_walls", painted, paintedGold],
   ["tfsf_rod_minus_x", rod, rodGold],
+  ["drude_te", drude, drudeGold],
 ];
 
 const sci = (v: number) => v.toExponential(2);

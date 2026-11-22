@@ -9,7 +9,7 @@
 //! reference peak at every 250-step checkpoint, padding exactly zero.
 
 use fdtd_core::grid::Component;
-use fdtd_core::kernel::{Diff, Kernel, compare};
+use fdtd_core::kernel::{CpuKernel, Diff, Kernel, compare};
 use fdtd_core::scene::Scene;
 use fdtd_core::scene::ViewField;
 use fdtd_core::tm::SimTm;
@@ -82,14 +82,11 @@ fn within_gate(name: &str, diffs: &[Diff]) -> Result<(), Failed> {
 }
 
 /// Hx row ny - 1 (unless y is periodic), Hy column nx - 1 and the wall ring
-/// of Ez are exactly zero.
+/// of Ez are exactly zero; in TEz the same slots, Ex, Ey and the Hz ring.
 fn padding_is_zero(name: &str, s: &Scene, sim: &mut GpuSim) -> Result<(), Failed> {
     let (nx, ny) = (s.grid.nx, s.grid.ny);
-    let (ez, hx, hy) = (
-        sim.read(Component::Ez)?,
-        sim.read(Component::Hx)?,
-        sim.read(Component::Hy)?,
-    );
+    let [node, y_edge, x_edge] = s.mode.fields();
+    let (ez, hx, hy) = (sim.read(node)?, sim.read(y_edge)?, sim.read(x_edge)?);
     let live = s.live_rows();
     for j in 0..ny {
         for i in 0..nx {
@@ -114,7 +111,7 @@ fn padding_is_zero(name: &str, s: &Scene, sim: &mut GpuSim) -> Result<(), Failed
 
 /// One committed scene, as it is: the Tier 4 acceptance case.
 fn scene_matches_cpu(gpu: &'static Gpu, name: &str, s: &Scene) -> Result<(), Failed> {
-    let mut cpu = SimTm::from_scene(s)?;
+    let mut cpu = CpuKernel::from_scene(s)?;
     let mut gpu_sim = GpuSim::new(gpu, s)?;
     let diffs = compare(&mut cpu, &mut gpu_sim, &tier4::checkpoints(STEPS, 250))?;
     within_gate(name, &diffs)?;
@@ -129,7 +126,7 @@ type Edit = (u64, fn(&mut Scene, f64) -> Option<[usize; 4]>);
 /// to both kernels, and carries on to `STEPS`. Checkpoints every 250 steps
 /// and at every edit, all within the gate.
 fn edited_run(gpu: &'static Gpu, name: &str, mut s: Scene, edits: &[Edit]) -> Result<(), Failed> {
-    let mut cpu = SimTm::from_scene(&s)?;
+    let mut cpu = CpuKernel::from_scene(&s)?;
     let mut gpu_sim = GpuSim::new(gpu, &s)?;
     let mut diffs = Vec::new();
     let mut prev = 0;
@@ -207,6 +204,34 @@ fn live_edits_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
         }),
     ];
     edited_run(gpu, "live edits", s, &edits)
+}
+
+/// Dispersive paint mid-run, in TEz and in TMz: a Drude stroke, part of it
+/// erased, a Lorentz stroke over the rest. Every location whose pole
+/// changes must restart its J and P exactly as the CPU kernel does.
+fn dispersive_live_edits_match_cpu(gpu: &'static Gpu) -> Result<(), Failed> {
+    let edits: [Edit; 3] = [
+        (500, |s, _| {
+            s.paint_stroke((40.0, 20.0), (40.0, 75.0), 1.5, 2)
+                .unwrap()
+                .bounds
+        }),
+        (900, |s, _| {
+            s.paint_stroke((40.0, 40.0), (40.0, 55.0), 2.0, 0)
+                .unwrap()
+                .bounds
+        }),
+        (1300, |s, _| {
+            s.paint_stroke((38.0, 22.0), (42.0, 30.0), 2.0, 1)
+                .unwrap()
+                .bounds
+        }),
+    ];
+    let te = scene("lorentz_te.json");
+    let mut tm = te.clone();
+    tm.mode = fdtd_core::scene::Mode::Tm;
+    edited_run(gpu, "dispersive live edits te", te, &edits)?;
+    edited_run(gpu, "dispersive live edits tm", tm, &edits)
 }
 
 /// A scene built without sources gets its first one mid-run.
@@ -600,6 +625,10 @@ fn main() {
         ("workgroup_size_independent", workgroup_size_independent),
         ("long_run_growth", long_run_growth),
         ("live_edits_match_cpu", live_edits_match_cpu),
+        (
+            "dispersive_live_edits_match_cpu",
+            dispersive_live_edits_match_cpu,
+        ),
         ("first_source_added_live", first_source_added_live),
         ("render_pixels_match_tables", render_pixels_match_tables),
         ("intensity_matches_cpu", intensity_matches_cpu),
