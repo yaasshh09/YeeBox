@@ -497,3 +497,373 @@ pub fn a20() -> Result<Vec<CaseResult>> {
         40,
     )
 }
+
+const FRAUNHOFER: &str = include_str!("../../../../validation/golden/fraunhofer.csv");
+
+/// The double slit and array frequency: 20 cells per wavelength.
+pub const SLIT_FREQ: f64 = 0.05;
+
+/// The A22 double slit: slits 40 cells wide (2 lambda) with centers 100
+/// cells apart (5 lambda), apertures measured between the PEC nodes of a
+/// one-node screen at column 66 that runs through the layer to both walls.
+/// A line of in-phase soft Ricker sources (peak 0.05) at column 26 spans
+/// every row outside the layer, as in the double slit preset. The far field
+/// comes from one contour side, column 76, ten cells behind the screen,
+/// across every row clear of the layer: an open line, which is exact for
+/// an infinite one and truncated here where the field is weak.
+pub fn double_slit_scene() -> Scene {
+    let d = 16;
+    let c = d + 130;
+    let ny = 2 * c + 1;
+    let (x_src, x_wall, x_line) = (d + 10, d + 50, d + 60);
+    let nx = x_line + 20 + d;
+    let wall = |y0: usize, y1: usize| Shape::Rect {
+        x0: x_wall as f64,
+        y0: y0 as f64,
+        x1: x_wall as f64,
+        y1: y1 as f64,
+        material: 1,
+    };
+    Scene {
+        version: SCENE_VERSION,
+        grid: GridSpec {
+            nx,
+            ny,
+            dx_phys_m: 1e-3,
+            courant: 0.5,
+        },
+        materials: vec![Material::VACUUM, Material::Pec],
+        geometry: vec![wall(0, c - 70), wall(c - 30, c + 30), wall(c + 70, ny - 1)],
+        sources: (d..ny - d)
+            .map(|j| Source {
+                i: x_src,
+                j,
+                waveform: ricker(SLIT_FREQ),
+                amplitude: 1.0,
+                kind: SourceKind::Soft,
+            })
+            .collect(),
+        monitors: vec![Monitor::Ntff {
+            x0: x_line - 1,
+            y0: d + 1,
+            x1: x_line,
+            y1: ny - 2 - d,
+            sides: vec![crate::ntff::Side::Right],
+            freqs: vec![SLIT_FREQ],
+            angles: DEFAULT_ANGLES,
+        }],
+        pml: Some(PmlSpec::recommended(d)),
+        periodic_y: false,
+        plane_wave: None,
+        paint: None,
+        view: None,
+        mode: Mode::Tm,
+    }
+}
+
+/// The Fraunhofer pattern, I / I(0) in dB, at theta = -90 to 90 degrees.
+pub fn fraunhofer() -> Result<Vec<(i32, f64)>> {
+    let mut rows = Vec::new();
+    for line in FRAUNHOFER.lines().skip(2) {
+        let c: Vec<&str> = line.split(',').collect();
+        ensure(c.len() == 2, || format!("fraunhofer: bad row {line}"))?;
+        rows.push((num(c[0], "fraunhofer")? as i32, num(c[1], "fraunhofer")?));
+    }
+    ensure(rows.len() == 181, || "fraunhofer: expected 181 rows".into())?;
+    Ok(rows)
+}
+
+/// The simulated double slit pattern in dB relative to theta = 0, at the
+/// same angles as `fraunhofer`.
+pub fn double_slit_pattern() -> Result<Vec<(i32, f64)>> {
+    let far = far_fields(&double_slit_scene())?;
+    let far = far
+        .first()
+        .ok_or(FdtdError::Case("A22: no far field".into()))?;
+    let at = |deg: i32| far[deg.rem_euclid(DEFAULT_ANGLES as i32) as usize];
+    let zero = db(at(0));
+    Ok((-90..=90).map(|t| (t, db(at(t)) - zero)).collect())
+}
+
+/// A22: the double slit far field against Fraunhofer, the worst dB
+/// difference over the compare region fixed in `validation/gen/
+/// fraunhofer.py` (|theta| <= 25 deg, Fraunhofer within 10 dB of its peak).
+/// Both patterns are referred to theta = 0. Gate 1 dB.
+pub fn a22() -> Result<Vec<CaseResult>> {
+    let (gold, sim) = (fraunhofer()?, double_slit_pattern()?);
+    let (mut worst, mut count) = (0.0_f64, 0);
+    for ((t, g), (_, s)) in gold.iter().zip(&sim) {
+        if t.abs() <= 25 && *g >= -10.0 {
+            worst = worst.max((s - g).abs());
+            count += 1;
+        }
+    }
+    Ok(vec![CaseResult::new(
+        "A22",
+        "double slit far field",
+        worst,
+        Gate::AtMost(1.0),
+        "dB",
+        format!(
+            "slits 2 lambda wide, 5 lambda apart, 20 cells per wavelength, TMz; \
+             {count} angles with |theta| <= 25 deg within 10 dB of the peak"
+        ),
+    )])
+}
+
+/// The A23 steering angles, degrees from the array normal (+x).
+pub const STEER: [f64; 4] = [0.0, 15.0, 30.0, 45.0];
+
+/// The A23 array: 8 soft line sources along y, half a wavelength (10 cells)
+/// apart, centered in a 127 x 127 vacuum grid with the 16-cell layer, each
+/// a Ricker pulse (peak 0.05) delayed by `tau_n = y_n sin(phi0)` plus a
+/// common offset: a true time delay array, so the beam points at `phi0` at
+/// every frequency. A closed contour 45 cells out records 3600 angles.
+pub fn array_scene(steer_deg: f64) -> Scene {
+    let (n, c, ring) = (127, 63, 45);
+    let s = steer_deg.to_radians().sin();
+    let sources = (0..8)
+        .map(|k| {
+            let y = 10.0 * (k as f64 - 3.5);
+            Source {
+                i: c,
+                j: (c as f64 + y + 0.5) as usize,
+                waveform: ricker(SLIT_FREQ).delayed(40.0 + y * s),
+                amplitude: 1.0,
+                kind: SourceKind::Soft,
+            }
+        })
+        .collect();
+    let mut scene = line_source_scene(n, (c, c), vec![], Mode::Tm);
+    scene.sources = sources;
+    scene.monitors = vec![Monitor::Ntff {
+        x0: c - ring,
+        y0: c - ring,
+        x1: c + ring,
+        y1: c + ring,
+        sides: ALL_SIDES.to_vec(),
+        freqs: vec![SLIT_FREQ],
+        angles: 3600,
+    }];
+    scene
+}
+
+/// The angle (degrees, within 30 of `near`) where `g` peaks on a grid of
+/// `angles` directions, refined by a parabola through the top three.
+fn beam_peak(g: impl Fn(usize) -> f64, angles: usize, near: f64) -> f64 {
+    let step = 360.0 / angles as f64;
+    let idx = |deg: f64| (deg / step).round().rem_euclid(angles as f64) as usize;
+    let (lo, span) = (idx(near - 30.0), (60.0 / step) as usize);
+    let best = (0..span)
+        .map(|k| (lo + k) % angles)
+        .max_by(|&a, &b| g(a).total_cmp(&g(b)))
+        .unwrap_or(lo);
+    let (a, b, c) = (
+        g((best + angles - 1) % angles),
+        g(best),
+        g((best + 1) % angles),
+    );
+    let shift = 0.5 * (a - c) / (a - 2.0 * b + c);
+    let deg = (best as f64 + shift) * step;
+    if deg > 180.0 { deg - 360.0 } else { deg }
+}
+
+/// A23: the measured beam direction of the true time delay array against
+/// the peak of its array factor, computed from the same delays and
+/// positions with the continuum k, at 0, 15, 30 and 45 degrees. Measured:
+/// the worst difference, degrees. Gate 1 degree.
+pub fn a23() -> Result<Vec<CaseResult>> {
+    let mut worst = 0.0_f64;
+    let mut parts = Vec::new();
+    let w = 2.0 * PI * SLIT_FREQ;
+    for steer in STEER {
+        let scene = array_scene(steer);
+        let far = far_fields(&scene)?;
+        let far = far
+            .first()
+            .ok_or(FdtdError::Case("A23: no far field".into()))?;
+        let got = beam_peak(|m| far[m].0.hypot(far[m].1), 3600, steer);
+        let center = 63.0;
+        // AF(phi) = sum_n exp(-j w tau_n + j k y_n sin(phi)), k = w.
+        let af = |m: usize| {
+            let phi = (m as f64 * 0.1).to_radians();
+            let (re, im) = scene.sources.iter().fold((0.0, 0.0), |(re, im), src| {
+                let Waveform::Ricker { t0, .. } = src.waveform else {
+                    return (re, im);
+                };
+                let ph = -w * t0 + w * (src.j as f64 - center) * phi.sin();
+                (re + ph.cos(), im + ph.sin())
+            });
+            re.hypot(im)
+        };
+        let want = beam_peak(af, 3600, steer);
+        worst = worst.max((got - want).abs());
+        parts.push(format!("{steer} deg: {got:.2} vs {want:.2}"));
+    }
+    Ok(vec![CaseResult::new(
+        "A23",
+        "phased array beam direction",
+        worst,
+        Gate::AtMost(1.0),
+        "deg",
+        format!(
+            "8 line sources, lambda / 2 apart, true time delays, TMz; {}",
+            parts.join(", ")
+        ),
+    )])
+}
+
+/// The A24 lattice constant, cells.
+pub const LATTICE: usize = 40;
+
+/// Normalized frequencies (units of c / a) of the A24 transmission scan.
+pub fn crystal_freqs() -> Vec<f64> {
+    (0..=100).map(|k| 0.1 + 0.005 * k as f64).collect()
+}
+
+/// The A24 crystal: eps 8.9 rods of radius 0.2 a in vacuum on a square
+/// lattice, a = 40 cells, one period in y (periodic, ny = a), eight rows
+/// along x, lit at normal incidence (Gamma-X) by a +x TF/SF Ricker pulse.
+/// The layout along x follows the A13 slab: layer (alpha 0, normal
+/// incidence), R line, entry face, 20 cells, the rods, 20 cells, T line,
+/// exit face, layer. Returns the scene and the two line columns.
+pub fn crystal_scene() -> (Scene, usize, usize) {
+    let (d, a, rows) = (16, LATTICE, 8);
+    let r_at = d + 4;
+    let x0 = r_at + 4;
+    let s0 = x0 + 20;
+    let t_at = s0 + rows * a + 20;
+    let x1 = t_at + 4;
+    let nx = x1 + 5 + d;
+    let rods = (0..rows)
+        .map(|k| Shape::Circle {
+            cx: (s0 + k * a + a / 2) as f64,
+            cy: (a / 2) as f64,
+            r: 0.2 * a as f64,
+            material: 1,
+        })
+        .collect();
+    let scene = Scene {
+        version: SCENE_VERSION,
+        grid: GridSpec {
+            nx,
+            ny: a,
+            dx_phys_m: 1e-3,
+            courant: 0.5,
+        },
+        materials: vec![
+            Material::VACUUM,
+            Material::Dielectric {
+                eps_inf: 8.9,
+                sigma: 0.0,
+            },
+        ],
+        geometry: rods,
+        sources: vec![],
+        monitors: vec![],
+        pml: Some(PmlSpec {
+            alpha_max: 0.0,
+            ..PmlSpec::recommended(d)
+        }),
+        periodic_y: true,
+        plane_wave: Some(PlaneWave {
+            x0,
+            y0: 0,
+            x1,
+            y1: a - 1,
+            direction: Direction::PlusX,
+            waveform: ricker(0.32 / a as f64),
+            amplitude: 1.0,
+        }),
+        paint: None,
+        view: None,
+        mode: Mode::Tm,
+    };
+    (scene, r_at, t_at)
+}
+
+/// The A24 run length, steps.
+pub const CRYSTAL_STEPS: u64 = 40_000;
+
+/// The Gamma-X transmission of the A24 crystal at `crystal_freqs` (c / a),
+/// after 3/4 of `CRYSTAL_STEPS` and after all of them. A single periodic
+/// cell holds slab modes with k_y = 2 pi / a below the light line, which
+/// are bound and lossless; the staircased rods couple a trace of the
+/// incident wave into them, so the crystal run never goes quiet and runs a
+/// fixed length instead. T is its flux over the incident flux of the run
+/// without rods, which does go quiet. The two readings show how much the
+/// unfinished ringing still moves the result.
+pub fn crystal_transmission() -> Result<[Vec<(f64, f64)>; 2]> {
+    let (scene, _, t_at) = crystal_scene();
+    let fn_list = crystal_freqs();
+    let freqs: Vec<f64> = fn_list.iter().map(|f| f / LATTICE as f64).collect();
+    let line = Monitor::Flux {
+        normal: crate::monitor::Normal::X,
+        at: t_at,
+        from: 0,
+        to: LATTICE - 1,
+        freqs,
+    };
+    let flux = |sim: &mut CpuKernel| -> Result<Vec<f64>> {
+        match sim.monitor_spectra()?.pop() {
+            Some(Spectrum::Flux(v)) => Ok(v),
+            other => Err(FdtdError::Case(format!("A24 flux: {other:?}"))),
+        }
+    };
+    let mut empty = scene.clone();
+    empty.geometry.clear();
+    empty.monitors = vec![line.clone()];
+    let mut sim = CpuKernel::from_scene(&empty)?;
+    run_until_quiet(&mut sim, 400, CRYSTAL_STEPS)?;
+    let inc = flux(&mut sim)?;
+    let mut full = scene;
+    full.monitors = vec![line];
+    let mut sim = CpuKernel::from_scene(&full)?;
+    sim.step(CRYSTAL_STEPS * 3 / 4);
+    let early = flux(&mut sim)?;
+    sim.step(CRYSTAL_STEPS / 4);
+    let last = flux(&mut sim)?;
+    let t = |v: &[f64]| {
+        fn_list
+            .iter()
+            .zip(v.iter().zip(&inc))
+            .map(|(&f, (a, b))| (f, a / b))
+            .collect()
+    };
+    Ok([t(&early), t(&last)])
+}
+
+/// The first stop band of a transmission scan: where T first drops below
+/// 0.1 (-10 dB) and where it next comes back above it, each edge linearly
+/// interpolated, in the scan's frequency units.
+pub fn stop_band(t: &[(f64, f64)]) -> Option<(f64, f64)> {
+    let cross = |a: (f64, f64), b: (f64, f64)| a.0 + (0.1 - a.1) / (b.1 - a.1) * (b.0 - a.0);
+    let lo = (1..t.len()).find(|&k| t[k - 1].1 >= 0.1 && t[k].1 < 0.1)?;
+    let hi = (lo + 1..t.len()).find(|&k| t[k - 1].1 < 0.1 && t[k].1 >= 0.1)?;
+    Some((cross(t[lo - 1], t[lo]), cross(t[hi - 1], t[hi])))
+}
+
+/// A24: the Gamma-X stop band of the eps 8.9, r = 0.2 a rod crystal,
+/// recorded, not gated: the reference edges have to come from MPB first
+/// (`docs/04-validation.md`). The often quoted 0.32 to 0.44 c / a is the
+/// complete TM gap over every direction, a narrower thing than this
+/// normal-incidence stop band.
+pub fn a24() -> Result<Vec<CaseResult>> {
+    let [early, t] = crystal_transmission()?;
+    let none = || FdtdError::Case("A24: no stop band in the scan".into());
+    let (lo, hi) = stop_band(&t).ok_or_else(none)?;
+    let (e_lo, e_hi) = stop_band(&early).ok_or_else(none)?;
+    let moved = (lo - e_lo).abs().max((hi - e_hi).abs());
+    Ok(vec![CaseResult::new(
+        "A24",
+        "photonic crystal Gamma-X stop band",
+        lo,
+        Gate::Record,
+        "c/a",
+        format!(
+            "T below -10 dB from {lo:.4} to {hi:.4} c / a (the edges moved {moved:.1e} over \
+             the last quarter of {CRYSTAL_STEPS} steps); eps 8.9 rods, r = 0.2 a, a = 40 \
+             cells, 8 rows, normal incidence"
+        ),
+    )])
+}

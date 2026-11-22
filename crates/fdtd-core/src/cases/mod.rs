@@ -26,6 +26,8 @@ pub enum Gate {
     AtMost(f64),
     /// lo <= measured <= hi.
     Range(f64, f64),
+    /// No gate yet: the number is recorded until its reference is confirmed.
+    Record,
 }
 
 impl Gate {
@@ -33,6 +35,7 @@ impl Gate {
         match *self {
             Gate::AtMost(b) => v <= b,
             Gate::Range(lo, hi) => (lo..=hi).contains(&v),
+            Gate::Record => true,
         }
     }
 }
@@ -42,6 +45,7 @@ impl std::fmt::Display for Gate {
         match *self {
             Gate::AtMost(b) => write!(f, "<= {}", fmt_num(b)),
             Gate::Range(lo, hi) => write!(f, "{} to {}", fmt_num(lo), fmt_num(hi)),
+            Gate::Record => write!(f, "recorded"),
         }
     }
 }
@@ -128,6 +132,9 @@ pub const CASES: &[(&str, CaseFn)] = &[
     ("NTFF", scattering::isotropy),
     ("A19", scattering::a19),
     ("A20", scattering::a20),
+    ("A22", scattering::a22),
+    ("A23", scattering::a23),
+    ("A24", scattering::a24),
 ];
 
 /// Runs every case. A case that errors becomes a failed row carrying the error.
@@ -167,6 +174,7 @@ mod tests {
         assert_eq!(Gate::AtMost(-60.0).to_string(), "<= -60");
         assert_eq!(Gate::AtMost(1e-12).to_string(), "<= 1.00e-12");
         assert_eq!(Gate::Range(1.8, 2.2).to_string(), "1.8 to 2.2");
+        assert!(Gate::Record.check(123.0) && Gate::Record.to_string() == "recorded");
         assert_eq!(fmt_num(0.0049), "4.90e-3");
         let failed = run(&[("Z", || Err(FdtdError::Case("guard".into())))]);
         assert_eq!(failed.len(), 1);
