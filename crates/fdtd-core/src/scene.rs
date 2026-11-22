@@ -1252,7 +1252,7 @@ impl Scene {
         for j in lo_y as usize..=hi_y as usize {
             for i in lo_x as usize..=hi_x as usize {
                 if self.in_pml(i, j)
-                    || segment_dist2((i as f64, j as f64), from, to) > radius * radius
+                    || segment_dist2((i as f64, j as f64), from, to) > radius * radius + 1e-9
                 {
                     continue;
                 }
@@ -2544,6 +2544,18 @@ pub(crate) mod tests {
             "{:?}",
             s.status(0).unwrap().warnings
         );
+    }
+
+    /// A zero-radius stroke along a long row takes every node on it: the
+    /// projection of node 25 onto (0, 15) to (39, 15) lands at 25.000000000000004,
+    /// and round-off like that must not drop a node on the segment.
+    #[test]
+    fn thin_long_stroke_takes_every_node() {
+        let mut s = empty(40, 30, vec![]);
+        let out = s.paint_stroke((0.0, 15.0), (39.0, 15.0), 0.0, 1).unwrap();
+        assert_eq!(out.painted, 38, "live nodes 1..=38");
+        let out = s.paint_stroke((3.0, 1.0), (3.0, 28.0), 0.0, 1).unwrap();
+        assert_eq!(out.painted, 28);
     }
 
     #[test]
