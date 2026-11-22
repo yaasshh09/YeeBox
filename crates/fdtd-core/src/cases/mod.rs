@@ -12,6 +12,7 @@ pub mod boundary;
 pub mod dispersive;
 pub mod duality;
 pub mod plane_wave;
+pub mod scattering;
 pub mod signal;
 pub mod tier1d;
 pub mod tier2d;
@@ -124,6 +125,7 @@ pub const CASES: &[(&str, CaseFn)] = &[
     ("A17", dispersive::a17),
     ("A18", duality::a18),
     ("A21", dispersive::a21),
+    ("NTFF", scattering::isotropy),
 ];
 
 /// Runs every case. A case that errors becomes a failed row carrying the error.

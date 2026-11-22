@@ -23,6 +23,18 @@
 //! The TEz line is the dual of the TMz one (E to H, H to -E, J to M, M to -J,
 //! eta to 1 / eta). Normalized units, angles in radians from +x,
 //! counterclockwise.
+//!
+//! The phase term uses the continuum k. I tried the numerical k(phi) of
+//! `dispersion` and it did not help: what the line source tests see is the
+//! co-location instead. The node average of H is low by cos(k_n / 2) (1.2
+//! percent at 20 cells per wavelength), which tips the J and M balance, so
+//! a little of the source radiates as if it were travelling inward and its
+//! phase cycles with the contour size. It is second order in the cell size
+//! (`tests/acceptance_ntff.rs`).
+// ponytail: one contour on Ez nodes with H averaged; a second contour on
+// the H edges with E averaged would cancel the J and M imbalance to first
+// order, add it if a gate ever needs better than about 0.1 dB at 20 cells
+// per wavelength.
 
 use crate::error::{FdtdError, Result};
 use crate::monitor::{FluxLine, Normal, Tap};
