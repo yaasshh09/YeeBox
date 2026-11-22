@@ -111,7 +111,13 @@ so every format change adds a migration.
     }
 
 The cross-implementation test harness takes a `Scene`, runs both kernels for N
-steps, and diffs every field. Any new feature lands in `fdtd-core` first with
+steps, and diffs every field. Both kernels run either mode: the GPU kernel
+keeps TEz in the same buffer slots (node field, y-edge field, x-edge field)
+and reads its medium rows from one packed table (`fdtd-gpu/src/buffers.rs`):
+one row per material in TMz, and in TEz one per unordered pair of materials,
+so painting rewrites only the edge ids. Drude J and Lorentz P live in one
+`aux` buffer per E array, allocated only for dispersive scenes, and every E
+shader calls the same `medium.wgsl`, a port of `dispersive::Aux::update`. Any new feature lands in `fdtd-core` first with
 physics tests, then in `fdtd-gpu` with an equivalence test. Never the other
 order.
 

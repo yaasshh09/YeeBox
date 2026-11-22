@@ -88,11 +88,20 @@ watch, one suggested interaction, and a link to the related validation case.
 | Phased array | beam steering, live polar plot | drag the phase slider | A23 |
 | Scattering cylinder | shadow and forward lobe, polar plot vs series | change radius | A19, A20 |
 | Plasmonic cylinder (TEz) | field enhancement at the surface at resonance | sweep frequency | A21 |
+| Silver mirror | standing waves in front of a real metal | bend the mirror with silver paint | A16 |
+| Resonant absorber | Lorentz rods soak up light at their resonance | change the wavelength | A17 |
 | Empty sandbox | nothing | everything | none |
 
 Presets marked with a validation case show a small "matches theory" badge
 that opens the comparison plot. That badge is the bridge between the two
 audiences.
+
+The View panel has a TM/TE switch that rebuilds the current scene in the other
+polarization. Switching the plasmon preset to TM turns it into a custom scene
+and says why: a plasmon shown in TMz would be physically wrong. Silver is in
+the paint palette; a silver stroke stays two cells clear of the absorbing
+border, and the status strip warns when a metal or a dispersive material is
+under-resolved.
 
 ## Instruments
 

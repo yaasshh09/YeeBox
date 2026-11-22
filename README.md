@@ -20,10 +20,12 @@ That's the goal. Here's where it stands today, honestly:
   reference on every committed scene, and a browser app that runs it live:
   paint walls and glass, drop and drag sources, probe the field, share the
   exact scene as a link.
-- **Done on the CPU reference, not yet on the GPU or in the browser:** the
-  second polarization, TEz (electric field in the plane, which surface
-  plasmons need), and frequency-dependent materials: Drude metals and Lorentz
-  resonators by auxiliary differential equation, in both polarizations.
+- **Also done:** the second polarization, TEz (electric field in the plane,
+  which surface plasmons need), and frequency-dependent materials: Drude
+  metals and Lorentz resonators by auxiliary differential equation, in both
+  polarizations, on the CPU reference, on the GPU, and in the browser. The app
+  has a TM/TE switch, silver to paint with, and three new presets: a plasmon
+  on a silver wire, a silver mirror and a resonant absorber.
 - **Not done yet:** oblique plane waves, scattering and far-field checks.
   I'll only claim those once their tests pass.
 
@@ -80,6 +82,17 @@ exact answer of the discrete Yee scheme, and the measurements land on it to
 1e-7 or better. The bands were picked from that prediction before any run.
 
 ![Slab R and T vs frequency](validation/report/slab_rt.svg)
+
+The GPU kernel runs all of this too, checked against the CPU on Drude and
+Lorentz scenes in both polarizations, with live painting of metal mid-run:
+the worst difference is 1.2e-5 of the peak field against a 1e-4 gate, and the
+browser self-test now includes the TEz Drude scene (1.3e-6).
+
+Silver is a Drude fit (Vial et al. 2005). At the 25 nm cells of the optical
+presets its skin depth is under one cell, so the app says it acts as a lossy
+mirror there; the plasmon preset uses 2 nm cells, where the skin depth is
+about 11. A TE box with no absorbing layer has a magnetic outer wall, not a
+metal one, because that keeps it the exact mirror image of the TM box.
 
 The Drude cylinder is the plasmon check, and it shows staircasing honestly. A
 circle drawn on a square grid is not a circle, and at a radius of 5 cells the
