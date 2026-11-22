@@ -101,6 +101,118 @@ fn slab_case(id: &'static str, name: &'static str, kind: &str) -> Result<Vec<Cas
     )])
 }
 
+/// The A21 cylinder at radius `a` cells: the measured resonance and the
+/// quasi-static one, wp / sqrt(eps_inf + 1), both angular, normalized.
+///
+/// A Drude cylinder (eps_inf 1) in a TEz vacuum, with wp set so that k a =
+/// 0.1 at the resonance (quasi-static) and gamma = 0.1 of it (Q about 10).
+/// A +x TF/SF Ricker pulse peaking at the resonance lights it; a probe on
+/// the backscatter axis in the scattered-field region sees only the
+/// cylinder's field. Its spectrum over the Ricker's analytic spectrum
+/// (|W| proportional to (f / f_p)^2 exp(-(f / f_p)^2), so no normalization
+/// run) peaks at the resonance; the record runs until the ring has decayed
+/// by e^-10, so no window is needed.
+pub fn drude_cylinder(a: usize) -> Result<(f64, f64)> {
+    let w_res = 0.1 / a as f64;
+    let (wp, gamma) = (w_res * 2.0_f64.sqrt(), 0.1 * w_res);
+    let (d, gap) = (16, 4);
+    let half = a + 6;
+    let c = d + gap + 4 + half;
+    let n = 2 * c + 1;
+    let f_p = w_res / (2.0 * std::f64::consts::PI);
+    let scene = crate::scene::Scene {
+        version: crate::scene::SCENE_VERSION,
+        grid: crate::scene::GridSpec {
+            nx: n,
+            ny: n,
+            dx_phys_m: 1e-9,
+            courant: 0.5,
+        },
+        materials: vec![
+            Material::VACUUM,
+            Material::Drude {
+                eps_inf: 1.0,
+                wp,
+                gamma,
+            },
+        ],
+        geometry: vec![crate::scene::Shape::Circle {
+            cx: c as f64,
+            cy: c as f64,
+            r: a as f64,
+            material: 1,
+        }],
+        sources: vec![],
+        monitors: vec![crate::scene::Monitor::Point {
+            i: c - half - 3,
+            j: c,
+        }],
+        pml: Some(crate::cpml::PmlSpec::recommended(d)),
+        periodic_y: false,
+        plane_wave: Some(crate::tfsf::PlaneWave {
+            x0: c - half,
+            y0: c - half,
+            x1: c + half,
+            y1: c + half,
+            direction: crate::tfsf::Direction::PlusX,
+            waveform: crate::source::Waveform::Ricker {
+                t0: 2.0 / f_p,
+                f_peak: f_p,
+            },
+            amplitude: 1.0,
+        }),
+        paint: None,
+        view: None,
+        mode: Mode::Te,
+    };
+    let s = scene.grid.courant;
+    let steps = ((4.0 / f_p + 20.0 / gamma) / s) as u64;
+    let mut sim = crate::te::SimTe::from_scene(&scene)?;
+    sim.step_n(steps);
+    let rec = sim.probes()[0].history().to_vec();
+    ensure(super::signal::max_abs(&rec) > 0.0, || {
+        "A21: the probe saw nothing".into()
+    })?;
+    let ricker = |w: f64| {
+        let x = w / w_res;
+        x * x * (-x * x).exp()
+    };
+    let response = |w: f64| {
+        let (re, im) = super::signal::dtft(&rec, None, w, s);
+        re.hypot(im) / ricker(w)
+    };
+    let grid: Vec<f64> = (0..=200)
+        .map(|k| w_res * (0.5 + k as f64 / 200.0))
+        .collect();
+    let best = (1..grid.len() - 1)
+        .max_by(|&i, &j| response(grid[i]).total_cmp(&response(grid[j])))
+        .unwrap_or(1);
+    ensure(best > 1 && best < grid.len() - 2, || {
+        format!("A21 a = {a}: the peak is on the edge of the search")
+    })?;
+    let w = super::signal::golden_max(response, grid[best - 1], grid[best + 1], 1e-12);
+    Ok((w, wp / 2.0_f64.sqrt()))
+}
+
+/// A21: the small Drude cylinder resonance in TEz within 5 percent of
+/// wp / sqrt(eps_inf + 1), gated at a = 10 cells, with a = 5 beside it for
+/// the staircasing trend (the a = 20 run is in `fdtd report`).
+pub fn a21() -> Result<Vec<CaseResult>> {
+    let err = |a| -> Result<f64> {
+        let (w, theory) = drude_cylinder(a)?;
+        Ok((w - theory) / theory)
+    };
+    let (e5, e10) = (err(5)?, err(10)?);
+    Ok(vec![CaseResult::new(
+        "A21",
+        "Drude cylinder resonance vs wp / sqrt(eps_inf + 1), TEz",
+        e10.abs(),
+        Gate::AtMost(0.05),
+        "rel",
+        format!("k a = 0.1, Q 10; radius 10 cells {e10:+.2e}, 5 cells {e5:+.2e}"),
+    )])
+}
+
 /// A16: Drude slab, eps_inf 1, wp = 2 pi 0.02, gamma 0.005.
 pub fn a16() -> Result<Vec<CaseResult>> {
     slab_case("A16", "Drude slab R and T vs complex eps", "drude")

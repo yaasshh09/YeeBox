@@ -123,6 +123,7 @@ pub const CASES: &[(&str, CaseFn)] = &[
     ("A16", dispersive::a16),
     ("A17", dispersive::a17),
     ("A18", duality::a18),
+    ("A21", dispersive::a21),
 ];
 
 /// Runs every case. A case that errors becomes a failed row carrying the error.
