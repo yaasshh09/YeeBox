@@ -22,6 +22,7 @@ golden data only with those versions.
 | `waveguide.py` | none | `validation/golden/waveguide.csv`, A11 and A12 TM1 guided beta, evanescent alpha and the cutoff (continuum and discrete) |
 | `slab_dispersive.py` | none | `validation/golden/slab_dispersive.csv`, A16 and A17 Drude and Lorentz slab R and T from the complex eps(w), exp(+jwt), over the band where the wavelength in the material is at least 20 cells; reuses `slab_cont` from `slab_airy.py` |
 | `plot_drude_cylinder.py` | runs `fdtd run --scene` itself | `validation/report/drude_cylinder.png`, the A21 Drude cylinder resonance in TEz at radius 5, 10, 20 cells, measured on its own in NumPy (Phase 6 done check) |
+| `cylinder_series.py` | none | `validation/golden/cylinder_series.csv`, A19 and A20 scattering width sigma / lambda in dB of a PEC and an eps 4 cylinder, TMz and TEz, at k a = 1, 2, 5, every degree; self-checks the PEC limit, the Rayleigh limit and the optical theorem before writing |
 
 Phases 0 and 1 need no golden data: every reference so far is an exact
 discrete identity or a closed form computed in Rust. The cavity plot script
