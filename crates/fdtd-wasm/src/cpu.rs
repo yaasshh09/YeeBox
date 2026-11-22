@@ -2,19 +2,19 @@
 //! when the browser has no WebGPU, with the same live probe, intensity
 //! mean and pixels (`render::CpuPainter`) as the GPU path.
 
-use fdtd_core::kernel::Kernel;
+use fdtd_core::kernel::{CpuKernel, Kernel};
 use fdtd_core::scene::Scene;
-use fdtd_core::tm::SimTm;
 use fdtd_core::{FdtdError, Result};
 use fdtd_gpu::buffers::Layout;
 use fdtd_gpu::render::{CpuPainter, Frame};
 
 pub struct CpuBackend {
-    sim: SimTm,
+    sim: CpuKernel,
     painter: CpuPainter,
     /// Material id per node with the wall entry on the ring, for drawing.
     ids: Vec<u32>,
-    /// Running mean of Ez^2 and its 1 / tau, while the intensity view is on.
+    /// Running mean of the node field squared (Ez^2, or Hz^2 in TEz) and its
+    /// 1 / tau, while the intensity view is on.
     mean: Vec<f64>,
     alpha: Option<f64>,
     probe: Option<usize>,
@@ -27,7 +27,7 @@ const MAX_PROBE_SAMPLES: usize = 1 << 16;
 impl CpuBackend {
     pub fn new(scene: &Scene) -> Result<CpuBackend> {
         Ok(CpuBackend {
-            sim: SimTm::from_scene(scene)?,
+            sim: CpuKernel::from_scene(scene)?,
             painter: CpuPainter::new(scene),
             ids: Layout::new(scene).ids,
             mean: vec![0.0; scene.grid.nx * scene.grid.ny],
@@ -44,8 +44,8 @@ impl CpuBackend {
     /// `n` steps, one at a time so the probe and the mean see every one.
     pub fn step(&mut self, n: u64) {
         for _ in 0..n {
-            self.sim.step_n(1);
-            let ez = self.sim.ez();
+            self.sim.step(1);
+            let ez = self.sim.node_field();
             if let Some(a) = self.alpha {
                 for (m, e) in self.mean.iter_mut().zip(ez) {
                     *m += a * (e * e - *m);
@@ -113,7 +113,7 @@ impl CpuBackend {
     /// RGBA8 pixels of `frame`, row-major from the top left.
     pub fn pixels(&self, frame: &Frame) -> Vec<u8> {
         self.painter
-            .draw(&self.ids, self.sim.ez(), &self.mean, frame)
+            .draw(&self.ids, self.sim.node_field(), &self.mean, frame)
     }
 }
 
@@ -135,7 +135,7 @@ mod tests {
     fn probe_and_mean_follow_the_reference() {
         let s = Session::load(SCENE).unwrap();
         let mut cpu = CpuBackend::new(&s.scene).unwrap();
-        let mut reference = SimTm::from_scene(&s.scene).unwrap();
+        let mut reference = fdtd_core::tm::SimTm::from_scene(&s.scene).unwrap();
         cpu.set_probe(Some((40, 25))).unwrap();
         cpu.set_intensity(Some(20.0)).unwrap();
         let mut mean = vec![0.0; 60 * 50];

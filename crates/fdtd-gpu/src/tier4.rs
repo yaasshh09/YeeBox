@@ -3,9 +3,8 @@
 //! `fdtd_core::kernel::compare` for the measure).
 
 use crate::{Gpu, GpuSim};
-use fdtd_core::kernel::{Diff, compare};
+use fdtd_core::kernel::{CpuKernel, Diff, Kernel, compare};
 use fdtd_core::scene::Scene;
-use fdtd_core::tm::SimTm;
 use fdtd_core::{FdtdError, Result};
 use std::path::{Path, PathBuf};
 
@@ -53,7 +52,7 @@ pub fn scenes() -> Result<Vec<(String, Scene)>> {
 
 /// Both kernels from `scene`, compared at `checkpoints`.
 pub fn run(gpu: &'static Gpu, scene: &Scene, checkpoints: &[u64]) -> Result<Vec<Diff>> {
-    let mut cpu = SimTm::from_scene(scene)?;
+    let mut cpu = CpuKernel::from_scene(scene)?;
     let mut gpu_sim = GpuSim::new(gpu, scene)?;
     compare(&mut cpu, &mut gpu_sim, checkpoints)
 }

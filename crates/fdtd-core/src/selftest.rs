@@ -15,10 +15,8 @@
 //! about 6e-8 of the peak, far under the 1e-4 gate.
 
 use crate::error::{FdtdError, Result};
-use crate::grid::Component;
-use crate::kernel::{Kernel, Snapshot};
+use crate::kernel::{CpuKernel, Kernel, Snapshot};
 use crate::scene::Scene;
-use crate::tm::SimTm;
 
 /// The self-test scenes, in `validation/scenes`: a closed box with
 /// dielectric and PEC, painted walls in a CPML, and a TF/SF plane wave on a
@@ -42,12 +40,13 @@ fn peak_steps() -> impl Iterator<Item = u64> {
 /// The golden bytes of `scene`: the CPU kernel's maxima every `PEAK_EVERY`
 /// steps and its fields at each checkpoint.
 pub fn golden(scene: &Scene) -> Result<Vec<u8>> {
-    let mut sim = SimTm::from_scene(scene)?;
+    let mut sim = CpuKernel::from_scene(scene)?;
     let mut peaks = Vec::new();
     let mut fields = Vec::new();
     for n in peak_steps() {
-        sim.step_n(n - sim.time_step());
-        for c in [Component::Ez, Component::Hx, Component::Hy] {
+        let now = sim.time_step();
+        Kernel::step(&mut sim, n - now);
+        for c in scene.mode.fields() {
             let v = sim.read_field(c)?;
             let m = v.iter().fold(0.0f64, |m, x| m.max(x.abs()));
             peaks.extend_from_slice(&m.to_le_bytes());
@@ -133,7 +132,7 @@ mod tests {
         let g = read_golden(&bytes, 12 * 9).unwrap();
         assert_eq!(g.snapshots.len(), CHECKPOINTS.len());
         assert_eq!(g.peaks.len(), 8);
-        let mut sim = SimTm::from_scene(&s).unwrap();
+        let mut sim = crate::tm::SimTm::from_scene(&s).unwrap();
         sim.step_n(250);
         let peak = sim.ez().iter().fold(0.0f64, |m, x| m.max(x.abs()));
         assert_eq!(g.peaks[0], (250, [peak, g.peaks[0].1[1], g.peaks[0].1[2]]));

@@ -8,6 +8,7 @@
 use crate::cpml::PmlSpec;
 use crate::dispersion::courant_limit;
 use crate::error::{FdtdError, Result};
+use crate::grid::Component;
 use crate::material::{Material, PALETTE};
 use crate::monitor::{Dft, FluxLine, Normal};
 use crate::source::{SourceKind, Waveform};
@@ -71,6 +72,15 @@ pub enum Mode {
 impl Mode {
     fn is_tm(&self) -> bool {
         *self == Mode::Tm
+    }
+
+    /// The field names of this mode by layout slot: the node field, the
+    /// y-edge field, the x-edge field.
+    pub fn fields(self) -> [Component; 3] {
+        match self {
+            Mode::Tm => [Component::Ez, Component::Hx, Component::Hy],
+            Mode::Te => [Component::Hz, Component::Ex, Component::Ey],
+        }
     }
 }
 

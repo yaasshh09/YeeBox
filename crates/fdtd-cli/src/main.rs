@@ -8,10 +8,9 @@ use fdtd_core::FdtdError;
 use fdtd_core::cases::{self, CaseResult, fmt_num};
 use fdtd_core::cpml::PmlSpec;
 use fdtd_core::fdtd1d::{Boundary1d, Sim1d, Source1d};
-use fdtd_core::grid::Component;
-use fdtd_core::kernel::Kernel;
+use fdtd_core::kernel::{CpuKernel, Kernel};
 use fdtd_core::reflection::{ReflectionSetup, reflection_db};
-use fdtd_core::scene::{Monitor, Scene};
+use fdtd_core::scene::{Mode, Monitor, Scene};
 use fdtd_core::source::{SourceKind, Waveform};
 use fdtd_core::tm::SimTm;
 use std::path::{Path, PathBuf};
@@ -855,9 +854,14 @@ fn run_scene(
             "probe record of {n_probes} x {rows} values is too large"
         ))?;
 
-    let mut sim = SimTm::from_scene(&scene)?;
+    let mut sim = CpuKernel::from_scene(&scene)?;
     Kernel::step(&mut sim, steps as u64);
-    let fields = [Component::Ez, Component::Hx, Component::Hy].map(|c| sim.read_field(c));
+    // Named for the mode: ez, hx, hy in TMz and hz, ex, ey in TEz.
+    let names = match scene.mode {
+        Mode::Tm => ["ez", "hx", "hy"],
+        Mode::Te => ["hz", "ex", "ey"],
+    };
+    let fields = scene.mode.fields().map(|c| sim.read_field(c));
     let [ez, hx, hy] = fields;
     let (ez, hx, hy) = (ez?, hx?, hy?);
     let probes: Vec<f64> = sim.probe_history()?.concat();
@@ -866,17 +870,17 @@ fn run_scene(
         out,
         &[
             npz::Array {
-                name: "ez",
+                name: names[0],
                 shape: &[ny, nx],
                 data: &ez,
             },
             npz::Array {
-                name: "hx",
+                name: names[1],
                 shape: &[ny, nx],
                 data: &hx,
             },
             npz::Array {
-                name: "hy",
+                name: names[2],
                 shape: &[ny, nx],
                 data: &hy,
             },

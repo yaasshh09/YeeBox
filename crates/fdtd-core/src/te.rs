@@ -425,6 +425,10 @@ impl Kernel for SimTe {
     fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
         Ok(self.spectral.iter().map(Spectral::spectrum).collect())
     }
+
+    fn mode(&self) -> Mode {
+        Mode::Te
+    }
 }
 
 #[cfg(test)]

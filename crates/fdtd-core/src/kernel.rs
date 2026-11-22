@@ -5,8 +5,10 @@ use crate::cpml::PmlSpec;
 use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::material::Material;
-use crate::scene::{GridSpec, Scene};
+use crate::scene::{GridSpec, Mode, Scene};
+use crate::te::SimTe;
 use crate::tfsf::PlaneWave;
+use crate::tm::SimTm;
 
 pub trait Kernel: Sized {
     /// Validates the scene and builds the kernel at time step 0, fields zero.
@@ -41,6 +43,116 @@ pub trait Kernel: Sized {
     /// Takes the sources of `scene` (positions, waveforms, amplitudes),
     /// keeping every field and the time step. Same `BuildKey` rule.
     fn set_sources(&mut self, scene: &Scene) -> Result<()>;
+
+    /// The polarization this kernel runs. TMz unless a kernel says otherwise.
+    fn mode(&self) -> Mode {
+        Mode::Tm
+    }
+}
+
+/// The f64 reference kernel of a scene's mode: what the CLI, the CPU
+/// fallback and the harnesses build when they take any scene.
+#[derive(Debug, Clone)]
+pub enum CpuKernel {
+    Tm(SimTm),
+    Te(SimTe),
+}
+
+impl CpuKernel {
+    /// The out-of-plane field on the nodes: Ez in TMz, Hz in TEz.
+    pub fn node_field(&self) -> &[f64] {
+        match self {
+            CpuKernel::Tm(k) => k.ez(),
+            CpuKernel::Te(k) => k.hz(),
+        }
+    }
+
+    pub fn nx(&self) -> usize {
+        match self {
+            CpuKernel::Tm(k) => k.nx(),
+            CpuKernel::Te(k) => k.nx(),
+        }
+    }
+
+    pub fn ny(&self) -> usize {
+        match self {
+            CpuKernel::Tm(k) => k.ny(),
+            CpuKernel::Te(k) => k.ny(),
+        }
+    }
+
+    /// The Courant number S, which is dt in normalized units.
+    pub fn courant(&self) -> f64 {
+        match self {
+            CpuKernel::Tm(k) => k.courant(),
+            CpuKernel::Te(k) => k.courant(),
+        }
+    }
+}
+
+impl Kernel for CpuKernel {
+    fn from_scene(scene: &Scene) -> Result<Self> {
+        Ok(match scene.mode {
+            Mode::Tm => CpuKernel::Tm(SimTm::from_scene(scene)?),
+            Mode::Te => CpuKernel::Te(SimTe::from_scene(scene)?),
+        })
+    }
+
+    fn step(&mut self, n: u64) {
+        match self {
+            CpuKernel::Tm(k) => k.step_n(n),
+            CpuKernel::Te(k) => k.step_n(n),
+        }
+    }
+
+    fn time_step(&self) -> u64 {
+        match self {
+            CpuKernel::Tm(k) => k.time_step(),
+            CpuKernel::Te(k) => k.time_step(),
+        }
+    }
+
+    fn read_field(&mut self, which: Component) -> Result<Vec<f64>> {
+        match self {
+            CpuKernel::Tm(k) => k.read_field(which),
+            CpuKernel::Te(k) => k.read_field(which),
+        }
+    }
+
+    fn probe_history(&mut self) -> Result<Vec<Vec<f64>>> {
+        match self {
+            CpuKernel::Tm(k) => k.probe_history(),
+            CpuKernel::Te(k) => k.probe_history(),
+        }
+    }
+
+    fn monitor_spectra(&mut self) -> Result<Vec<Spectrum>> {
+        match self {
+            CpuKernel::Tm(k) => k.monitor_spectra(),
+            CpuKernel::Te(k) => k.monitor_spectra(),
+        }
+    }
+
+    fn set_materials(&mut self, scene: &Scene, bounds: [usize; 4]) -> Result<()> {
+        match self {
+            CpuKernel::Tm(k) => k.set_materials(scene, bounds),
+            CpuKernel::Te(k) => k.set_materials(scene, bounds),
+        }
+    }
+
+    fn set_sources(&mut self, scene: &Scene) -> Result<()> {
+        match self {
+            CpuKernel::Tm(k) => k.set_sources(scene),
+            CpuKernel::Te(k) => k.set_sources(scene),
+        }
+    }
+
+    fn mode(&self) -> Mode {
+        match self {
+            CpuKernel::Tm(_) => Mode::Tm,
+            CpuKernel::Te(_) => Mode::Te,
+        }
+    }
 }
 
 /// The Tier 4 gate: an f32 kernel within this fraction of the reference
@@ -225,11 +337,10 @@ impl Snapshot {
     /// Reads a kernel where it stands.
     pub fn of<K: Kernel>(k: &mut K) -> Result<Snapshot> {
         Ok(Snapshot {
-            fields: [
-                k.read_field(Component::Ez)?,
-                k.read_field(Component::Hx)?,
-                k.read_field(Component::Hy)?,
-            ],
+            fields: {
+                let [a, b, c] = k.mode().fields();
+                [k.read_field(a)?, k.read_field(b)?, k.read_field(c)?]
+            },
             probes: k.probe_history()?.concat(),
             spectra: flatten(&k.monitor_spectra()?),
         })
@@ -303,7 +414,6 @@ pub fn compare<A: Kernel, B: Kernel>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::tm::SimTm;
     use std::path::Path;
 
     fn scene(name: &str) -> Scene {
@@ -311,6 +421,34 @@ mod tests {
             .join("../../validation/scenes")
             .join(name);
         Scene::from_json(&std::fs::read_to_string(path).unwrap()).unwrap()
+    }
+
+    /// `CpuKernel` builds the kernel of the scene's mode, steps exactly like
+    /// it, and `Snapshot` reads the TEz fields by their own names.
+    #[test]
+    fn cpu_kernel_follows_the_mode() {
+        let tm_scene = scene("tfsf_rod_minus_x.json");
+        let mut te_scene = tm_scene.clone();
+        te_scene.mode = crate::scene::Mode::Te;
+        // The rod is a dielectric, not vacuum, so TEz runs it, just differently.
+        let mut a = CpuKernel::from_scene(&tm_scene).unwrap();
+        let mut b = SimTm::from_scene(&tm_scene).unwrap();
+        let mut c = CpuKernel::from_scene(&te_scene).unwrap();
+        let mut d = crate::te::SimTe::from_scene(&te_scene).unwrap();
+        assert_eq!(
+            (a.mode(), c.mode()),
+            (crate::scene::Mode::Tm, crate::scene::Mode::Te)
+        );
+        for k in [&mut a, &mut c] {
+            Kernel::step(k, 120);
+        }
+        b.step_n(120);
+        d.step_n(120);
+        assert_eq!(Snapshot::of(&mut a).unwrap(), Snapshot::of(&mut b).unwrap());
+        let te = Snapshot::of(&mut c).unwrap();
+        assert_eq!(te, Snapshot::of(&mut d).unwrap());
+        assert_eq!(te.fields[0], d.hz());
+        assert_eq!(c.node_field(), d.hz());
     }
 
     /// The reference against itself is exactly zero everywhere, on a scene
