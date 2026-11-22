@@ -56,6 +56,10 @@ The layers are `PmlSpec::recommended`, tuned with `fdtd pml-sweep` against the w
 | R+T | R + T = 1, lossless slab | 6.87e-8 abs | <= 5.00e-3 | pass | the A13 slab at L = 20 |
 | A14 | lossy medium attenuation vs analytic | 4.00e-3 rel | <= 0.01 | pass | eps 2.25, sigma 0.05, f 0.008 to 0.02; vs exact discrete 2.5e-6 |
 | A15 | TF/SF leakage, empty domain | -303.9111 dB | <= -120 | pass | all four directions, closed box and periodic y |
+| A16 | Drude slab R and T vs complex eps | 2.18e-3 abs | <= 0.02 | pass | 20 cells, f 0.004 to 0.045 (42 points), TMz 6.2e-4, TEz 2.2e-3 |
+| A17 | Lorentz slab R and T vs complex eps | 4.79e-3 abs | <= 0.02 | pass | 20 cells, f 0.004 to 0.045 (41 points), TMz 4.8e-3, TEz 4.7e-3 |
+| A18 | TEz vs TMz under duality, vacuum line source | 0 rel | <= 1.00e-10 | pass | 121 x 101, 1500 steps; closed box 0.0e0, CPML 16 0.0e0; probe 0.0e0; unshifted source 1.3e-1 |
+| A21 | Drude cylinder resonance vs wp / sqrt(eps_inf + 1), TEz | 5.14e-3 rel | <= 0.05 | pass | k a = 0.1, Q 10; radius 10 cells +5.14e-3, 5 cells +1.38e-1 |
 
 ## Dielectric slab (A13)
 
@@ -70,15 +74,24 @@ Adapter: NVIDIA GeForce GTX 1660 Ti (Vulkan). Each entry is max |gpu - cpu| over
 | Scene | Ez | Hx | Hy | Probes | Spectra | Result |
 |---|---|---|---|---|---|---|
 | cavity_tm | 1.02e-6 | 1.16e-6 | 1.07e-6 | 1.33e-6 | 0.00e0 | pass |
+| drude_te | 3.94e-7 | 6.33e-7 | 1.67e-6 | 7.56e-7 | 5.72e-7 | pass |
+| drude_tm | 2.63e-6 | 8.42e-6 | 4.55e-6 | 1.18e-6 | 2.76e-7 | pass |
 | hard_sources | 1.22e-6 | 1.29e-6 | 1.03e-6 | 9.83e-7 | 0.00e0 | pass |
 | line_source_cpml | 5.70e-7 | 6.98e-7 | 9.48e-7 | 1.39e-6 | 0.00e0 | pass |
+| lorentz_te | 6.86e-7 | 8.85e-6 | 6.94e-6 | 6.17e-6 | 5.29e-6 | pass |
+| lorentz_tm | 3.56e-7 | 3.47e-6 | 2.73e-6 | 1.15e-5 | 0.00e0 | pass |
 | materials_clutter | 5.61e-7 | 1.37e-6 | 1.57e-6 | 6.21e-7 | 1.86e-7 | pass |
 | painted_walls | 2.04e-6 | 9.13e-6 | 6.90e-6 | 4.07e-7 | 0.00e0 | pass |
 | phased_array_cpml | 6.60e-7 | 1.03e-6 | 1.23e-6 | 1.29e-6 | 4.38e-8 | pass |
+| preset_absorber_compact | 8.39e-7 | 2.33e-6 | 1.88e-6 | 0.00e0 | 0.00e0 | pass |
 | preset_double_slit_compact | 7.96e-7 | 1.42e-6 | 2.68e-6 | 0.00e0 | 0.00e0 | pass |
 | preset_lens_compact | 7.28e-7 | 1.71e-6 | 1.40e-6 | 0.00e0 | 0.00e0 | pass |
+| preset_mirror_compact | 2.68e-7 | 1.89e-6 | 3.03e-6 | 0.00e0 | 0.00e0 | pass |
+| preset_plasmon_compact | 3.86e-6 | 1.19e-5 | 1.11e-5 | 0.00e0 | 0.00e0 | pass |
 | preset_waveguide_compact | 1.54e-6 | 2.47e-6 | 1.83e-6 | 0.00e0 | 0.00e0 | pass |
 | slab_tfsf | 3.75e-7 | 0.00e0 | 4.97e-7 | 0.00e0 | 6.05e-5 | pass |
+| te_materials_cpml | 7.21e-7 | 1.72e-6 | 1.24e-6 | 4.71e-7 | 1.94e-8 | pass |
+| te_tfsf_rod_plus_y | 2.72e-7 | 4.03e-7 | 5.48e-7 | 5.87e-6 | 2.03e-5 | pass |
 | tfsf_cylinder_plus_y | 3.85e-7 | 4.07e-7 | 8.21e-7 | 4.05e-7 | 5.28e-8 | pass |
 | tfsf_lossy_minus_y | 8.34e-7 | 1.53e-6 | 2.73e-6 | 8.14e-7 | 1.89e-7 | pass |
 | tfsf_rod_minus_x | 3.44e-7 | 1.02e-6 | 4.98e-7 | 3.26e-7 | 6.32e-6 | pass |

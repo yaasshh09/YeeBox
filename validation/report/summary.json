@@ -111,6 +111,34 @@
       "measured": "-303.9111 dB",
       "name": "TF/SF leakage, empty domain",
       "pass": true
+    },
+    {
+      "gate": "<= 0.02",
+      "id": "A16",
+      "measured": "2.18e-3 abs",
+      "name": "Drude slab R and T vs complex eps",
+      "pass": true
+    },
+    {
+      "gate": "<= 0.02",
+      "id": "A17",
+      "measured": "4.79e-3 abs",
+      "name": "Lorentz slab R and T vs complex eps",
+      "pass": true
+    },
+    {
+      "gate": "<= 1.00e-10",
+      "id": "A18",
+      "measured": "0 rel",
+      "name": "TEz vs TMz under duality, vacuum line source",
+      "pass": true
+    },
+    {
+      "gate": "<= 0.05",
+      "id": "A21",
+      "measured": "5.14e-3 rel",
+      "name": "Drude cylinder resonance vs wp / sqrt(eps_inf + 1), TEz",
+      "pass": true
     }
   ],
   "cpml": [
