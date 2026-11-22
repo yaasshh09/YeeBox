@@ -5,9 +5,9 @@ entry at the top of the session log.
 
 ## Current state
 
-**Active phase:** Phase 6, parts A and B done (TEz and dispersive media on the CPU reference, A16, A17, A18, A21 passing); parts C (GPU) and D (browser) to go. Phase 5 people and hardware items still open, CI not yet run on GitHub
+**Active phase:** Phase 6 built: TEz and Drude and Lorentz media on the CPU, the GPU and in the browser; A16, A17, A18, A21 pass; the plasmon preset runs with its badge on the A21 plot. Phase 5 people and hardware items still open, CI not yet run on GitHub
 **Blocked on:** nothing
-**Next action:** Phase 6 part C: the TEz and ADE shaders on the GPU, then Tier 4 on the four dispersive scenes (plan: `~/.claude/plans/woolly-honking-stardust-of-cdad43f4-adb1-43e5-a59e-eabf6d3790d8.md`). The owner still has to push and enable Pages
+**Next action:** the owner pushes and enables Pages; then check the silver Drude numbers against Vial et al. 2005, run the self-test in Firefox, and plan Phase 7
 
 ## Decisions log
 
@@ -119,6 +119,13 @@ Never silently reverse one of these. Add a new row instead.
 | 2026-11-22 | Drude skin depth under 2 cells and material wavelength under 10 cells are warnings in `Scene::status`, not errors | allowed scenes, but the user should know |
 | 2026-11-22 | The discrete energy includes J^2 / (2 wp^2) and P^2 / (2 d_eps) + V^(n-1/2) V^(n+1/2) / (2 d_eps w0^2) | derived in `Aux::energy`: the Drude part is exactly conserved for gamma = 0 and never increasing otherwise; the Lorentz part is the leapfrog invariant for delta = 0 |
 | 2026-11-22 | A16 and A17 run the A13 slab with the material swapped, in both modes; A21 peaks are picked blind (the tallest), from the probe spectrum over the analytic Ricker spectrum | one slab harness; no normalization run; no tuning toward the theory |
+| 2026-11-22 | GPU medium table: rows of 3 vec4 (Ca, Cb, flags; Drude k, beta, cj; Lorentz a1, a2, a3, cp); TMz indexes by material id, TEz by edge id into one row per unordered material pair | the pair table depends only on the material table, so live paint rewrites edge ids and never the coef buffer |
+| 2026-11-22 | J, P, P^(n-1) packed in one `aux` buffer per E array, a stub without dispersion; every E shader prepends `medium.wgsl` | keeps each pass within 8 storage buffers; one port of `Aux::update` |
+| 2026-11-22 | TEz on the GPU is three passes (Hz, Ex, Ey) on the TMz buffer slots; TF/SF and sources reuse the TMz shaders with the TEz order, times and negated edge factors | no second TF/SF shader; the same lists the CPU applies |
+| 2026-11-22 | GPU aux restart follows each CPU kernel exactly: material id in TMz, row value in TEz | a live-paint trial with the restart disabled fails, so it is tested |
+| 2026-11-22 | Silver is `material::silver(dx)`, a Drude fit converted per cell size, and joins the palette as `palette(dx)`; presets use the same function | painted silver and preset silver are one material, so TEz never meets two different Drude metals from the palette |
+| 2026-11-22 | `Status` carries `mode` and `warnings`; the UI shows both and has a TM/TE switch; leaving TE on the plasmon preset makes it a custom scene | the mode comes from the same poll as every other status number |
+| 2026-11-22 | A preset badge with a `plot` opens that plot; Vite bundles `validation/report/drude_cylinder.png` into the site | no copy step in the Pages build |
 
 ## Measured numbers
 
@@ -186,6 +193,11 @@ Fill in as they become available. These go in the README.
 | Energy with lossy Drude and Lorentz | worst single-step rise 0 (Drude), 1.1e-15 of the start (Lorentz, round-off) | 6000 steps, source off | 2026-11-22 |
 | Drude plasma oscillation, uniform field | E_n = cos(n theta) to 1e-11 over 2000 steps | Crank-Nicolson identity, tan(theta/2) = (wp / sqrt(eps_inf)) S / 2 | 2026-11-22 |
 | `fdtd validate` runtime | about 52 s for 20 checks | release build | 2026-11-22 |
+| GPU vs CPU, Phase 6 scenes | drude_tm 8.1e-6, drude_te 7.6e-7, lorentz_tm 1.2e-5, lorentz_te (Drude and Lorentz on shared edges) 8.3e-6, te_materials_cpml 1.4e-6, te_tfsf_rod_plus_y 6.5e-7; plasmon, mirror, absorber twins 1.2e-5, 3.0e-6, 2.1e-6 | GTX 1660 Ti, every 250 steps to 2000; gate 1e-4 | 2026-11-22 |
+| GPU vs CPU, dispersive live paint | 6.1e-6 (TEz), 9.2e-6 (TMz) | Drude stroke, part erased, Lorentz over it, at steps 500, 900, 1300 | 2026-11-22 |
+| Browser GPU vs native CPU (self-test page) | drude_te 1.3e-6; the other three scenes unchanged (5.1e-6 worst) | headed Chromium with WebGPU, GTX 1660 Ti | 2026-11-22 |
+| Preset display gains | plasmon 0.95, mirror 27, absorber 0.75 (1 / p99 of the node field) | CPU run of the full presets, 1800 to 2600 steps | 2026-11-22 |
+| First-load weight | 684 kB gzipped (wasm 277 kB) | `web/scripts/weight.mjs`; budget 2 MB | 2026-11-22 |
 
 ## Known deviations from reference
 
@@ -224,6 +236,9 @@ Fill in as they become available. These go in the README.
 | Phase 6 plan "TE cavity resonance against the discrete closed form" | Covered by A18 instead | the TEz box is the exact dual of the TMz box, which A6 and A7 check | yes |
 | A21 convergence study | Radius 5, 10, 20 cells at fixed k a; the 20-cell run is in the plot script, not in `cargo test` | 40 s in release; the error left at 20 cells is retardation, not grid | yes |
 | Lossy Lorentz energy | Asserted non-increasing per step to 1e-14 although not proven | the worst measured rise is 1.1e-15, round-off; it is a regression guard | yes |
+| Silver Drude parameters | eps_inf 3.718, wp 1.3659e16 rad/s, gamma 2.7909e13 rad/s, quoted from memory as the Vial et al. 2005 fit | not checked against the paper this session | open: check before claiming silver is quantitative |
+| Plasmon preset view | TEz draws Hz; the plasmon field enhancement is in the in-plane E, which the app does not draw | the preset text says what is visible (the wire bends the wave), not more | yes, an E magnitude view could come later |
+| Phase 6 browser checks | Chrome only (headed Chromium); Firefox not rerun | Playwright Firefox here has no WebGPU | open |
 
 ## CI coverage
 
@@ -253,6 +268,32 @@ Format:
 
 Write the Broke field carefully, especially when the cause was embarrassing.
 It becomes the devlog.
+
+### 2026-11-22 (Phase 6, parts C and D)
+**Landed:** the GPU kernel runs TEz and both dispersive models. The medium
+table is rows of three vec4, one per material in TMz and one per material
+pair in TEz, and every E shader calls `medium.wgsl`, a port of the CPU update
+in the same order, so plain cells still run the Phase 5 line. Six new scenes
+pass Tier 4 (worst 1.2e-5), dispersive live paint passes in both modes, and
+the browser self-test gained the TEz Drude scene (1.3e-6 in Chromium). The
+app has a TM/TE switch, silver in the palette (a Drude fit converted per cell
+size), skin depth and resolution warnings, and three presets: a plasmon on a
+silver wire (TEz, badge on the A21 plot), a silver mirror and a resonant
+absorber. The report and the Verify panel list A16, A17, A18 and A21. 278 Rust
+tests, 5 Vitest, 6 Playwright, 20 validation checks, all green. Nothing
+pushed.
+**Broke:** Three things. First, all four TEz Tier 4 scenes failed at once
+with "this kernel does not run Te scenes"; the GPU was fine, the test harness
+still built `SimTm` directly, and its padding check read fields by TMz name.
+Second, the presets test assumed every preset table starts vacuum, glass,
+PEC; the plasmon preset did not, so it does now. Third, my first headed GPU
+run timed out on the self-test page because I opened it under `/YeeBox/`;
+with `base: "./"` the preview serves at the root and fell back to the main
+page. Also worth saying: my first plasmon copy claimed the field crowds onto
+the surface, but TEz draws Hz and that crowding is in E, so I reworded it.
+**Open:** check the silver numbers against Vial et al. 2005; Firefox; an
+in-plane E view for the plasmon; CI and Pages still have not run.
+**Next:** the owner pushes and enables Pages, then plan Phase 7.
 
 ### 2026-11-22 (Phase 6, parts A and B)
 **Landed:** TEz and dispersive media on the CPU reference. `te.rs` is the TMz
