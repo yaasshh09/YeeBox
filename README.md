@@ -20,9 +20,12 @@ That's the goal. Here's where it stands today, honestly:
   reference on every committed scene, and a browser app that runs it live:
   paint walls and glass, drop and drag sources, probe the field, share the
   exact scene as a link.
-- **Not done yet:** oblique plane waves,
-  dispersive materials, scattering and far-field checks. I'll only claim those
-  once their tests pass.
+- **Done on the CPU reference, not yet on the GPU or in the browser:** the
+  second polarization, TEz (electric field in the plane, which surface
+  plasmons need), and frequency-dependent materials: Drude metals and Lorentz
+  resonators by auxiliary differential equation, in both polarizations.
+- **Not done yet:** oblique plane waves, scattering and far-field checks.
+  I'll only claim those once their tests pass.
 
 The reference solver stays deliberately simple. Its only job is to be
 obviously correct, so it can prove the fast GPU kernel right.
@@ -65,6 +68,11 @@ picture. `fdtd report` regenerates the plot and
 | Attenuation in a lossy medium | 0.40 percent | 1 percent |
 | Waveguide guided wavelength and cutoff | 0.030 percent | 0.5 percent |
 | Waveguide evanescent decay below cutoff | 0.060 percent | 1 percent |
+| TEz against TMz under duality, vacuum line source, with reflections and a CPML | bit for bit | 1e-10 |
+| Drude slab R and T vs the complex permittivity, both polarizations | 2.2e-3 | 0.02 |
+| Lorentz slab R and T vs the complex permittivity, both polarizations | 4.8e-3 | 0.02 |
+| Small Drude cylinder resonance vs wp / sqrt(eps_inf + 1), TEz, radius 10 cells | 0.51 percent | 5 percent |
+| Energy with lossless Drude or Lorentz media, J and P included, 10000 steps | 8e-14 | 1e-10 |
 
 For the slab, the lossy medium and the waveguide, the error that remains is
 the grid's own dispersion, and I can show it: the golden data also carries the
@@ -72,6 +80,16 @@ exact answer of the discrete Yee scheme, and the measurements land on it to
 1e-7 or better. The bands were picked from that prediction before any run.
 
 ![Slab R and T vs frequency](validation/report/slab_rt.svg)
+
+The Drude cylinder is the plasmon check, and it shows staircasing honestly. A
+circle drawn on a square grid is not a circle, and at a radius of 5 cells the
+staircase splits the surface mode into several peaks; the tallest is 14
+percent off. At 10 cells the dipole peak is 0.5 percent off, and at 20 cells
+0.3 percent, which is about what a cylinder that is not quite small (k a =
+0.1) should show. The peak is picked blind, the tallest one, and a NumPy script
+re-measures every run on its own.
+
+![Drude cylinder resonance vs radius](validation/report/drude_cylinder.png)
 
 `fdtd validate` runs every case and prints this table with its gates;
 `cargo test` checks the same cases.

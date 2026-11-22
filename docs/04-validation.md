@@ -66,7 +66,17 @@ Notes:
   peak; deep nulls are dominated by staircasing error. Also demonstrate that
   the error decreases as the cylinder radius in cells doubles.
 - A13, A16, A17: valid over the band where the wavelength inside the material
-  is at least 20 cells. State the band in the test.
+  is at least 20 cells. State the band in the test. A16 and A17 use
+  lambda0 / sqrt(|eps(w)|) with the complex eps, run in both TMz and TEz, and
+  put the plasma or resonance frequency inside the band (f = 0.02).
+- A18: compare Hz of the TEz kernel with Ez of the TMz kernel after the same
+  number of steps, with the TEz waveform moved half a step earlier. The
+  duality is exact on this layout, closed box and CPML alike; a guard checks
+  that the unshifted source is visibly off.
+- A21: k a = 0.1 at the quasi-static resonance, Q about 10, gated at a radius
+  of 10 cells. The peak is the tallest one, picked blind. Staircasing splits
+  the surface mode at small radii (several peaks at 5 cells); the trend over
+  5, 10, 20 cells is `validation/report/drude_cylinder.png`.
 - A24: confirm the reference gap edges with MPB or the textbook before
   enabling this as a gate. Until confirmed it is a recorded measurement, not a
   pass/fail test.

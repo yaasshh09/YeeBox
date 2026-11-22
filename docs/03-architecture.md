@@ -82,8 +82,18 @@ used by both kernels. Rasterization rule: a cell takes the material of the
 last shape containing its center.
 
 `Scene::validate()` returns typed errors for: Courant above the limit,
-`eps_inf < 1`, dispersive material inside the PML, a source inside the PML,
-monitors outside the domain, grid too large for the device limits.
+`eps_inf < 1`, dispersive material inside the PML (or within two nodes of
+its interface), a Lorentz `w0 * dt >= 1`, two different Drude or Lorentz cells
+sharing a TEz edge, a TEz plane wave in a non-vacuum background, a source
+inside the PML, monitors outside the domain, grid too large for the device
+limits. Resolution problems that are allowed but worth knowing (a Drude skin
+depth under 2 cells, a material wavelength under 10 cells) come back as
+warnings in `Scene::status`, not errors.
+
+`mode` defaults to TM and is left out of the JSON when it is TM, so every
+file and link from before Phase 6 decodes and re-encodes unchanged; no
+migration was needed. Anything that builds a CPU kernel from an arbitrary
+scene goes through `kernel::CpuKernel`, which picks `SimTm` or `SimTe`.
 
 Version the format from day one. Shared URLs must keep working after updates,
 so every format change adds a migration.

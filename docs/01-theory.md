@@ -40,7 +40,8 @@ Required for surface plasmons: a plasmon needs an electric field component
 normal to the metal surface, which TMz does not have. A plasmonic demo run in
 TMz is physically wrong no matter how good it looks.
 
-Phases 1 to 5 implement TMz only. TEz arrives in Phase 6.
+Phases 1 to 5 implemented TMz only. Phase 6 adds TEz (`te.rs`), and a scene
+picks its mode with `"mode": "te"` (TMz is the default and is not written).
 
 ## Yee grid staggering, TMz
 
@@ -73,10 +74,34 @@ the E update reads only H and writes only E. No double buffering is needed, on
 CPU or GPU. If someone adds ping-pong buffers they have misunderstood the
 scheme.
 
-TEz is the dual: swap E and H roles, with material coefficients now living on
-the E edges. Because `Ex` and `Ey` sit at different points than cell centers,
-permittivity must be evaluated at each edge location. See material averaging
-below.
+## Yee grid staggering, TEz
+
+TEz uses the TMz layout with the roles swapped, so a material cell is the same
+node in both modes and the CPML profiles are shared:
+
+    Hz[i, j]   lives at ( i * dx,        j * dy )         time n + 1/2
+    Ex[i, j]   lives at ( i * dx,       (j + 1/2) * dy )  time n
+    Ey[i, j]   lives at ((i + 1/2) * dx, j * dy )         time n
+
+    Hz[i,j] += (dt / mu) * ( (Ex[i,j] - Ex[i,j-1]) / dy
+                           - (Ey[i,j] - Ey[i-1,j]) / dx )
+    Ex[i,j]  = Ca * Ex[i,j] + Cb * (Hz[i, j+1] - Hz[i, j]) / dy
+    Ey[i,j]  = Ca * Ey[i,j] - Cb * (Hz[i+1, j] - Hz[i, j]) / dx
+
+Hz is updated first in a step, then E, so after n steps a kernel holds E^n and
+Hz^(n - 1/2), the same levels as TMz holds E and H. In vacuum this is the TMz
+update with Ez -> Hz, Hx -> -Ex, Hy -> -Ey, half a step later; test A18 checks
+it bit for bit, reflections and CPML included.
+
+The outer ring of Hz nodes is never updated and stays zero, as the TMz ring of
+Ez does. That keeps the duality exact, and it makes the outer wall of a TEz box
+a magnetic wall (PMC, Hz = 0), not an electric one. Behind a CPML the wall type
+does not matter; in a closed TEz box it does, and the README says so. PEC
+painted inside the domain is a real electric conductor: every edge touching a
+PEC cell has Ca = Cb = 0.
+
+Point sources in TEz drive Hz (a magnetic line current), read at
+t = (n + 1/2) dt, right after the Hz update.
 
 ## Boundaries
 
@@ -103,6 +128,13 @@ Material interfaces on a staggered grid are staircased. For Ez nodes the
 permittivity is that of the cell. For TEz edge components use the arithmetic
 mean of the two cells sharing the edge. State this limitation in the README;
 staircasing makes curved-surface convergence first order.
+
+With dispersive cells the TEz edge takes the mean of the two eps(w): eps_inf
+and sigma are averaged, and each cell's pole enters with its strength halved
+(wp^2 / 2 or d_eps / 2), whole when both cells share it. An edge holds one
+Drude and one Lorentz slot, so two different Drude (or two different Lorentz)
+cells side by side are refused by the validator. Dispersive cells must also
+sit at least two nodes inside the CPML interface (`Scene::dispersive_allowed`).
 
 ### Dispersive models
 
