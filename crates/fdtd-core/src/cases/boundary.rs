@@ -104,6 +104,7 @@ pub fn a8() -> Result<Vec<CaseResult>> {
         plane_wave: None,
         paint: None,
         view: None,
+        mode: crate::scene::Mode::Tm,
     };
     let mut sim = SimTm::from_scene(&scene)?;
     let (steps, period) = (3000, 40);

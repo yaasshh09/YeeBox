@@ -75,6 +75,7 @@ fn cluttered(nx: usize, ny: usize) -> Scene {
         plane_wave: None,
         paint: None,
         view: None,
+        mode: fdtd_core::scene::Mode::Tm,
     }
 }
 

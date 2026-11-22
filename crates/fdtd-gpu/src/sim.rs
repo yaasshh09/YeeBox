@@ -12,7 +12,7 @@ use fdtd_core::kernel::{BuildKey, material_edit};
 #[cfg(not(target_arch = "wasm32"))]
 use fdtd_core::kernel::{Kernel, Spectrum};
 use fdtd_core::monitor::{Dft, FluxLine};
-use fdtd_core::scene::{Monitor, Scene, Source};
+use fdtd_core::scene::{Mode, Monitor, Scene, Source};
 use fdtd_core::source::SourceKind;
 use fdtd_core::tfsf::Tfsf;
 use fdtd_core::{FdtdError, Result};
@@ -135,6 +135,10 @@ impl GpuSim {
     /// must not depend on it; Tier 4 checks 4, 8 and 16.
     pub fn with_workgroup(gpu: &'static Gpu, scene: &Scene, wg: u32) -> Result<Self> {
         scene.validate()?;
+        // ponytail: TMz only until the TEz shaders land (Phase 6 part C).
+        if scene.mode != Mode::Tm {
+            return Err(FdtdError::WrongMode { mode: scene.mode });
+        }
         if !(1..=16).contains(&wg) {
             return Err(FdtdError::InvalidParameter {
                 name: "workgroup edge",
@@ -767,6 +771,9 @@ impl GpuSim {
             Component::Ez => EZ,
             Component::Hx => HX,
             Component::Hy => HY,
+            component @ (Component::Hz | Component::Ex | Component::Ey) => {
+                return Err(FdtdError::FieldNotInMode { component });
+            }
         }];
         let bytes = self.gpu.read_async(buf, 0, buf.size()).await?;
         Ok(bytemuck::cast_slice::<u8, f32>(&bytes)

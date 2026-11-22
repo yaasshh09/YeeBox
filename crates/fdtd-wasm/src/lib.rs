@@ -36,6 +36,8 @@ pub fn error_code(e: &FdtdError) -> &'static str {
         FdtdError::Case(_) => "case",
         FdtdError::Json(_) => "json",
         FdtdError::Gpu(_) => "gpu",
+        FdtdError::FieldNotInMode { .. } => "field_not_in_mode",
+        FdtdError::WrongMode { .. } => "wrong_mode",
         FdtdError::Rebuild => "rebuild",
     }
 }

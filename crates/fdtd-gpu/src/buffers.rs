@@ -57,12 +57,13 @@ pub struct GpuCorrection {
     pub factor: f32,
 }
 
-/// The shader number of a field: 0 Ez, 1 Hx, 2 Hy.
+/// The shader number of a field: 0 the node field (Ez or Hz), 1 the y-edge
+/// field (Hx or Ex), 2 the x-edge field (Hy or Ey). TEz shares the TMz slots.
 pub fn field_id(c: Component) -> u32 {
     match c {
-        Component::Ez => 0,
-        Component::Hx => 1,
-        Component::Hy => 2,
+        Component::Ez | Component::Hz => 0,
+        Component::Hx | Component::Ex => 1,
+        Component::Hy | Component::Ey => 2,
     }
 }
 

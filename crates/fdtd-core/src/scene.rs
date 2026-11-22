@@ -51,6 +51,27 @@ pub struct Scene {
     /// How the field is drawn. Display only: no kernel reads it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub view: Option<View>,
+    /// Polarization. TM is the default and is not written, so files from
+    /// before TEz existed are unchanged.
+    #[serde(default, skip_serializing_if = "Mode::is_tm")]
+    pub mode: Mode,
+}
+
+/// Which 2D polarization a scene runs in (`docs/01-theory.md`, 2D modes).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Mode {
+    /// Ez, Hx, Hy: electric field out of the plane.
+    #[default]
+    Tm,
+    /// Hz, Ex, Ey: electric field in the plane. Plasmons need this one.
+    Te,
+}
+
+impl Mode {
+    fn is_tm(&self) -> bool {
+        *self == Mode::Tm
+    }
 }
 
 /// Display settings carried with a scene so a shared link looks the same.
@@ -1170,6 +1191,7 @@ pub(crate) mod tests {
             plane_wave: None,
             paint: None,
             view: None,
+            mode: crate::scene::Mode::Tm,
         }
     }
 
@@ -1842,6 +1864,20 @@ pub(crate) mod tests {
             bad.view.as_mut().unwrap().gain = gain;
             assert!(bad.validate().is_err(), "gain {gain}");
         }
+    }
+
+    #[test]
+    fn mode_defaults_to_tm_and_round_trips() {
+        let s = sample();
+        assert_eq!(s.mode, Mode::Tm);
+        // TM is the default and is left out, so every older file and share
+        // link decodes and re-encodes exactly as before.
+        assert!(!s.to_json().unwrap().contains("mode"));
+        let mut te = s.clone();
+        te.mode = Mode::Te;
+        let text = te.to_json().unwrap();
+        assert!(text.contains(r#""mode": "te""#));
+        assert_eq!(Scene::from_json(&text).unwrap(), te);
     }
 
     #[test]

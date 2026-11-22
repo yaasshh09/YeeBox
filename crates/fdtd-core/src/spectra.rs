@@ -158,6 +158,7 @@ mod tests {
             }),
             paint: None,
             view: None,
+            mode: crate::scene::Mode::Tm,
         }
     }
 

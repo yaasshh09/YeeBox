@@ -33,7 +33,7 @@ use crate::error::{FdtdError, Result};
 use crate::grid::Component;
 use crate::kernel::{BuildKey, Kernel, Spectrum, material_edit};
 use crate::monitor::{Dft, FluxLine, PointProbe};
-use crate::scene::{Monitor, Scene, Source};
+use crate::scene::{Mode, Monitor, Scene, Source};
 use crate::source::SourceKind;
 use crate::tfsf::Tfsf;
 
@@ -91,6 +91,9 @@ impl SimTm {
     }
 
     fn build(scene: &Scene) -> Result<Self> {
+        if scene.mode != Mode::Tm {
+            return Err(FdtdError::WrongMode { mode: scene.mode });
+        }
         let (nx, ny, s) = (scene.grid.nx, scene.grid.ny, scene.grid.courant);
         let ids = scene.rasterize();
         let mut ca = vec![0.0; nx * ny];
@@ -364,6 +367,9 @@ impl Kernel for SimTm {
             Component::Ez => self.ez.clone(),
             Component::Hx => self.hx.clone(),
             Component::Hy => self.hy.clone(),
+            component @ (Component::Hz | Component::Ex | Component::Ey) => {
+                return Err(FdtdError::FieldNotInMode { component });
+            }
         })
     }
 
@@ -415,7 +421,7 @@ impl Kernel for SimTm {
 pub(crate) mod tests {
     use super::*;
     use crate::cpml::{Cpml, Profile};
-    use crate::grid::{Axis, Component, curl_stencil_tm};
+    use crate::grid::{Axis, Component, curl_stencil};
     use crate::material::Material;
     use crate::scene::{GridSpec, SCENE_VERSION, Shape};
     use crate::source::Waveform;
@@ -439,6 +445,7 @@ pub(crate) mod tests {
             plane_wave: None,
             paint: None,
             view: None,
+            mode: crate::scene::Mode::Tm,
         }
     }
 
@@ -456,6 +463,18 @@ pub(crate) mod tests {
         b.geometry.clear();
         b.pml = Some(crate::cpml::tests::spec(5));
         [a, b]
+    }
+
+    #[test]
+    fn refuses_a_te_scene() {
+        let mut s = crate::scene::tests::sample();
+        s.mode = crate::scene::Mode::Te;
+        assert_eq!(
+            SimTm::from_scene(&s).unwrap_err(),
+            FdtdError::WrongMode {
+                mode: crate::scene::Mode::Te
+            }
+        );
     }
 
     #[test]
@@ -574,13 +593,14 @@ pub(crate) mod tests {
 
     impl Fields {
         fn apply(&self, target: Component, i: usize, j: usize) -> f64 {
-            curl_stencil_tm(target)
+            curl_stencil(target)
                 .iter()
                 .map(|t| {
+                    // By layout slot, so TEz stencils read the same arrays.
                     let src = match t.src {
-                        Component::Ez => &self.ez,
-                        Component::Hx => &self.hx,
-                        Component::Hy => &self.hy,
+                        Component::Ez | Component::Hz => &self.ez,
+                        Component::Hx | Component::Ex => &self.hx,
+                        Component::Hy | Component::Ey => &self.hy,
                     };
                     // y wraps modulo ny. Inside the non-periodic loop ranges
                     // the offset never leaves the grid, so this is the identity there.
@@ -649,10 +669,10 @@ pub(crate) mod tests {
     impl CpmlFields {
         fn slot(target: Component, axis: Axis) -> usize {
             match (target, axis) {
-                (Component::Hx, _) => 0,
-                (Component::Hy, _) => 1,
-                (Component::Ez, Axis::X) => 2,
-                (Component::Ez, Axis::Y) => 3,
+                (Component::Hx | Component::Ex, _) => 0,
+                (Component::Hy | Component::Ey, _) => 1,
+                (Component::Ez | Component::Hz, Axis::X) => 2,
+                (Component::Ez | Component::Hz, Axis::Y) => 3,
             }
         }
 
@@ -661,8 +681,8 @@ pub(crate) mod tests {
         /// x is indexed by i, y by j.
         fn coef(&self, target: Component, axis: Axis, i: usize, j: usize) -> (f64, f64, f64) {
             let (p, k) = match (target, axis) {
-                (Component::Ez, Axis::X) => (&self.pml.x_int, i),
-                (Component::Ez, Axis::Y) => (&self.pml.y_int, j),
+                (Component::Ez | Component::Hz, Axis::X) => (&self.pml.x_int, i),
+                (Component::Ez | Component::Hz, Axis::Y) => (&self.pml.y_int, j),
                 (_, Axis::X) => (&self.pml.x_half, i),
                 (_, Axis::Y) => (&self.pml.y_half, j),
             };
@@ -672,11 +692,11 @@ pub(crate) mod tests {
         fn apply(&mut self, target: Component, i: usize, j: usize) -> f64 {
             let nx = self.f.nx;
             let (mut d, mut used, mut sum) = ([0.0; 2], [false; 2], 0.0);
-            for t in curl_stencil_tm(target) {
+            for t in curl_stencil(target) {
                 let src = match t.src {
-                    Component::Ez => &self.f.ez,
-                    Component::Hx => &self.f.hx,
-                    Component::Hy => &self.f.hy,
+                    Component::Ez | Component::Hz => &self.f.ez,
+                    Component::Hx | Component::Ex => &self.f.hx,
+                    Component::Hy | Component::Ey => &self.f.hy,
                 };
                 let (si, sj) = ((i as i64 + t.di) as usize, (j as i64 + t.dj) as usize);
                 let v = t.sign * src[sj * nx + si];

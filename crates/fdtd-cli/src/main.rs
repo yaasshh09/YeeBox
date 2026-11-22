@@ -90,6 +90,7 @@ fn bench_scene(n: usize, pml: bool) -> Scene {
         plane_wave: None,
         paint: None,
         view: None,
+        mode: fdtd_core::scene::Mode::Tm,
     }
 }
 

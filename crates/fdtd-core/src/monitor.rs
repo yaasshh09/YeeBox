@@ -207,6 +207,11 @@ pub fn read_taps(sim: &SimTm, taps: &[Tap]) -> Vec<f64> {
             Component::Ez => sim.ez()[k],
             Component::Hx => sim.hx()[k],
             Component::Hy => sim.hy()[k],
+            // `FluxLine::taps` builds every tap a TMz kernel reads, and it
+            // names only TMz fields, so no scene can get here.
+            Component::Hz | Component::Ex | Component::Ey => {
+                unreachable!("TMz taps are Ez, Hx, Hy")
+            }
         })
         .collect()
 }
@@ -304,6 +309,7 @@ mod tests {
             }),
             paint: None,
             view: None,
+            mode: crate::scene::Mode::Tm,
         }
     }
 
@@ -526,6 +532,7 @@ mod tests {
             }),
             paint: None,
             view: None,
+            mode: crate::scene::Mode::Tm,
         };
         let freqs = [0.02, 0.035, 0.05, 0.065, 0.08];
         let node = 60;

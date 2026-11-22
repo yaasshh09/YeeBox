@@ -260,7 +260,7 @@ impl Sim1d {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::grid::{Axis, Component, curl_stencil_tm};
+    use crate::grid::{Axis, Component, curl_stencil};
 
     /// Deterministic values in [-1, 1) from a 64-bit LCG. Enough for test data.
     fn random_fields(seed: u64, n: usize) -> Vec<f64> {
@@ -279,7 +279,7 @@ mod tests {
     /// dropping every y-difference. Interior nodes only.
     fn stencil_step(ez: &mut [f64], hy: &mut [f64], s: f64) {
         let apply = |target: Component, src: &[f64], i: usize| -> f64 {
-            curl_stencil_tm(target)
+            curl_stencil(target)
                 .iter()
                 .filter(|t| t.axis == Axis::X)
                 .map(|t| t.sign * src[(i as i64 + t.di) as usize])
@@ -418,6 +418,7 @@ mod tests {
             plane_wave: None,
             paint: None,
             view: None,
+            mode: crate::scene::Mode::Tm,
         };
         let mut two = SimTm::from_scene(&scene).unwrap();
         let mut one = Sim1d::new(nx, s, Boundary1d::Cpml(spec), Boundary1d::Cpml(spec)).unwrap();

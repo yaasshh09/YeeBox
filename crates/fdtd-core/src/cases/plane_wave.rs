@@ -105,6 +105,7 @@ pub fn slab_scene(l: usize, f_max: f64) -> (Scene, usize, usize) {
         }),
         paint: None,
         view: None,
+        mode: crate::scene::Mode::Tm,
     };
     (scene, r_at, t_at)
 }
@@ -262,6 +263,7 @@ pub fn a14() -> Result<Vec<CaseResult>> {
         plane_wave: None,
         paint: None,
         view: None,
+        mode: crate::scene::Mode::Tm,
     };
     let mut sim = SimTm::from_scene(&scene)?;
     run_until_quiet(&mut sim, 600, 200_000)?;
@@ -337,6 +339,7 @@ fn guide_phasors(steps_per_period: usize, row: usize, xs: &[usize]) -> Result<Ve
         plane_wave: None,
         paint: None,
         view: None,
+        mode: crate::scene::Mode::Tm,
     };
     let mut sim = SimTm::from_scene(&scene)?;
     let window = 4 * steps_per_period;
@@ -499,6 +502,7 @@ pub fn empty_tfsf(n: usize, lo: usize, hi: usize, dir: Direction, periodic: bool
         }),
         paint: None,
         view: None,
+        mode: crate::scene::Mode::Tm,
     }
 }
 

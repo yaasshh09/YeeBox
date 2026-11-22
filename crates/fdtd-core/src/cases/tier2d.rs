@@ -31,6 +31,7 @@ fn vacuum(nx: usize, ny: usize, s: f64) -> Scene {
         plane_wave: None,
         paint: None,
         view: None,
+        mode: crate::scene::Mode::Tm,
     }
 }
 

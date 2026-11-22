@@ -65,6 +65,15 @@ pub enum FdtdError {
     #[error("gpu: {0}")]
     Gpu(String),
 
+    /// A field was asked of a kernel running the other polarization (Hz of
+    /// a TMz kernel, Ez of a TEz one).
+    #[error("{component:?} is not a field of this mode")]
+    FieldNotInMode { component: crate::grid::Component },
+
+    /// A kernel was built from a scene in the polarization it does not run.
+    #[error("this kernel does not run {mode:?} scenes")]
+    WrongMode { mode: crate::scene::Mode },
+
     /// A live edit changed something a kernel is built from (grid, y wrap,
     /// material table, CPML, plane wave); build a new kernel instead.
     #[error("this edit needs a new kernel")]
