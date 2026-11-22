@@ -13,24 +13,24 @@
 //! Normalized units throughout; frequencies in cycles per unit time.
 
 use crate::error::{FdtdError, Result};
-use crate::kernel::{Kernel, Spectrum};
+use crate::kernel::{CpuKernel, Kernel, Spectrum};
 use crate::monitor::Normal;
 use crate::scene::{Monitor, Scene};
 use crate::tfsf::Direction;
-use crate::tm::SimTm;
 
 /// The decay level a spectrum run waits for, relative to the peak |Ez| seen.
 pub const QUIET: f64 = 1e-6;
 
-/// Steps `sim` until max |Ez| over the grid has stayed below `QUIET` times
-/// the largest value seen for `window` consecutive steps. Returns the step
-/// count, or `NotDecayed` if `max_steps` pass first.
-pub fn run_until_quiet(sim: &mut SimTm, window: u64, max_steps: u64) -> Result<u64> {
+/// Steps `sim` until max |node field| (Ez, or Hz in TEz) over the grid has
+/// stayed below `QUIET` times the largest value seen for `window`
+/// consecutive steps. Returns the step count, or `NotDecayed` if
+/// `max_steps` pass first.
+pub fn run_until_quiet(sim: &mut CpuKernel, window: u64, max_steps: u64) -> Result<u64> {
     let (mut peak, mut quiet) = (0.0_f64, 0u64);
     let mut level = 1.0;
     while sim.time_step() < max_steps {
-        sim.step();
-        let m = sim.ez().iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+        sim.step(1);
+        let m = sim.node_field().iter().fold(0.0_f64, |m, v| m.max(v.abs()));
         peak = peak.max(m);
         level = if peak > 0.0 { m / peak } else { 1.0 };
         quiet = if peak > 0.0 && level < QUIET {
@@ -92,7 +92,7 @@ pub fn rt_spectrum(
     let run = |s: &Scene| -> Result<(Vec<f64>, Vec<f64>, u64)> {
         let mut s = s.clone();
         s.monitors = vec![line(r_at), line(t_at)];
-        let mut sim = SimTm::from_scene(&s)?;
+        let mut sim = CpuKernel::from_scene(&s)?;
         let steps = run_until_quiet(&mut sim, window, max_steps)?;
         let mut fluxes = Kernel::monitor_spectra(&mut sim)?
             .into_iter()
@@ -166,8 +166,13 @@ mod tests {
     /// T is exactly 1 and R is the TF/SF leakage, round-off squared.
     #[test]
     fn empty_box_is_transparent() {
-        for dir in [Direction::PlusX, Direction::MinusX] {
-            let scene = periodic_line(160, dir);
+        let modes = [crate::scene::Mode::Tm, crate::scene::Mode::Te];
+        for (dir, mode) in [Direction::PlusX, Direction::MinusX]
+            .into_iter()
+            .flat_map(|d| modes.map(|m| (d, m)))
+        {
+            let mut scene = periodic_line(160, dir);
+            scene.mode = mode;
             let (r_at, t_at) = match dir {
                 Direction::PlusX => (24, 120),
                 _ => (135, 40),
@@ -200,7 +205,7 @@ mod tests {
             y1: 3.0,
             material: 1,
         });
-        let mut sim = SimTm::from_scene(&scene).unwrap();
+        let mut sim = CpuKernel::from_scene(&scene).unwrap();
         assert!(matches!(
             run_until_quiet(&mut sim, 100, 3000),
             Err(FdtdError::NotDecayed { steps: 3000, .. })

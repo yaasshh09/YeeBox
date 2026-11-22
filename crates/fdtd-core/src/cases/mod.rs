@@ -9,6 +9,7 @@
 //! and `all` reports it as a failed row. Normalized units throughout.
 
 pub mod boundary;
+pub mod dispersive;
 pub mod duality;
 pub mod plane_wave;
 pub mod signal;
@@ -119,6 +120,8 @@ pub const CASES: &[(&str, CaseFn)] = &[
     ("A13, R+T", plane_wave::a13),
     ("A14", plane_wave::a14),
     ("A15", plane_wave::a15),
+    ("A16", dispersive::a16),
+    ("A17", dispersive::a17),
     ("A18", duality::a18),
 ];
 

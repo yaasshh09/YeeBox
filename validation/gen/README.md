@@ -20,6 +20,7 @@ golden data only with those versions.
 | `line_source_hankel.py` | none | `validation/golden/line_source_hankel.csv`, `H0^(2)(k r) / H0^(2)(k r0)` at the A8 probes, with the numerical and the continuum k |
 | `slab_airy.py` | none | `validation/golden/slab_airy.csv`, A13 slab R and T (continuum Airy and the exact discrete Yee slab) at L = 20, 40, 80; `validation/golden/lossy_medium.csv`, A14 attenuation per cell (continuum and discrete) |
 | `waveguide.py` | none | `validation/golden/waveguide.csv`, A11 and A12 TM1 guided beta, evanescent alpha and the cutoff (continuum and discrete) |
+| `slab_dispersive.py` | none | `validation/golden/slab_dispersive.csv`, A16 and A17 Drude and Lorentz slab R and T from the complex eps(w), exp(+jwt), over the band where the wavelength in the material is at least 20 cells; reuses `slab_cont` from `slab_airy.py` |
 
 Phases 0 and 1 need no golden data: every reference so far is an exact
 discrete identity or a closed form computed in Rust. The cavity plot script

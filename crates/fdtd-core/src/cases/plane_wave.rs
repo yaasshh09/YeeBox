@@ -7,7 +7,7 @@ use super::signal::slope;
 use super::{CaseResult, Gate, ensure};
 use crate::cpml::PmlSpec;
 use crate::error::{FdtdError, Result};
-use crate::kernel::{Kernel, Spectrum};
+use crate::kernel::{CpuKernel, Kernel, Spectrum};
 use crate::material::Material;
 use crate::monitor::Dft;
 use crate::scene::{GridSpec, Monitor, SCENE_VERSION, Scene, Shape, Source};
@@ -23,7 +23,7 @@ const GUIDE: &str = include_str!("../../../../validation/golden/waveguide.csv");
 
 /// The numeric rows of a golden CSV (the three comment lines and the column
 /// header dropped), after checking its second line (the parameter line).
-fn golden(text: &str, params: &str, what: &str) -> Result<Vec<Vec<String>>> {
+pub(super) fn golden(text: &str, params: &str, what: &str) -> Result<Vec<Vec<String>>> {
     ensure(text.lines().nth(1) == Some(params), || {
         format!("{what}: golden data is for another setup")
     })?;
@@ -34,7 +34,7 @@ fn golden(text: &str, params: &str, what: &str) -> Result<Vec<Vec<String>>> {
         .collect())
 }
 
-fn num(cell: &str, what: &str) -> Result<f64> {
+pub(super) fn num(cell: &str, what: &str) -> Result<f64> {
     cell.parse()
         .map_err(|_| FdtdError::Case(format!("{what}: bad number {cell}")))
 }
@@ -56,6 +56,20 @@ fn normal_layer(d: usize) -> PmlSpec {
 /// l - 1, the golden file's "nodes 1..L"), 20 cells, T line, 4 cells, exit
 /// face, 4 cells, layer. Returns the scene and the two line columns.
 pub fn slab_scene(l: usize, f_max: f64) -> (Scene, usize, usize) {
+    let eps4 = Material::Dielectric {
+        eps_inf: 4.0,
+        sigma: 0.0,
+    };
+    slab_scene_with(l, f_max, eps4, crate::scene::Mode::Tm)
+}
+
+/// `slab_scene` with the slab made of `material`, run in `mode`.
+pub fn slab_scene_with(
+    l: usize,
+    f_max: f64,
+    material: Material,
+    mode: crate::scene::Mode,
+) -> (Scene, usize, usize) {
     let d = 16;
     let r_at = d + 4;
     let x0 = r_at + 4;
@@ -72,13 +86,7 @@ pub fn slab_scene(l: usize, f_max: f64) -> (Scene, usize, usize) {
             dx_phys_m: 1e-3,
             courant: 0.5,
         },
-        materials: vec![
-            Material::VACUUM,
-            Material::Dielectric {
-                eps_inf: 4.0,
-                sigma: 0.0,
-            },
-        ],
+        materials: vec![Material::VACUUM, material],
         geometry: vec![Shape::Rect {
             x0: s0 as f64,
             y0: -1.0,
@@ -105,7 +113,7 @@ pub fn slab_scene(l: usize, f_max: f64) -> (Scene, usize, usize) {
         }),
         paint: None,
         view: None,
-        mode: crate::scene::Mode::Tm,
+        mode,
     };
     (scene, r_at, t_at)
 }
@@ -265,7 +273,7 @@ pub fn a14() -> Result<Vec<CaseResult>> {
         view: None,
         mode: crate::scene::Mode::Tm,
     };
-    let mut sim = SimTm::from_scene(&scene)?;
+    let mut sim = CpuKernel::from_scene(&scene)?;
     run_until_quiet(&mut sim, 600, 200_000)?;
     let spectra = Kernel::monitor_spectra(&mut sim)?;
     let (mut worst_c, mut worst_d) = (0.0_f64, 0.0_f64);
