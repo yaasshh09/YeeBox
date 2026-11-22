@@ -382,6 +382,12 @@ impl SimTm {
         (&self.ca, &self.cb)
     }
 
+    /// The J and P part of the discrete energy (`Aux::energy`), 0 without
+    /// dispersion.
+    pub fn dispersive_energy(&self) -> f64 {
+        self.aux.energy(&self.rows, &self.pole, &self.ez, self.s)
+    }
+
     /// True on wall nodes and PEC material nodes of node (i, j).
     pub fn is_pec(&self, i: usize, j: usize) -> bool {
         self.cb[j * self.nx + i] == 0.0

@@ -414,6 +414,16 @@ impl SimTe {
     pub fn time_step(&self) -> u64 {
         self.n
     }
+
+    /// The J and P part of the discrete energy (`Aux::energy`), 0 without
+    /// dispersion.
+    pub fn dispersive_energy(&self) -> f64 {
+        self.aux_x
+            .energy(&self.rows, &self.pole_x, &self.ex, self.s)
+            + self
+                .aux_y
+                .energy(&self.rows, &self.pole_y, &self.ey, self.s)
+    }
 }
 
 impl Kernel for SimTe {

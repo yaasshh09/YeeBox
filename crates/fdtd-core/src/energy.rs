@@ -48,7 +48,7 @@ pub fn energy(sim: &SimTm) -> f64 {
             h += hy[k] * (hy[k] + s * (ez[k + 1] - ez[k]));
         }
     }
-    0.5 * (e + h)
+    0.5 * (e + h) + sim.dispersive_energy()
 }
 
 /// W^n of a TEz kernel, with the same assumptions as `energy`.
@@ -72,7 +72,7 @@ pub fn energy_te(sim: &SimTe) -> f64 {
             h += hz[k] * next;
         }
     }
-    0.5 * (e + h)
+    0.5 * (e + h) + sim.dispersive_energy()
 }
 
 #[cfg(test)]
@@ -251,5 +251,104 @@ mod tests {
             last = w;
         }
         assert!(last < 0.5 * w0, "loss must remove energy: {last} of {w0}");
+    }
+
+    /// The energy of `scene` in TMz and TEz over `steps`: worst relative
+    /// drift from the start, largest single-step rise, and the final level.
+    fn passivity(scene: &Scene, steps: usize) -> [(f64, f64, f64); 2] {
+        let mut tm = started(scene);
+        let mut te = started_te(scene);
+        let mut out = [(0.0, 0.0, 0.0); 2];
+        for (m, w) in out.iter_mut().enumerate() {
+            let energy_of =
+                |tm: &SimTm, te: &SimTe| if m == 0 { energy(tm) } else { energy_te(te) };
+            let w0 = energy_of(&tm, &te);
+            let (mut drift, mut rise, mut last) = (0.0_f64, 0.0_f64, w0);
+            for _ in 0..steps {
+                if m == 0 {
+                    tm.step();
+                } else {
+                    te.step();
+                }
+                let now = energy_of(&tm, &te);
+                drift = drift.max(((now - w0) / w0).abs());
+                rise = rise.max((now - last) / w0);
+                last = now;
+            }
+            *w = (drift, rise, last / w0);
+        }
+        out
+    }
+
+    /// Lossless Drude and Lorentz blocks: the total energy, J and P terms
+    /// included, is conserved to 1e-10 in both modes over 1e4 steps, and
+    /// the field energy alone is not (so the dispersive terms carry real
+    /// energy and the test can tell).
+    #[test]
+    fn dispersive_lossless_conserves_energy() {
+        for (name, m) in [
+            (
+                "drude",
+                Material::Drude {
+                    eps_inf: 1.5,
+                    wp: 0.4,
+                    gamma: 0.0,
+                },
+            ),
+            (
+                "lorentz",
+                Material::Lorentz {
+                    eps_inf: 1.5,
+                    d_eps: 2.0,
+                    w0: 0.3,
+                    delta: 0.0,
+                },
+            ),
+        ] {
+            let scene = cavity_with_block(m);
+            for (mode, (drift, _, _)) in ["tm", "te"].iter().zip(passivity(&scene, 10_000)) {
+                eprintln!("{name} {mode}: drift {drift:.2e}");
+                assert!(drift < 1e-10, "{name} {mode}: drift {drift:e}");
+            }
+            let mut sim = started(&scene);
+            let w0 = energy(&sim);
+            sim.step_n(500);
+            assert!(
+                (sim.dispersive_energy() / w0).abs() > 1e-4,
+                "{name}: the poles hold no energy"
+            );
+        }
+    }
+
+    /// Lossy Drude never gains energy, step by step, in either mode (proven,
+    /// `Aux::energy`). Lossy Lorentz is not proven monotone per step; its
+    /// worst measured rise is 1.1e-15 of the start, round-off, so it is held
+    /// to the same 1e-14 as a regression guard.
+    #[test]
+    fn dispersive_loss_never_gains_energy() {
+        let drude = cavity_with_block(Material::Drude {
+            eps_inf: 1.0,
+            wp: 0.4,
+            gamma: 0.02,
+        });
+        for (mode, (_, rise, end)) in ["tm", "te"].iter().zip(passivity(&drude, 6000)) {
+            eprintln!("lossy drude {mode}: worst rise {rise:.2e}, end {end:.3}");
+            assert!(rise <= 1e-14, "drude {mode}: rose by {rise:e}");
+            assert!(end < 0.9, "drude {mode}: loss must remove energy, {end}");
+        }
+        let lorentz = cavity_with_block(Material::Lorentz {
+            eps_inf: 1.0,
+            d_eps: 2.0,
+            w0: 0.3,
+            delta: 0.02,
+        });
+        for (mode, (drift, rise, end)) in ["tm", "te"].iter().zip(passivity(&lorentz, 6000)) {
+            eprintln!(
+                "lossy lorentz {mode}: worst rise {rise:.2e}, end {end:.3}, drift {drift:.2e}"
+            );
+            assert!(end < 0.9, "lorentz {mode}: loss must remove energy, {end}");
+            assert!(rise <= 1e-14, "lorentz {mode}: rose by {rise:e}");
+            assert!(drift <= 1.0, "lorentz {mode}: above its start");
+        }
     }
 }

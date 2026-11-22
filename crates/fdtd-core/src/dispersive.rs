@@ -97,6 +97,8 @@ pub struct DrudeRow {
     pub beta: f64,
     /// (1 + k) / 2, the weight of J^n in the E update.
     pub cj: f64,
+    /// 1 / wp^2: the J term of the discrete energy is J^2 / (2 wp^2).
+    pub inv_wp2: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -106,6 +108,10 @@ pub struct LorentzRow {
     pub a3: f64,
     /// 1 / d, the weight of P^(n+1) - P^n in the E update.
     pub cp: f64,
+    /// 1 / d_eps and 1 / (d_eps w0^2), the P and dP/dt weights of the
+    /// discrete energy.
+    pub inv_d_eps: f64,
+    pub inv_d_eps_w02: f64,
 }
 
 impl Row {
@@ -212,6 +218,7 @@ impl Medium {
                 k,
                 beta: (p.wp2 * s / 2.0) / g,
                 cj: (1.0 + k) / 2.0,
+                inv_wp2: 1.0 / p.wp2,
             }
         });
         let beta = drude.map_or(0.0, |d| d.beta);
@@ -224,6 +231,8 @@ impl Medium {
                 a2: -(1.0 - p.delta * s) / g,
                 a3: p.d_eps * p.w0 * p.w0 * s * s / g,
                 cp: 1.0 / d,
+                inv_d_eps: 1.0 / p.d_eps,
+                inv_d_eps_w02: 1.0 / (p.d_eps * p.w0 * p.w0),
             }
         });
         Row {
@@ -291,6 +300,42 @@ impl Aux {
             p: vec![0.0; n],
             p_old: vec![0.0; n],
         }
+    }
+
+    /// The auxiliary part of the discrete energy over every location with a
+    /// pole, `e` the E array these fields belong to, at E^n:
+    ///
+    ///   J^2 / (2 wp^2) + P^2 / (2 d_eps) + V^(n-1/2) V^(n+1/2) / (2 d_eps w0^2)
+    ///
+    /// with V = dP/dt as (P - P^(n-1)) / S and (P^(n+1) - P) / S, P^(n+1)
+    /// taken from the update as the solver will. Added to the field energy
+    /// (`energy.rs`), the Drude part makes the total exactly conserved for
+    /// gamma = 0 and non-increasing otherwise, because the trapezoid gives
+    ///
+    ///   W^(n+1) - W^n = -S gamma sum (J^(n+1) + J^n)^2 / (4 wp^2).
+    ///
+    /// The Lorentz scheme is a leapfrog with (E, P) at integer steps and
+    /// (H, V) at half steps, coupled skew-symmetrically with weights eps,
+    /// 1 / d_eps and 1, 1 / (d_eps w0^2), so for delta = 0 this is its
+    /// conserved quantity; with damping it is not proven monotone step by step.
+    pub fn energy(&self, rows: &[Row], poles: &[u32], e: &[f64], s: f64) -> f64 {
+        let mut w = 0.0;
+        for (k, &id) in poles.iter().enumerate() {
+            if id == NO_POLE {
+                continue;
+            }
+            let r = &rows[id as usize];
+            if let Some(d) = r.drude {
+                w += 0.5 * self.j[k] * self.j[k] * d.inv_wp2;
+            }
+            if let Some(l) = r.lorentz {
+                let p_new = l.a1 * self.p[k] + l.a2 * self.p_old[k] + l.a3 * e[k];
+                let (v_old, v_new) = ((self.p[k] - self.p_old[k]) / s, (p_new - self.p[k]) / s);
+                w += 0.5 * self.p[k] * self.p[k] * l.inv_d_eps
+                    + 0.5 * v_old * v_new * l.inv_d_eps_w02;
+            }
+        }
+        w
     }
 
     /// A location whose pole changed starts from rest.
